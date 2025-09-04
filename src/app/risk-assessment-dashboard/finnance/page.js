@@ -1,7 +1,5 @@
 import SmallSidebar from "@/app/components/SmallSidebar";
 import DummyTable from "@/app/components/DummyTable";
-import { AddButton } from "@/app/components/Button";
-import Image from "next/image";
 import SmallHeader from "@/app/components/SmallHeader";
 
 export default function Finnance(){

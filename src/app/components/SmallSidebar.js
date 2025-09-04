@@ -6,12 +6,6 @@ import Image from "next/image";
 export default function SmallSidebar(){
     return(
         <div className="h-screen w-12 flex flex-col items-center gap-16 bg-[#141D38] p-2 fixed z-100">
-             {/* <Image 
-            src= "/images/kias-logo.png"
-            width={250}
-            height={250}
-            alt="kias logo"
-            className="w"/> */}
             <div className="text-white">
             <ul className="flex flex-col gap-8 mt-20">
                 <li>
@@ -21,6 +15,7 @@ export default function SmallSidebar(){
                             width={50}
                             height={50}
                             alt="kias logo"
+                            className="hover:scale-90"
                         />
                     </a>
                 </li>
@@ -31,6 +26,7 @@ export default function SmallSidebar(){
                             width={50}
                             height={50}
                             alt="kias logo"
+                            className="hover:scale-90"
                         />
                     </a>
                 </li>
@@ -41,6 +37,7 @@ export default function SmallSidebar(){
                             width={50}
                             height={50}
                             alt="kias logo"
+                            className="hover:scale-90"
                         />
                     </a>
                 </li>
@@ -51,6 +48,7 @@ export default function SmallSidebar(){
                             width={50}
                             height={50}
                             alt="kias logo"
+                            className="hover:scale-90"
                         />
                     </a>
                 </li>

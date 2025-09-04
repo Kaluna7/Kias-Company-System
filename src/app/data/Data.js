@@ -21,7 +21,7 @@ export const buttonRiskAssessment = [
     },
     {
         logo : "/images/Design.png",
-        name : "Store Design & Planning",
+        name : "Store D & P",
         href : "risk-assessment-dashboard/sdp/"
     },
     {
@@ -30,10 +30,12 @@ export const buttonRiskAssessment = [
         href : "risk-assessment-dashboard/tax/"
     },
     {
+        logo : "/images/L&p.png",
         name : "Loss & Prevention",
         href : "risk-assessment-dashboard/l&p/"
     },
     {
+        logo : "/images/Mis.png",
         name : "MIS",
         href : "risk-assessment-dashboard/mis/"
     },
