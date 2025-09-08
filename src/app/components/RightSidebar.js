@@ -1,3 +1,5 @@
+"use client";
+
 import { MyCalendar, Note } from "./Accessories";
 
 export default function RightSidebar(){

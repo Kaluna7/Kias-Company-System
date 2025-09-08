@@ -1,3 +1,5 @@
+"use client";
+
 import RiskAssessmentDashboard from "./risk-assessment-dashboard/page";
 
 

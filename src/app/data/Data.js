@@ -2,7 +2,7 @@ export const buttonRiskAssessment = [
     {
         logo : "/images/Finance.png",
         name : "Finnance",
-        href : "risk-assessment-dashboard/finnance/"
+        href : "risk-assessment-dashboard/finance/"
     },
     {
         logo : "/images/Accounting.png",
@@ -40,16 +40,57 @@ export const buttonRiskAssessment = [
         href : "risk-assessment-dashboard/mis/"
     },
     {
+        logo : "/images/Merchandise.png",
         name : "Merchandise",
         href : "risk-assessment-dashboard/merch/"
     },
     {
+        logo : "/images/Operational.png",
         name : "Operational",
         href : "risk-assessment-dashboard/ops/"
     },
     {
+        logo : "/images/Warehouse.png",
         name : "Warehouse",
         href : "risk-assessment-dashboard/whs/"
     },
     
+]
+
+
+export const fileButton = [
+    {
+        name : "New Data"
+    },
+    {
+        name : "Delete Data"
+    },
+    {
+        name : "Export Data"
+    }
+]
+
+export const editButton = [
+    {
+        name : "New Data"
+    },
+    {
+        name : "Delete Data"
+    },
+    {
+        name : "Export Data"
+    }
+]
+
+
+export const viewButton = [
+    {
+        name : "New Data"
+    },
+    {
+        name : "Delete Data"
+    },
+    {
+        name : "Export Data"
+    }
 ]

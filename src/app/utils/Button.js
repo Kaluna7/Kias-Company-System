@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FaPlus } from 'react-icons/fa';
 import { BsSearch } from 'react-icons/bs';
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { BiDownArrow } from 'react-icons/bi';
 
 export function ButtonRiskAssessment({ name, href, logo }) {
@@ -35,28 +35,35 @@ export function Button({onClick,label,style}){
 }
 
 
-export function DropDown({onClick}) {
-  const [open, setOpen] = useState(false);
+export function DropDown({onSelect, label, items, isOpen, onToggle, onClose}) {
+   const ref = useRef(null);
+
+useEffect(() => {
+  function handleClickOutside(e) {
+    if (ref.current && !ref.current.contains(e.target)) {
+      onClose();
+    }
+  }
+  document.addEventListener("click", handleClickOutside);
+  return () => document.removeEventListener("click", handleClickOutside);
+}, [onClose]);
+
 
   return (
-    <div className="relative inline-block text-left">
+    <div ref={ref} className="relative inline-block text-left">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={onToggle}
         className="px-4 py-2 text-white rounded-lg flex flex-row items-center gap-1 text-sm cursor-pointer hover:text-yellow-400 hover:scale-98"
       >
-        View <BiDownArrow />
+        {label}
       </button>
-      {open && (
-        <div className="absolute mt-2 w-40 bg-white border rounded-lg shadow-lg z-10">
-          <button className="block w-full text-left px-4 py-2 hover:bg-gray-100" onClick={onClick}>
-            Test
+      {isOpen && (
+        <div className="absolute mt-2 w-40 bg-[#141D38] rounded-lg z-10 text-sm shadow-md shadow-black text-white">
+          {items.map((item , idx) => (
+            <button key={idx} className="block w-full text-left px-4 py-2 hover:bg-[#4c4c54] rounded-lg hover:cursor-pointer" onClick={() => {onSelect(item.name); onClose();}}>
+            {item.name}
           </button>
-          <button className="block w-full text-left px-4 py-2 hover:bg-gray-100" onClick={onClick}>
-            test
-          </button>
-          <button className="block w-full text-left px-4 py-2 hover:bg-gray-100" onClick={onClick}>
-            test
-          </button>
+          ))}
         </div>
       )}
     </div>
@@ -68,7 +75,7 @@ export function Search(){
   return(
   <div className="relative bg-white flex flex-row rounded-2xl p-1 gap-1 w-[30%]">
   <input type="text" placeholder="Search..." 
-         class="w-full bg-white px-6 rounded-2xl" />
+         className="w-full bg-white px-6 rounded-2xl" />
     <button className="p-1 bg-yellow-300 rounded-2xl cursor-pointer"><BsSearch /></button>
 </div>
   );

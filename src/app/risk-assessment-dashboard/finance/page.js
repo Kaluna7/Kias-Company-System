@@ -2,7 +2,7 @@ import SmallSidebar from "@/app/components/SmallSidebar";
 import DummyTable from "@/app/components/DummyTable";
 import SmallHeader from "@/app/components/SmallHeader";
 
-export default function Finnance(){
+export default function Finance(){
     return(
         <main className="flex flex-row w-max h-full">
             <SmallSidebar />
