@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { DropDown, Search } from "../utils/Button";
+import { DropDown, Search } from "./Button";
 import { fileButton, editButton, viewButton } from "../data/Data";
 import { useState } from "react";
 

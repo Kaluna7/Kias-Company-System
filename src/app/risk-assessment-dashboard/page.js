@@ -1,6 +1,6 @@
 "use client";
 import LargeSidebar from "../components/LargeSidebar";
-import { ButtonRiskAssessment } from "../utils/Button";
+import { ButtonRiskAssessment } from "../components/Button";
 import { buttonRiskAssessment } from "../data/Data";
 import RightSidebar from "../components/RightSidebar";
 
