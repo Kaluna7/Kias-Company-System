@@ -9,9 +9,8 @@ import { EditNotePad } from "../components/PopUp";
 import { viewPopUp } from "../utils/store";
 
 export default function RiskAssessmentDashboard() {
-
-  const { isOpen , closePopUp } = usePopUp();
-  const { isViewOpen , closeViewPopUp } = viewPopUp();
+  const { isOpen, closePopUp } = usePopUp();
+  const { isViewOpen, closeViewPopUp } = viewPopUp();
 
   return (
     <main className="flex flex-row h-screen overflow-hidden p-6 bg-[#E6F0FA] gap-6">
@@ -22,12 +21,8 @@ export default function RiskAssessmentDashboard() {
             Risk Assessment
           </h1>
         </header>
-        {isOpen && (
-            <NewNotePad onClose={closePopUp}/>
-        )}
-        {isViewOpen && (
-          <ViewNote onClose={closeViewPopUp} />
-        )}
+        {isOpen && <NewNotePad onClose={closePopUp} />}
+        {isViewOpen && <ViewNote onClose={closeViewPopUp} />}
         <div className="grid grid-cols-4 gap-6 p-6 h-fit w-fit mt-[-50px] ">
           {buttonRiskAssessment.map((item, index) => (
             <ButtonRiskAssessment key={index} {...item} />
@@ -38,6 +33,5 @@ export default function RiskAssessmentDashboard() {
     </main>
   );
 }
-
 
 // [#e6f7fb]

@@ -4,15 +4,21 @@ import Image from "next/image";
 import { DropDown, Search } from "./Button";
 import { fileButton, editButton, viewButton } from "../data/Data";
 import { useState } from "react";
+import { newFinanceDataPopUp } from "../utils/store";
 
 export default function SmallHeader({ label }) {
   const [active, setActive] = useState(null);
 
   const handleClick = (name) => {
-  console.log("You clicked:", name);
-  setActive(null);
-};
+    console.log("You clicked:", name);
 
+    // cek apakah yang diklik adalah New Data
+    if (name === "New Data") {
+      newFinanceDataPopUp.getState().openNewFinance();
+    }
+
+    setActive(null);
+  };
 
   return (
     <div className="w-full z-200">

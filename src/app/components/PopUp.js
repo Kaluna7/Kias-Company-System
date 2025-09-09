@@ -1,6 +1,10 @@
 "use client";
 import { useState } from "react";
 import { useNoteStore } from "../utils/store";
+import { newFinanceDataPopUp } from "../utils/store";
+
+
+// NOTE PAD
 
 export function NewNotePad({ onClose }) {
   const [title, setTitle] = useState("");
@@ -144,6 +148,7 @@ export function EditNotePad({onClose}){
 
 
 
+// VIEW NOTE
 
 export function ViewNote({onClose}){
     
@@ -158,4 +163,22 @@ export function ViewNote({onClose}){
             </div>
         </div>
     );
+}
+
+
+// FINANCE
+
+export function NewFinanceData({onClose}){
+  return(
+    <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
+      <h1 className="text-white font-bold text-4xl">New Data</h1>
+      <div className="bg-white h-full w-full rounded-2xl flex flex-col p-3 items-center">
+        
+      </div>
+      <div className="flex flex-row gap-6">
+          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
+          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
+        </div>
+    </div>
+  );
 }

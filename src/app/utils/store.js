@@ -1,18 +1,26 @@
 "use client";
 
-
 import { create } from "zustand";
 
+// ADD NEW NOTE POP-UP
 export const usePopUp = create((set) => ({
-    isOpen : false,
-    openPopUp : () => set({isOpen : true}),
-    closePopUp : () => set({isOpen : false})
+  isOpen: false,
+  openPopUp: () => set({ isOpen: true }),
+  closePopUp: () => set({ isOpen: false }),
 }));
 
+// VIEW NOTE POP-UP
 export const viewPopUp = create((set) => ({
-    isViewOpen : false,
-    openViewPopUp : () => set({isViewOpen : true}),
-    closeViewPopUp : () => set({isViewOpen : false})
+  isViewOpen: false,
+  openViewPopUp: () => set({ isViewOpen: true }),
+  closeViewPopUp: () => set({ isViewOpen: false }),
+}));
+
+//NEW FINANCE DATA POP UP
+export const newFinanceDataPopUp = create((set) => ({
+  isNewFinanceOpen: false,
+  openNewFinance: () => set({ isNewFinanceOpen: true }),
+  closeNewFinance: () => set({ isNewFinanceOpen: false }),
 }));
 
 // store/useNoteStore.js
@@ -58,5 +66,36 @@ export const useNoteStore = create((set) => ({
       body: JSON.stringify({ id }),
     });
     set((state) => ({ notes: state.notes.filter((n) => n.id !== id) }));
+  },
+}));
+
+// FINANCE
+export const useFinanceStore = create((set) => ({
+  finance: [],
+
+  fetchFinance: async () => {
+    const res = await fetch("/api/finance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        risk_id,
+        category,
+        sub_department,
+        risk_description,
+        sop_related,
+        risk_details,
+        impact_description,
+        impact_level,
+        probability_level,
+        priority_level,
+        mitigation_strategy,
+        owners,
+        root_cause_category,
+        onset_timeframe,
+      }),
+    });
+    const newFinance = await res.json();
+    set((state) => ({ finance: [...state.finance, newFinance] }));
+    return newFinance;
   },
 }));

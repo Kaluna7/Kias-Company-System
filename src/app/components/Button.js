@@ -2,10 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FaPlus } from 'react-icons/fa';
 import { BsSearch } from 'react-icons/bs';
-import { useRef, useState, useEffect } from "react";
-import { BiDownArrow } from 'react-icons/bi';
+import { useRef, useEffect } from "react";
 
 export function ButtonRiskAssessment({ name, href, logo }) {
   return (
@@ -35,19 +33,20 @@ export function Button({onClick,label,style}){
 }
 
 
-export function DropDown({onSelect, label, items, isOpen, onToggle, onClose}) {
-   const ref = useRef(null);
 
-useEffect(() => {
-  function handleClickOutside(e) {
-    if (ref.current && !ref.current.contains(e.target)) {
-      onClose();
+//DROP DOWN THAT CONNECT TO SMALL HEADER
+export function DropDown({ onSelect, label, items, isOpen, onToggle, onClose, openWhat }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        onClose();
+      }
     }
-  }
-  document.addEventListener("click", handleClickOutside);
-  return () => document.removeEventListener("click", handleClickOutside);
-}, [onClose]);
-
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [onClose]);
 
   return (
     <div ref={ref} className="relative inline-block text-left">
@@ -57,12 +56,27 @@ useEffect(() => {
       >
         {label}
       </button>
+
       {isOpen && (
         <div className="absolute mt-2 w-40 bg-[#141D38] rounded-lg z-10 text-sm shadow-md shadow-black text-white">
-          {items.map((item , idx) => (
-            <button key={idx} className="block w-full text-left px-4 py-2 hover:bg-[#4c4c54] rounded-lg hover:cursor-pointer" onClick={() => {onSelect(item.name); onClose();}}>
-            {item.name}
-          </button>
+          {items.map((item, idx) => (
+            <button
+  key={idx}
+  className="block w-full text-left px-4 py-2 hover:bg-[#4c4c54] rounded-lg hover:cursor-pointer"
+  onClick={() => {
+    if (item.action) {
+      item.action(); // <- jalankan action dari item
+    }
+    if (openWhat) {
+      openWhat(item.name); // <- kalau kamu mau pakai openWhat juga
+    }
+    onSelect(item.name);
+    onClose();
+  }}
+>
+  {item.name}
+</button>
+
           ))}
         </div>
       )}

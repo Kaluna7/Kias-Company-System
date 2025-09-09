@@ -2,11 +2,10 @@
 
 import RiskAssessmentDashboard from "./risk-assessment-dashboard/page";
 
-
-export default function Home(){
-  return(
+export default function Home() {
+  return (
     <main>
-    <RiskAssessmentDashboard />
+      <RiskAssessmentDashboard />
     </main>
   );
 }

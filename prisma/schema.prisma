@@ -14,3 +14,20 @@ model notes {
   description String?
   created_at  DateTime? @default(now()) @db.Timestamp(6)
 }
+
+model finance {
+  risk_id             Int     @id @default(autoincrement())
+  category            String? @db.VarChar(50)
+  sub_department      String? @db.VarChar(35)
+  risk_description    String?
+  sop_related         String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
