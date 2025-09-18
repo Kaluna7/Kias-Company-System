@@ -9,7 +9,7 @@ export default function LossPrevention() {
       <div className="flex flex-col">
         <SmallHeader label={"Risk Assessment Form Loss Prevention"} />
         <div className="mt-12 ml-14">
-          <DummyTable />
+          {/* test */}
         </div>
       </div>
     </main>

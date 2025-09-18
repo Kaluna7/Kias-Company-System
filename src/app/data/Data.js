@@ -1,4 +1,3 @@
-import { NewFinanceData } from "../components/PopUp";
 
 export const buttonRiskAssessment = [
   {

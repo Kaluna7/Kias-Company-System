@@ -85,6 +85,9 @@ export function DropDown({ onSelect, label, items, isOpen, onToggle, onClose, op
 }
 
 
+
+// SEARCH
+
 export function Search(){
   return(
   <div className="relative bg-white flex flex-row rounded-2xl p-1 gap-1 w-[30%]">

@@ -23,6 +23,22 @@ export const newFinanceDataPopUp = create((set) => ({
   closeNewFinance: () => set({ isNewFinanceOpen: false }),
 }));
 
+
+//NEW ACCOUNTING DATA POP UP
+
+export const newAccountingDataPopUp = create ((set) => ({
+  isNewAccountingOpen : false,
+  openNewAccounting : () => set({ isNewAccountingOpen : true}),
+  closeNewAccounting : () => set({ isNewAccountingOpen : false })
+}))
+
+
+
+
+
+
+
+
 // store/useNoteStore.js
 
 export const useNoteStore = create((set) => ({

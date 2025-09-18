@@ -9,7 +9,7 @@ export default function Mis() {
       <div className="flex flex-col">
         <SmallHeader label={"Risk Assessment Form MIS"} />
         <div className="mt-12 ml-14">
-          <DummyTable />
+          {/* test */}
         </div>
       </div>
     </main>

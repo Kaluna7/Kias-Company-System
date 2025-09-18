@@ -26,7 +26,7 @@ export function MyCalendar() {
 export function Note() {
   const notes = useNoteStore((s) => s.notes);
   const fetchNotes = useNoteStore((s) => s.fetchNotes);
-  const updateNote = useNoteStore((s) => s.updateNote);
+  // const updateNote = useNoteStore((s) => s.updateNote);
   const deleteNote = useNoteStore((s) => s.deleteNote);
 
   const addPopUp = usePopUp((s) => s.openPopUp);

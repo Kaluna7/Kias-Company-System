@@ -2,7 +2,7 @@
 
 import SmallSidebar from "@/app/components/SmallSidebar";
 import SmallHeader from "@/app/components/SmallHeader";
-import { NewFinanceData } from "@/app/components/PopUp";
+import { NewFinanceInput } from "@/app/components/PopUp";
 import { newFinanceDataPopUp } from "@/app/utils/store";
 import { useMemo } from "react";
 
@@ -26,7 +26,7 @@ export default function Finance() {
       <div className="flex flex-col">
         <SmallHeader label="Risk Assessment Form Finance" items={items} />
         <div className="mt-12 ml-14">
-          {isNewFinanceOpen && <NewFinanceData onClose={closeNewFinance} />}
+          {isNewFinanceOpen && <NewFinanceInput onClose={closeNewFinance} />}
         </div>
       </div>
     </main>

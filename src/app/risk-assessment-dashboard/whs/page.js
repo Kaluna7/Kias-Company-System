@@ -9,7 +9,7 @@ export default function Warehouse() {
       <div className="flex flex-col">
         <SmallHeader label={"Risk Assessment Form Warehouse"} />
         <div className="mt-12 ml-14">
-          <DummyTable />
+          {/* test */}
         </div>
       </div>
     </main>

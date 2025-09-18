@@ -9,7 +9,7 @@ export default function Hrd() {
       <div className="flex flex-col">
         <SmallHeader label={"Risk Assessment Form HRD"} />
         <div className="mt-12 ml-14">
-          <DummyTable />
+          {/* test */}
         </div>
       </div>
     </main>

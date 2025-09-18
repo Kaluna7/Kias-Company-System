@@ -9,7 +9,7 @@ export default function Tax() {
       <div className="flex flex-col">
         <SmallHeader label={"Risk Assessment Form Tax"} />
         <div className="mt-12 ml-14">
-          <DummyTable />
+          {/* test */}
         </div>
       </div>
     </main>

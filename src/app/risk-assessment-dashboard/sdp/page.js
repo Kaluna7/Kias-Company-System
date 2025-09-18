@@ -9,7 +9,7 @@ export default function StoreDesignPlanning() {
       <div className="flex flex-col">
         <SmallHeader label={"Risk Assessment Form SDP"} />
         <div className="mt-12 ml-14">
-          <DummyTable />
+          {/* test */}
         </div>
       </div>
     </main>
