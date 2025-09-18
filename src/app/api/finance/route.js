@@ -25,6 +25,7 @@ export async function POST(req) {
     root_cause_category,
     onset_timeframe,
   } = body;
+  
   const newFinance = await prisma.finance.create({
     data: {
       risk_id,

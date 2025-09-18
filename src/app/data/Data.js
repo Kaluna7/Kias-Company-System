@@ -75,3 +75,61 @@ export const viewButton = [
   { name: "Delete Data" },
   { name: "Export Data" },
 ];
+
+
+export const ListFinance = [
+  {
+    label : "Category",
+    placeholder : "Category"
+  },
+  {
+    label : "Sub Department",
+    placeholder : "Category"
+  },
+  {
+    label : "SOP Related / Standard",
+    placeholder : "Category"
+  },
+  {
+    label : "Risk Description",
+    placeholder : "Category"
+  },
+  {
+    label : "Risk Details",
+    placeholder : "Category"
+  },
+  {
+    label : "Impact Description",
+    placeholder : "Category"
+  },
+  {
+    label : "Impact Level",
+    placeholder : "Category"
+  },
+  {
+    label : "Probability Level",
+    placeholder : "Category"
+  },
+  {
+    label : "Priority Level",
+    placeholder : "Category"
+  },
+  {
+    label : "Mitigation Strategy",
+    placeholder : "Category"
+  },
+  {
+    label : "Owner",
+    placeholder : "Category"
+  },
+  {
+    label : "Root Cause Category",
+    placeholder : "Category"
+  },
+  {
+    label : "Onset TimeFrame",
+    placeholder : "Category"
+  },
+
+
+];

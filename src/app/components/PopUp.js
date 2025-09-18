@@ -4,7 +4,7 @@ import { useNoteStore } from "../utils/store";
 import { newFinanceDataPopUp } from "../utils/store";
 
 
-// NOTE PAD
+// NOTEPAD
 
 export function NewNotePad({ onClose }) {
   const [title, setTitle] = useState("");
@@ -168,12 +168,20 @@ export function ViewNote({onClose}){
 
 // FINANCE
 
+import { List } from "./List";
+import { ListFinance } from "../data/Data";
+
+
 export function NewFinanceData({onClose}){
   return(
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-white h-full w-full rounded-2xl flex flex-col p-3 items-center">
-        
+      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
+        <div className="w-full h-full grid grid-cols-4 gap-6">
+          {ListFinance.map((item , index) => (
+            <List key={index} {...item}/>
+          ))}
+        </div>
       </div>
       <div className="flex flex-row gap-6">
           <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
