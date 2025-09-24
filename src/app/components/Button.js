@@ -34,8 +34,8 @@ export function Button({onClick,label,style}){
 
 
 
-//DROP DOWN THAT CONNECT TO SMALL HEADER
-export function DropDown({ onSelect, label, items, isOpen, onToggle, onClose, openWhat }) {
+// DROP DOWN THAT CONNECT TO SMALL HEADER
+export function DropDown({ onSelect, label, items = [], isOpen, onToggle, onClose, openWhat }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -61,22 +61,22 @@ export function DropDown({ onSelect, label, items, isOpen, onToggle, onClose, op
         <div className="absolute mt-2 w-40 bg-[#141D38] rounded-lg z-10 text-sm shadow-md shadow-black text-white">
           {items.map((item, idx) => (
             <button
-  key={idx}
-  className="block w-full text-left px-4 py-2 hover:bg-[#4c4c54] rounded-lg hover:cursor-pointer"
-  onClick={() => {
-    if (item.action) {
-      item.action(); // <- jalankan action dari item
-    }
-    if (openWhat) {
-      openWhat(item.name); // <- kalau kamu mau pakai openWhat juga
-    }
-    onSelect(item.name);
-    onClose();
-  }}
->
-  {item.name}
-</button>
+              key={item.id ?? `${item.name}-${idx}`}
+              className="block w-full text-left px-4 py-2 hover:bg-[#4c4c54] rounded-lg hover:cursor-pointer"
+              onClick={() => {
+                // Jangan jalankan item.action() di sini.
+                // Kirim object item ke SmallHeader supaya parent yang menjalankan action
+                if (typeof onSelect === "function") onSelect(item);
 
+                // optional: jika ada handler openWhat (legacy), panggil juga
+                if (typeof openWhat === "function") openWhat(item.name);
+
+                // tutup dropdown
+                if (typeof onClose === "function") onClose();
+              }}
+            >
+              {item.name}
+            </button>
           ))}
         </div>
       )}

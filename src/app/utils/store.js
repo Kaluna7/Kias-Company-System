@@ -16,7 +16,7 @@ export const viewPopUp = create((set) => ({
   closeViewPopUp: () => set({ isViewOpen: false }),
 }));
 
-//NEW FINANCE DATA POP UP
+// NEW FINANCE DATA POP UP
 export const newFinanceDataPopUp = create((set) => ({
   isNewFinanceOpen: false,
   openNewFinance: () => set({ isNewFinanceOpen: true }),
@@ -24,22 +24,27 @@ export const newFinanceDataPopUp = create((set) => ({
 }));
 
 
-//NEW ACCOUNTING DATA POP UP
+// NEW ACCOUNTING DATA POP UP
 
 export const newAccountingDataPopUp = create ((set) => ({
   isNewAccountingOpen : false,
   openNewAccounting : () => set({ isNewAccountingOpen : true}),
   closeNewAccounting : () => set({ isNewAccountingOpen : false })
-}))
+}));
+
+// NEW HRD DATA POP UP
+
+export const newHrdDataPopUp = create ((set) => ({
+  isNewHrdOpen : false,
+  openNewHrd : () => set({ isNewHrdOpen : true }),
+  closeNewHrd : () => set({ isNewHrdOpen : false })
+}));
 
 
 
 
 
-
-
-
-// store/useNoteStore.js
+//NOTEPAD
 
 export const useNoteStore = create((set) => ({
   notes: [],
@@ -61,7 +66,7 @@ export const useNoteStore = create((set) => ({
     return newNote;
   },
 
-  // sekarang menerima title & description
+ 
   updateNote: async (id, title, description) => {
     const res = await fetch("/api/notes", {
       method: "PUT",
@@ -84,6 +89,9 @@ export const useNoteStore = create((set) => ({
     set((state) => ({ notes: state.notes.filter((n) => n.id !== id) }));
   },
 }));
+
+
+
 
 // FINANCE
 export const useFinanceStore = create((set) => ({
