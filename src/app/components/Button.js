@@ -9,7 +9,7 @@ export function ButtonRiskAssessment({ name, href, logo }) {
   return (
     <ul>
       <li>
-        <Link href={href} className="rounded-2xl text-center bg-white flex flex-col items-center text-[#034f75] font-extrabold py-4 shadow-md text-[14px] px-6 gap-2 hover:scale-98">
+        <Link href={href} className="rounded-2xl text-center bg-white flex flex-col items-center text-[#034f75] font-extrabold py-5 shadow-md text-[14px] px-10 gap-2 hover:scale-98">
           <Image 
             src={logo}
             width={120}

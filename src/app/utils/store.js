@@ -16,32 +16,6 @@ export const viewPopUp = create((set) => ({
   closeViewPopUp: () => set({ isViewOpen: false }),
 }));
 
-// NEW FINANCE DATA POP UP
-export const newFinanceDataPopUp = create((set) => ({
-  isNewFinanceOpen: false,
-  openNewFinance: () => set({ isNewFinanceOpen: true }),
-  closeNewFinance: () => set({ isNewFinanceOpen: false }),
-}));
-
-
-// NEW ACCOUNTING DATA POP UP
-
-export const newAccountingDataPopUp = create ((set) => ({
-  isNewAccountingOpen : false,
-  openNewAccounting : () => set({ isNewAccountingOpen : true}),
-  closeNewAccounting : () => set({ isNewAccountingOpen : false })
-}));
-
-// NEW HRD DATA POP UP
-
-export const newHrdDataPopUp = create ((set) => ({
-  isNewHrdOpen : false,
-  openNewHrd : () => set({ isNewHrdOpen : true }),
-  closeNewHrd : () => set({ isNewHrdOpen : false })
-}));
-
-
-
 
 
 //NOTEPAD
@@ -92,34 +66,43 @@ export const useNoteStore = create((set) => ({
 
 
 
-
 // FINANCE
+
+
 export const useFinanceStore = create((set) => ({
   finance: [],
 
-  fetchFinance: async () => {
-    const res = await fetch("/api/finance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        risk_id,
-        category,
-        sub_department,
-        risk_description,
-        sop_related,
-        risk_details,
-        impact_description,
-        impact_level,
-        probability_level,
-        priority_level,
-        mitigation_strategy,
-        owners,
-        root_cause_category,
-        onset_timeframe,
-      }),
-    });
-    const newFinance = await res.json();
-    set((state) => ({ finance: [...state.finance, newFinance] }));
-    return newFinance;
+  loadFinance: async () => {
+    try {
+      const res = await fetch("/api/finance");
+      if (!res.ok) throw new Error("Failed to fetch finances");
+      const data = await res.json();
+      set({ finance: data });
+      return data;
+    } catch (err) {
+      console.error("loadFinance error:", err);
+      return [];
+    }
+  },
+
+  createFinance: async (payload) => {
+    try {
+      const res = await fetch("/api/finance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create finance");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ finance: [newItem, ...state.finance] }));
+      return newItem;
+    } catch (err) {
+      console.error("createFinance error:", err);
+      throw err;
+    }
   },
 }));

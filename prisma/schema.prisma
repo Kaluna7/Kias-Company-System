@@ -17,6 +17,7 @@ model notes {
 
 model finance {
   risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @unique @db.VarChar(20)
   category            String? @db.VarChar(50)
   sub_department      String? @db.VarChar(35)
   risk_description    String?
@@ -31,3 +32,4 @@ model finance {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
 }
+
