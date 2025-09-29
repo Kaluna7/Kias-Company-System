@@ -626,95 +626,546 @@ export function NewGeneralAffairInput({ onClose }) {
 
 // STORE DESIGN & PLANNING POP UP
 
-export function NewSDPInput({onClose}){
-  return(
+
+import { useStorePlanningStore } from "../utils/store";
+
+export function NewSDPInput({ onClose }) {
+  const createStorePlanning = useStorePlanningStore((s) => s.createStorePlanning);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createStorePlanning(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>SDP</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
       <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
 
 // TAX POP UP
 
-export function NewTaxInput({onClose}){
-  return(
+import { useTaxStore } from "../utils/store";
+
+export function NewTaxInput({ onClose }) {
+  const createTax = useTaxStore((s) => s.createTax);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createTax(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>TAX</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
       <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
 
 // LOSS & PREVENTION POP UP
 
-export function NewLpInput({onClose}){
-  return(
+import { useLossPreventionStore } from "../utils/store";
+
+export function NewLpInput({ onClose }) {
+  const createLossPrevention = useLossPreventionStore((s) => s.createLossPrevention);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createLossPrevention(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>LOSS PREVENTION</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
       <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
 
 // MIS POP UP
 
-export function NewMisInput({onClose}){
-  return(
+import { useMisStore } from "../utils/store";
+
+export function NewMisInput({ onClose }) {
+  const createMis = useMisStore((s) => s.createMis);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createMis(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>Mis</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
       <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
 
 // MERCHANDISE POP UP
 
-export function NewMerchandiseInput({onClose}){
-  return(
+import { useMerchandiseStore } from "../utils/store";
+
+export function NewMerchandiseInput({ onClose }) {
+  const createMerchandise = useMerchandiseStore((s) => s.createMerchandise);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createMerchandise(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>Merchandise</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
       <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
@@ -722,19 +1173,109 @@ export function NewMerchandiseInput({onClose}){
 
 // OPERATIONAL POP UP
 
-export function NewOperationalInput({onClose}){
-  return(
+import { useOperationalStore } from "../utils/store";
+
+export function NewOperationalInput({ onClose }) {
+  const createOperational = useOperationalStore((s) => s.createOperational);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createOperational(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>Operational</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
       <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
@@ -742,8 +1283,109 @@ export function NewOperationalInput({onClose}){
 
 // WAREHOUSE POP UP
 
-export function NewWarehouseInput({onClose}){
-  return(
-    <></>
+import { useWarehouseStore } from "../utils/store";
+
+export function NewWarehouseInput({ onClose }) {
+  const createWarehouse = useWarehouseStore((s) => s.createWarehouse);
+
+  const initialForm = Object.values(LABEL_TO_KEY).reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {});
+
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onChange = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  const onSave = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const payload = { ...form };
+      for (const nf of NUMERIC_FIELDS) {
+        if (payload[nf] === "") payload[nf] = null;
+        else payload[nf] = Number(payload[nf]);
+      }
+
+      await createWarehouse(payload);
+      setLoading(false);
+      onClose();
+      setForm(initialForm);
+    } catch (err) {
+      setError(err?.message || "Gagal menyimpan data");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
+      <h1 className="text-white font-bold text-4xl">New Data</h1>
+   
+      <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
+        <div
+          className="w-full h-full overflow-y-auto pr-2"
+          style={{ scrollbarGutter: "stable" }}
+        >   
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {ListAssessmentForm.map((item, idx) => {
+              const label = item.label;
+              const key = LABEL_TO_KEY[label];
+              if (!key) return null;
+
+              const isTextarea = TEXTAREA_LABELS.has(label);
+              const isNumber = NUMERIC_FIELDS.has(key);
+
+              if (isTextarea) {              
+                return (
+                  <div key={idx} className="col-span-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
+                    <textarea
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-3 rounded resize-y min-h-[5rem] max-h-[14rem] border"
+                    />
+                  </div>
+                );
+              }             
+              return (
+                <React.Fragment key={idx}>
+                  <div className="col-span-1 flex items-center">
+                    <label className="text-sm font-medium text-gray-700">{label}</label>
+                  </div>
+
+                  <div className="col-span-3">
+                    <input
+                      value={form[key]}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      placeholder={item.placeholder}
+                      className="w-full p-2 rounded h-10 border"
+                      type={isNumber ? "number" : "text"}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="text-red-500">{error}</div>}
+
+      <div className="flex flex-row gap-6">
+        <button
+          onClick={onSave}
+          disabled={loading}
+          className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onClose} className="bg-gray-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">
+          Close
+        </button>
+      </div>
+    </div>
   );
 }

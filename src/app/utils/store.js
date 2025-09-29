@@ -229,3 +229,298 @@ export const useGeneralAffairStore = create((set) => ({
   },
 }));
 
+
+
+// STORE DESIGN & PLANNING NEW DATA POP UP
+
+export const useStorePlanningStore = create((set) => ({
+  sdp: [],
+
+  loadStorePlanning: async () => {
+    try {
+      const res = await fetch("/api/sdp");
+      if (!res.ok) throw new Error("Failed to fetch store planning");
+      const data = await res.json();
+      set({ sdp: data });
+      return data;
+    } catch (err) {
+      console.error("loadStorePlanning error:", err);
+      return [];
+    }
+  },
+
+  createStorePlanning: async (payload) => {
+    try {
+      const res = await fetch("/api/sdp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create store design planning");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ sdp: [newItem, ...state.sdp] }));
+      return newItem;
+    } catch (err) {
+      console.error("createStorePlanning error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+
+// TAX NEW DATA POP UP
+
+export const useTaxStore = create((set) => ({
+  tax: [],
+
+  loadTax: async () => {
+    try {
+      const res = await fetch("/api/tax");
+      if (!res.ok) throw new Error("Failed to fetch tax");
+      const data = await res.json();
+      set({ tax: data });
+      return data;
+    } catch (err) {
+      console.error("loadTax error:", err);
+      return [];
+    }
+  },
+
+  createTax: async (payload) => {
+    try {
+      const res = await fetch("/api/tax", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create tax");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ tax: [newItem, ...state.tax] }));
+      return newItem;
+    } catch (err) {
+      console.error("createTax error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+// LOSS PREVENTION NEW DATA POP UP
+
+export const useLossPreventionStore = create((set) => ({
+  lp: [],
+
+  loadLossPrevention: async () => {
+    try {
+      const res = await fetch("/api/l&p");
+      if (!res.ok) throw new Error("Failed to fetch loss prevention");
+      const data = await res.json();
+      set({ lp: data });
+      return data;
+    } catch (err) {
+      console.error("loadLossPrevention error:", err);
+      return [];
+    }
+  },
+
+  createLossPrevention: async (payload) => {
+    try {
+      const res = await fetch("/api/l&p", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create loss prevention");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ lp: [newItem, ...state.lp] }));
+      return newItem;
+    } catch (err) {
+      console.error("createLossPrevention error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+// MIS NEW DATA POP UP
+
+export const useMisStore = create((set) => ({
+  mis: [],
+
+  loadMis: async () => {
+    try {
+      const res = await fetch("/api/mis");
+      if (!res.ok) throw new Error("Failed to fetch mis");
+      const data = await res.json();
+      set({ mis: data });
+      return data;
+    } catch (err) {
+      console.error("loadMis error:", err);
+      return [];
+    }
+  },
+
+  createMis: async (payload) => {
+    try {
+      const res = await fetch("/api/mis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to mis");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ mis: [newItem, ...state.mis] }));
+      return newItem;
+    } catch (err) {
+      console.error("createGeneralAffair error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+
+// MERCHANDISE NEW DATA POP UP
+
+export const useMerchandiseStore = create((set) => ({
+  merchandise: [],
+
+  loadMerchandise: async () => {
+    try {
+      const res = await fetch("/api/merch");
+      if (!res.ok) throw new Error("Failed to fetch merchandise");
+      const data = await res.json();
+      set({ merchandise: data });
+      return data;
+    } catch (err) {
+      console.error("loadMerchandise error:", err);
+      return [];
+    }
+  },
+
+  createMerchandise: async (payload) => {
+    try {
+      const res = await fetch("/api/merch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create merchandise");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ merchandise: [newItem, ...state.merchandise] }));
+      return newItem;
+    } catch (err) {
+      console.error("createMerchandise error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+// OPERATIONAL NEW DATA POP UP
+
+export const useOperationalStore = create((set) => ({
+  operational: [],
+
+  loadOperational: async () => {
+    try {
+      const res = await fetch("/api/ops");
+      if (!res.ok) throw new Error("Failed to fetch operational");
+      const data = await res.json();
+      set({ operational: data });
+      return data;
+    } catch (err) {
+      console.error("loadOperational error:", err);
+      return [];
+    }
+  },
+
+  createOperational: async (payload) => {
+    try {
+      const res = await fetch("/api/ops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create operational");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ operational: [newItem, ...state.operational] }));
+      return newItem;
+    } catch (err) {
+      console.error("createOperational error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+// WAREHOUSE NEW DATA POP UP
+
+export const useWarehouseStore = create((set) => ({
+  warehouse: [],
+
+  loadWarehouse: async () => {
+    try {
+      const res = await fetch("/api/whs");
+      if (!res.ok) throw new Error("Failed to fetch warehouse");
+      const data = await res.json();
+      set({ generalAffair: data });
+      return data;
+    } catch (err) {
+      console.error("loadWarehouse error:", err);
+      return [];
+    }
+  },
+
+  createWarehouse: async (payload) => {
+    try {
+      const res = await fetch("/api/whs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create warehouse");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ warehouse: [newItem, ...state.warehouse] }));
+      return newItem;
+    } catch (err) {
+      console.error("createWarehouse error:", err);
+      throw err;
+    }
+  },
+}));

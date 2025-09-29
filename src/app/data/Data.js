@@ -31,7 +31,7 @@ export const buttonRiskAssessment = [
   },
   {
     logo: "/images/L&p.png",
-    name: "Loss & Prevention",
+    name: "L & P",
     href: "risk-assessment-dashboard/l&p/",
   },
   {
