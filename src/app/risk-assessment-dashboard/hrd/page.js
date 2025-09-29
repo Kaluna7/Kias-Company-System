@@ -2,20 +2,19 @@
 
 import SmallSidebar from "@/app/components/SmallSidebar";
 import SmallHeader from "@/app/components/SmallHeader";
-import { NewAccountingInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
+import { NewHrdInput } from "@/app/components/PopUp";
+import { usePopUp, useHrdStore } from "@/app/utils/store";
 import { useMemo, useEffect } from "react";
-import { useAccountingStore } from "@/app/utils/store";
 
-function AccountingTable() {
-  const accountings = useAccountingStore((s) => s.accounting);
-  const loadAccounting = useAccountingStore((s) => s.loadAccounting);
+function HrdTable() {
+  const hrds = useHrdStore((s) => s.hrd);
+  const loadHrd = useHrdStore((s) => s.loadHrd);
 
   useEffect(() => {
-    loadAccounting();
-  }, [loadAccounting]);
+    loadHrd();
+  }, [loadHrd]);
 
-  if (!accountings || accountings.length === 0)
+  if (!hrds || hrds.length === 0)
     return <div className="p-4 text-gray-500">Belum ada data.</div>;
 
   return (
@@ -87,7 +86,7 @@ function AccountingTable() {
           </thead>
 
           <tbody className="bg-white divide-y divide-gray-200">
-            {accountings.map((f, index) => (
+            {hrds.map((f, index) => (
               <tr
                 key={f.risk_id}
                 className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
@@ -95,7 +94,7 @@ function AccountingTable() {
                 {/* RISK ID NO */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
                   <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
-                    {f.risk_id_no ?? `A.2.2.${f.risk_id}`}
+                    {f.risk_id_no ?? `A.2.3.${f.risk_id}`}
                   </div>
                 </td>
 
@@ -198,7 +197,7 @@ function AccountingTable() {
   );
 }
 
-export default function Accounting() {
+export default function Hrd() {
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
   const closePopUp = usePopUp((s) => s.closePopUp);
@@ -218,8 +217,8 @@ export default function Accounting() {
       <div className="flex flex-col flex-1">
         <SmallHeader label="Risk Assessment Form HRD" items={items} />
         <div className="mt-12 ml-14 flex-1">
-          {isOpen && <NewAccountingInput onClose={closePopUp} />}
-          <AccountingTable />
+          {isOpen && <NewHrdInput onClose={closePopUp} />}
+          <HrdTable />
         </div>
       </div>
     </main>

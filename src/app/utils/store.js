@@ -118,7 +118,7 @@ export const useAccountingStore = create((set) => ({
       set({ accounting: data });
       return data;
     } catch (err) {
-      console.error("loadFinance error:", err);
+      console.error("loadAccounting error:", err);
       return [];
     }
   },
@@ -132,15 +132,100 @@ export const useAccountingStore = create((set) => ({
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody?.error || "Failed to create finance");
+        throw new Error(errBody?.error || "Failed to create accounting");
       }
       const newItem = await res.json();
       // newItem already contains risk_code from server
       set((state) => ({ accounting: [newItem, ...state.accounting] }));
       return newItem;
     } catch (err) {
-      console.error("createFinance error:", err);
+      console.error("createAccounitng error:", err);
       throw err;
     }
   },
 }));
+
+
+
+// HRD NEW DATA POP UP
+
+export const useHrdStore = create((set) => ({
+  hrd: [],
+
+  loadHrd: async () => {
+    try {
+      const res = await fetch("/api/hrd");
+      if (!res.ok) throw new Error("Failed to fetch Hrd");
+      const data = await res.json();
+      set({ hrd: data });
+      return data;
+    } catch (err) {
+      console.error("loadHrd error:", err);
+      return [];
+    }
+  },
+
+  createHrd: async (payload) => {
+    try {
+      const res = await fetch("/api/hrd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create hrd");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ hrd: [newItem, ...state.hrd] }));
+      return newItem;
+    } catch (err) {
+      console.error("createHrd error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+// GENERAL AFFAIR NEW DATA POP UP
+
+export const useGeneralAffairStore = create((set) => ({
+  generalAffair: [],
+
+  loadGeneralAffair: async () => {
+    try {
+      const res = await fetch("/api/g&a");
+      if (!res.ok) throw new Error("Failed to fetch general affair");
+      const data = await res.json();
+      set({ generalAffair: data });
+      return data;
+    } catch (err) {
+      console.error("loadGeneralAffair error:", err);
+      return [];
+    }
+  },
+
+  createGeneralAffair: async (payload) => {
+    try {
+      const res = await fetch("/api/g&a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create general affair");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ generalAffair: [newItem, ...state.generalAffair] }));
+      return newItem;
+    } catch (err) {
+      console.error("createGeneralAffair error:", err);
+      throw err;
+    }
+  },
+}));
+

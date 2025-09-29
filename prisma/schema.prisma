@@ -50,3 +50,165 @@ model accounting {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
 }
+
+model general_affair {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model hrd {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model lp {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model merchandise {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model mis {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model operational {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model sdp {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model tax {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
+
+model warehouse {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
