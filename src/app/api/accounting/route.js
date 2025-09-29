@@ -48,7 +48,7 @@ export async function POST(req) {
     // created should already contain risk_id_no because trigger runs BEFORE INSERT
     return new Response(JSON.stringify(created), { status: 201 });
   } catch (err) {
-    console.error("POST /api/accounitng error:", err);
+    console.error("POST /api/accounting error:", err);
     return new Response(
       JSON.stringify({ error: err.message ?? "Server error" }),
       { status: 500 },

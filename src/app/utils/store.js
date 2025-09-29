@@ -110,10 +110,10 @@ export const useFinanceStore = create((set) => ({
 export const useAccountingStore = create((set) => ({
   accounting: [],
 
-  loadFinance: async () => {
+  loadAccounting: async () => {
     try {
       const res = await fetch("/api/accounting");
-      if (!res.ok) throw new Error("Failed to fetch finances");
+      if (!res.ok) throw new Error("Failed to fetch accounting");
       const data = await res.json();
       set({ accounting: data });
       return data;
@@ -123,7 +123,7 @@ export const useAccountingStore = create((set) => ({
     }
   },
 
-  createFinance: async (payload) => {
+  createAccounting: async (payload) => {
     try {
       const res = await fetch("/api/accounting", {
         method: "POST",

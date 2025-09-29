@@ -17,7 +17,6 @@ model notes {
 
 model finance {
   risk_id             Int     @id @default(autoincrement())
-  risk_id_no          String? @unique @db.VarChar(20)
   category            String? @db.VarChar(50)
   sub_department      String? @db.VarChar(35)
   risk_description    String?
@@ -31,5 +30,23 @@ model finance {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  risk_id_no          String? @db.VarChar(20)
 }
 
+model accounting {
+  risk_id             Int     @id @default(autoincrement())
+  risk_id_no          String? @db.VarChar(20)
+  category            String? @db.VarChar(20)
+  sub_department      String? @db.VarChar(35)
+  sop_related         String?
+  risk_description    String?
+  risk_details        String?
+  impact_description  String?
+  impact_level        Int?
+  probability_level   Int?
+  priority_level      Int?
+  mitigation_strategy String?
+  owners              String? @db.VarChar(35)
+  root_cause_category String?
+  onset_timeframe     String? @db.VarChar(35)
+}
