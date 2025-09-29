@@ -15,7 +15,8 @@ function FinanceTable() {
     loadFinance();
   }, [loadFinance]);
 
-  if (!finances || finances.length === 0) return <div className="p-4 text-gray-500">Belum ada data.</div>;
+  if (!finances || finances.length === 0)
+    return <div className="p-4 text-gray-500">Belum ada data.</div>;
 
   return (
     <div className="p-4">
@@ -40,20 +41,48 @@ function FinanceTable() {
 
           <thead>
             <tr className="bg-gradient-to-r from-gray-100 to-gray-200">
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">RISK ID NO.</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Category</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Sub Department</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">SOP Related</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Risk Description</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Risk Details</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Impact Description</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Impact Level</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Probability Level</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Priority Level</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Mitigation Strategy</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Owners</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Root Cause Category</th>
-              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">Onset Timeframe</th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                RISK ID NO.
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Category
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Sub Department
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                SOP Related
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Risk Description
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Risk Details
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Impact Description
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Impact Level
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Probability Level
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Priority Level
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Mitigation Strategy
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Owners
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Root Cause Category
+              </th>
+              <th className="p-3 text-center text-sm font-semibold text-gray-700 border-b border-gray-300">
+                Onset Timeframe
+              </th>
             </tr>
           </thead>
 
@@ -72,17 +101,23 @@ function FinanceTable() {
 
                 {/* Category */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.category ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.category ?? "-"}
+                  </div>
                 </td>
 
                 {/* Sub Department */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.sub_department ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.sub_department ?? "-"}
+                  </div>
                 </td>
 
                 {/* SOP Related */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.sop_related ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.sop_related ?? "-"}
+                  </div>
                 </td>
 
                 {/* Risk Description */}
@@ -108,17 +143,23 @@ function FinanceTable() {
 
                 {/* Impact Level */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.impact_level ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.impact_level ?? "-"}
+                  </div>
                 </td>
 
                 {/* Probability Level */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.probability_level ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.probability_level ?? "-"}
+                  </div>
                 </td>
 
                 {/* Priority Level */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.priority_level ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.priority_level ?? "-"}
+                  </div>
                 </td>
 
                 {/* Mitigation Strategy */}
@@ -130,17 +171,23 @@ function FinanceTable() {
 
                 {/* Owners */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.owners ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.owners ?? "-"}
+                  </div>
                 </td>
 
                 {/* Root Cause Category */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.root_cause_category ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.root_cause_category ?? "-"}
+                  </div>
                 </td>
 
                 {/* Onset Timeframe */}
                 <td className="p-3 text-sm text-gray-800 border-b border-gray-200 align-top text-center">
-                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">{f.onset_timeframe ?? "-"}</div>
+                  <div className="whitespace-pre-wrap break-words break-all min-h-[40px]">
+                    {f.onset_timeframe ?? "-"}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -162,7 +209,7 @@ export default function Finance() {
       { name: "Delete Data", action: () => console.log("del") },
       { name: "Export Data", action: () => console.log("export") },
     ],
-    [openPopUp]
+    [openPopUp],
   );
 
   return (

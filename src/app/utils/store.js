@@ -16,8 +16,6 @@ export const viewPopUp = create((set) => ({
   closeViewPopUp: () => set({ isViewOpen: false }),
 }));
 
-
-
 //NOTEPAD
 
 export const useNoteStore = create((set) => ({
@@ -40,7 +38,6 @@ export const useNoteStore = create((set) => ({
     return newNote;
   },
 
- 
   updateNote: async (id, title, description) => {
     const res = await fetch("/api/notes", {
       method: "PUT",
@@ -66,8 +63,7 @@ export const useNoteStore = create((set) => ({
 
 
 
-// FINANCE
-
+// FINANCE NEW DATA POP UP
 
 export const useFinanceStore = create((set) => ({
   finance: [],
@@ -99,6 +95,48 @@ export const useFinanceStore = create((set) => ({
       const newItem = await res.json();
       // newItem already contains risk_code from server
       set((state) => ({ finance: [newItem, ...state.finance] }));
+      return newItem;
+    } catch (err) {
+      console.error("createFinance error:", err);
+      throw err;
+    }
+  },
+}));
+
+
+
+// ACCOUNTING NEW DATA POP UP
+
+export const useAccountingStore = create((set) => ({
+  accounting: [],
+
+  loadFinance: async () => {
+    try {
+      const res = await fetch("/api/accounting");
+      if (!res.ok) throw new Error("Failed to fetch finances");
+      const data = await res.json();
+      set({ accounting: data });
+      return data;
+    } catch (err) {
+      console.error("loadFinance error:", err);
+      return [];
+    }
+  },
+
+  createFinance: async (payload) => {
+    try {
+      const res = await fetch("/api/accounting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to create finance");
+      }
+      const newItem = await res.json();
+      // newItem already contains risk_code from server
+      set((state) => ({ accounting: [newItem, ...state.accounting] }));
       return newItem;
     } catch (err) {
       console.error("createFinance error:", err);

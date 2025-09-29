@@ -1,4 +1,3 @@
-
 export const buttonRiskAssessment = [
   {
     logo: "/images/Finance.png",
@@ -75,60 +74,60 @@ export const viewButton = [
   { name: "Export Data" },
 ];
 
-
-export const ListFinance = [
+// LIST INPUT POP UP RISK ASSESSMENT FORM
+export const ListAssessmentForm = [
   {
-    label : "Category",
-    placeholder : "Category"
+    label: "Category",
+    placeholder: "Category",
   },
   {
-    label : "Sub Department",
-    placeholder : "Category"
+    label: "Sub Department",
+    placeholder: "Sub Department",
   },
   {
-    label : "SOP Related / Standard",
-    placeholder : "Category"
+    label: "SOP Related / Standard",
+    placeholder: "if Yes, please input / if Not, please blank it",
   },
   {
-    label : "Risk Description",
-    placeholder : "Category"
+    label: "Risk Description",
+    placeholder: "Give a brief summary of the risk.",
   },
   {
-    label : "Risk Details",
-    placeholder : "Category"
+    label: "Risk Details",
+    placeholder: "Give a brief summary of the risk.",
   },
   {
-    label : "Impact Description",
-    placeholder : "Category"
+    label: "Impact Description",
+    placeholder: "What will happen if the risk is not mitigated or eliminated?",
   },
   {
-    label : "Impact Level",
-    placeholder : "Category"
+    label: "Impact Level",
+    placeholder: "Rate (LOW) to 3 (HIGH)",
   },
   {
-    label : "Probability Level",
-    placeholder : "Category"
+    label: "Probability Level",
+    placeholder: "Rate 1 (LOW) to 3 (HIGH)",
   },
   {
-    label : "Priority Level",
-    placeholder : "Category"
+    label: "Priority Level",
+    placeholder: "(IMPACT X PROBABILITY) Address  highest first. ",
   },
   {
-    label : "Mitigation Strategy",
-    placeholder : "Category"
+    label: "Mitigation Strategy",
+    placeholder:
+      "What can be done to lower or eliminate the impact or probability?",
   },
   {
-    label : "Owner",
-    placeholder : "Category"
+    label: "Owner",
+    placeholder: "Who's responsible?",
   },
   {
-    label : "Root Cause Category",
-    placeholder : "Category"
+    label: "Root Cause Category",
+    placeholder: "Give a brief summary of the root cause",
   },
   {
-    label : "Onset TimeFrame",
-    placeholder : "Category"
+    label: "Onset TimeFrame",
+    placeholder:
+      "- FAST:  Likely to occur with little or no warning - MODERATE:  Likely to occur within  2 to 4 weeks. - SLOW:  Likely to occur in four weeks or more.",
   },
-
-
 ];

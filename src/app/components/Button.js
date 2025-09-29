@@ -1,21 +1,19 @@
-"use client"
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
-import { BsSearch } from 'react-icons/bs';
+import { BsSearch } from "react-icons/bs";
 import { useRef, useEffect } from "react";
 
 export function ButtonRiskAssessment({ name, href, logo }) {
   return (
     <ul>
       <li>
-        <Link href={href} className="rounded-2xl text-center bg-white flex flex-col items-center text-[#034f75] font-extrabold py-5 shadow-md text-[14px] px-10 gap-2 hover:scale-98">
-          <Image 
-            src={logo}
-            width={120}
-            height={120}
-            alt={name}
-          />
+        <Link
+          href={href}
+          className="rounded-2xl text-center bg-white flex flex-col items-center text-[#034f75] font-extrabold py-5 shadow-md text-[14px] px-10 gap-2 hover:scale-98"
+        >
+          <Image src={logo} width={120} height={120} alt={name} />
           {name}
         </Link>
       </li>
@@ -23,19 +21,24 @@ export function ButtonRiskAssessment({ name, href, logo }) {
   );
 }
 
-
-export function Button({onClick,label,style}){
-  return(
+export function Button({ onClick, label, style }) {
+  return (
     <button onClick={onClick} className={style}>
       {label}
     </button>
   );
 }
 
-
-
 // DROP DOWN THAT CONNECT TO SMALL HEADER
-export function DropDown({ onSelect, label, items = [], isOpen, onToggle, onClose, openWhat }) {
+export function DropDown({
+  onSelect,
+  label,
+  items = [],
+  isOpen,
+  onToggle,
+  onClose,
+  openWhat,
+}) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -84,16 +87,19 @@ export function DropDown({ onSelect, label, items = [], isOpen, onToggle, onClos
   );
 }
 
-
-
 // SEARCH
 
-export function Search(){
-  return(
-  <div className="relative bg-white flex flex-row rounded-2xl p-1 gap-1 w-[30%]">
-  <input type="text" placeholder="Search..." 
-         className="w-full bg-white px-6 rounded-2xl" />
-    <button className="p-1 bg-yellow-300 rounded-2xl cursor-pointer"><BsSearch /></button>
-</div>
+export function Search() {
+  return (
+    <div className="relative bg-white flex flex-row rounded-2xl p-1 gap-1 w-[30%]">
+      <input
+        type="text"
+        placeholder="Search..."
+        className="w-full bg-white px-6 rounded-2xl"
+      />
+      <button className="p-1 bg-yellow-300 rounded-2xl cursor-pointer">
+        <BsSearch />
+      </button>
+    </div>
   );
 }

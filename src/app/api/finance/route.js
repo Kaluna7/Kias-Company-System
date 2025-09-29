@@ -1,4 +1,3 @@
-// app/api/finance/route.js
 import { PrismaClient } from "@/generated/prisma";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -17,7 +16,10 @@ export async function GET() {
     return new Response(JSON.stringify(finances), { status: 200 });
   } catch (err) {
     console.error("GET /api/finance error:", err);
-    return new Response(JSON.stringify({ error: err.message ?? "Server error" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message ?? "Server error" }),
+      { status: 500 },
+    );
   }
 }
 
@@ -47,6 +49,9 @@ export async function POST(req) {
     return new Response(JSON.stringify(created), { status: 201 });
   } catch (err) {
     console.error("POST /api/finance error:", err);
-    return new Response(JSON.stringify({ error: err.message ?? "Server error" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message ?? "Server error" }),
+      { status: 500 },
+    );
   }
 }

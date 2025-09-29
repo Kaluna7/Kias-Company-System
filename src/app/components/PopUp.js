@@ -1,9 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useNoteStore } from "../utils/store";
-import { newFinanceDataPopUp } from "../utils/store";
-
-
+import { newFinanceDataPopUp } from "../utils/store"// 
 // NOTEPAD
 
 export function NewNotePad({ onClose }) {
@@ -167,7 +165,7 @@ export function ViewNote({onClose}){
 // FINANCE INPUT POP UP
 
 import React from "react";
-import { ListFinance } from "../data/Data";
+import { ListAssessmentForm } from "../data/Data";
 import { useFinanceStore } from "../utils/store";
 
 // mapping label -> key
@@ -227,16 +225,14 @@ export function NewFinanceInput({ onClose }) {
   return (
     <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
       <h1 className="text-white font-bold text-4xl">New Data</h1>
-
-      {/* BOX PUTIH: fixed size, internal scroll */}
+   
       <div className="bg-gray-50 w-full rounded-2xl p-6 h-[28rem] max-h-[28rem]">
         <div
           className="w-full h-full overflow-y-auto pr-2"
           style={{ scrollbarGutter: "stable" }}
-        >
-          {/* grid: 4 columns (label col = 1, input col = 3) with rows auto */}
+        >   
           <div className="grid grid-cols-4 gap-4 items-start">
-            {ListFinance.map((item, idx) => {
+            {ListAssessmentForm.map((item, idx) => {
               const label = item.label;
               const key = LABEL_TO_KEY[label];
               if (!key) return null;
@@ -244,8 +240,7 @@ export function NewFinanceInput({ onClose }) {
               const isTextarea = TEXTAREA_LABELS.has(label);
               const isNumber = NUMERIC_FIELDS.has(key);
 
-              if (isTextarea) {
-                // textarea takes full width (span 4)
+              if (isTextarea) {              
                 return (
                   <div key={idx} className="col-span-4">
                     <label className="block mb-2 text-sm font-medium text-gray-700">{label}</label>
@@ -257,9 +252,7 @@ export function NewFinanceInput({ onClose }) {
                     />
                   </div>
                 );
-              }
-
-              // normal row: label (col 1) | input (col 3)
+              }             
               return (
                 <React.Fragment key={idx}>
                   <div className="col-span-1 flex items-center">
@@ -481,17 +474,6 @@ export function NewOperationalInput({onClose}){
 
 export function NewWarehouseInput({onClose}){
   return(
-    <div className="absolute z-999 bg-[#141D38] h-full w-full max-h-[40rem] max-w-[70rem] left-55 top-15 p-6 flex flex-col items-center gap-4 rounded-2xl">
-      <h1 className="text-white font-bold text-4xl">New Data</h1>
-      <div className="bg-gray-50 h-full w-full rounded-2xl flex flex-col p-6 items-center justify-center">
-        <div className="w-full h-full grid grid-cols-4 gap-6">
-          <h1>Warehouse</h1>
-        </div>
-      </div>
-      <div className="flex flex-row gap-6">
-          <button onClick={"#"} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Save</button>
-          <button onClick={onClose} className="bg-green-400 h-fit w-fit py-2 px-6 rounded-xl cursor-pointer">Close</button>
-        </div>
-    </div>
+    <></>
   );
 }

@@ -7,8 +7,7 @@ import { RiDeleteBin6Fill } from "react-icons/ri";
 import { AiOutlineEye } from "react-icons/ai";
 import dynamic from "next/dynamic";
 
-
-  const Calendar = dynamic(() => import("react-calendar"), {
+const Calendar = dynamic(() => import("react-calendar"), {
   ssr: false,
 });
 

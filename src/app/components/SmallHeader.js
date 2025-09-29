@@ -27,7 +27,8 @@ export default function SmallHeader({
   // - jika parent kirim explicit fileItems prop -> pakai
   // - else jika parent kirim items array -> treat sebagai fileItems (backward compat)
   // - else pakai default imports
-  const fileItems = fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : fileButton);
+  const fileItems =
+    fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : fileButton);
   const editItems = editItemsProp ?? editItemsProp ?? editButton;
   const viewItems = viewItemsProp ?? viewButton;
 
@@ -42,9 +43,17 @@ export default function SmallHeader({
 
   const handleClick = (payload) => {
     // payload idealnya object item, tapi handle juga kalau string (legacy)
-    const item = typeof payload === "object" && payload !== null ? payload : findItemFromName(payload);
+    const item =
+      typeof payload === "object" && payload !== null
+        ? payload
+        : findItemFromName(payload);
 
-    console.log("[SmallHeader] clicked payload:", payload, "=> resolved item:", item);
+    console.log(
+      "[SmallHeader] clicked payload:",
+      payload,
+      "=> resolved item:",
+      item,
+    );
 
     if (!item) {
       setActive(null);
@@ -65,7 +74,9 @@ export default function SmallHeader({
     // Fallback: kalau item punya modal string (opsional), emit event atau log
     if (item.modal) {
       // contoh: emit custom event (kalau kamu punya ModalHost central yang listen)
-      window.dispatchEvent(new CustomEvent("open-modal", { detail: { name: item.modal } }));
+      window.dispatchEvent(
+        new CustomEvent("open-modal", { detail: { name: item.modal } }),
+      );
       setActive(null);
       return;
     }
@@ -77,12 +88,39 @@ export default function SmallHeader({
   return (
     <div className="w-full z-200">
       <header className="w-full bg-[#141D38] h-12 flex items-center justify-between fixed border-b border-white">
-        <Image src="/images/kias-logo.png" width={45} height={45} alt="kias logo" className="ml-1" />
+        <Image
+          src="/images/kias-logo.png"
+          width={45}
+          height={45}
+          alt="kias logo"
+          className="ml-1"
+        />
 
         <div className="flex flex-row gap-4 ml-[-140px]">
-          <DropDown items={fileItems} label="File" onSelect={handleClick} isOpen={active === "File"} onToggle={() => setActive(active === "File" ? null : "File")} onClose={() => setActive(null)} />
-          <DropDown items={editItems} label="Edit" onSelect={handleClick} isOpen={active === "Edit"} onToggle={() => setActive(active === "Edit" ? null : "Edit")} onClose={() => setActive(null)} />
-          <DropDown items={viewItems} label="View" onSelect={handleClick} isOpen={active === "View"} onToggle={() => setActive(active === "View" ? null : "View")} onClose={() => setActive(null)} />
+          <DropDown
+            items={fileItems}
+            label="File"
+            onSelect={handleClick}
+            isOpen={active === "File"}
+            onToggle={() => setActive(active === "File" ? null : "File")}
+            onClose={() => setActive(null)}
+          />
+          <DropDown
+            items={editItems}
+            label="Edit"
+            onSelect={handleClick}
+            isOpen={active === "Edit"}
+            onToggle={() => setActive(active === "Edit" ? null : "Edit")}
+            onClose={() => setActive(null)}
+          />
+          <DropDown
+            items={viewItems}
+            label="View"
+            onSelect={handleClick}
+            isOpen={active === "View"}
+            onToggle={() => setActive(active === "View" ? null : "View")}
+            onClose={() => setActive(null)}
+          />
         </div>
 
         <Search />
