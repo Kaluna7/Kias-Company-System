@@ -136,7 +136,6 @@ export const ListAssessmentForm = [
 
 // FORM NEW DATA CONFIG
 
-// formConfig.js
 export const LABEL_TO_KEY = {
   "Category": "category",
   "Sub Department": "sub_department",
@@ -164,4 +163,24 @@ export const TEXTAREA_LABELS = new Set([
   "Mitigation Strategy",
   "Impact Description",
   "Risk Description",
+]);
+
+
+export const SELECT_OPTIONS = {
+    category: [
+      { value: "", label: "Choose Category" },
+      { value: "Compliance", label: "Compliance" },
+      { value: "Operational", label: "Operational" },
+      { value: "Finance", label: "Finance" },
+    ],
+    onset_timeframe: [
+      { value: "", label: "Choose Onset Timeframe" },
+      { value: "Slow", label: "Slow (Likely to occur with little or no warning)" },
+      { value: "Moderate", label: "Moderate (Likely to occur within  2 to 4 weeks)" },
+      { value: "Fast", label: "Fast (Likely to occur with little or no warning)" },
+    ]
+  };
+
+export const OPTIONAL_FIELDS = new Set([
+  "sop_related"
 ]);

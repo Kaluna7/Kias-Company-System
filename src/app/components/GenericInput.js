@@ -1,11 +1,13 @@
+"use client";
 import React, { useState } from "react";
+import { SELECT_OPTIONS, OPTIONAL_FIELDS } from "../data/Data";
 
 export function GenericInputModal({
   onClose,
-  createItem,         // function dari store, misal createFinance
+  createItem,      
   title = "New Data",
-  listForm = [],       // ListAssessmentForm
-  labelToKey = {},     // LABEL_TO_KEY
+  listForm = [],     
+  labelToKey = {},  
   numericFields = new Set(),
   textareaLabels = new Set()
 }) {
@@ -41,6 +43,7 @@ export function GenericInputModal({
     }
   };
 
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -67,6 +70,7 @@ export function GenericInputModal({
 
                   const isTextarea = textareaLabels.has(label);
                   const isNumber = numericFields.has(key);
+                  const hasSelect = !!SELECT_OPTIONS[key];
 
                   if (isTextarea) {
                     return (
@@ -89,15 +93,29 @@ export function GenericInputModal({
                       </div>
 
                       <div className="col-span-3">
-                        <input
+                        {hasSelect ? (
+                          <select
+                            value={form[key]}
+                            onChange={(e) => onChange(key, e.target.value)}
+                            required
+                            className="w-full p-2 rounded h-10 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                          >
+                            {SELECT_OPTIONS[key].map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
                           value={form[key]}
                           onChange={(e) => onChange(key, e.target.value)}
                           placeholder={item.placeholder}
                           type={isNumber ? "number" : "text"}
                           {...(isNumber ? { min: 0 } : {})}
-                          required
-                          className="w-full p-2 rounded h-10 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                          required={!OPTIONAL_FIELDS.has(key)}
+                          onWheel={isNumber ? (e) => e.currentTarget.blur() : undefined}
+                          className="w-full p-2 rounded h-10 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 appearance-none"
                         />
+                        )}
                       </div>
                     </React.Fragment>
                   );
@@ -114,9 +132,7 @@ export function GenericInputModal({
             <button
               type="submit"
               disabled={loading}
-              className={`px-6 py-2 rounded-xl text-white ${
-                loading ? "bg-green-300" : "bg-green-500 hover:bg-green-600 cursor-pointer"
-              }`}
+              className={`px-6 py-2 rounded-xl text-white ${loading ? "bg-green-300" : "bg-green-500 hover:bg-green-600 cursor-pointer"}`}
             >
               {loading ? "Saving..." : "Save"}
             </button>
