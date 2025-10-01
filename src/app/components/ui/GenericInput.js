@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { SELECT_OPTIONS, OPTIONAL_FIELDS } from "../data/Data";
+import { SELECT_OPTIONS, OPTIONAL_FIELDS } from "../../data/Data";
 
 export function GenericInputModal({
   onClose,

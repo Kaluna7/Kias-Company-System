@@ -1,6 +1,7 @@
 "use client";
 
-import { MyCalendar, Note } from "./Accessories";
+import { MyCalendar } from "../features/Calender";
+import { Note } from "../features/Note";
 
 export default function RightSidebar() {
   return (

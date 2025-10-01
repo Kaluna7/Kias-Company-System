@@ -1,0 +1,49 @@
+"use client";
+
+import { create } from "zustand";
+
+//NOTEPAD
+
+export const useNoteStore = create((set) => ({
+  notes: [],
+
+  fetchNotes: async () => {
+    const res = await fetch("/api/RiskAssessment/notes");
+    const data = await res.json();
+    set({ notes: data });
+  },
+
+  addNote: async (title, description) => {
+    const res = await fetch("/api/RiskAssessment/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, description }),
+    });
+    const newNote = await res.json();
+    set((state) => ({ notes: [...state.notes, newNote] }));
+    return newNote;
+  },
+
+  updateNote: async (id, title, description) => {
+    const res = await fetch("/api/RiskAssessment/notes", {
+      method: "PUT",
+      headers: { "Content-type": "application/json" },
+      body: JSON.stringify({ id, title, description }),
+    });
+    const updated = await res.json();
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === id ? updated : n)),
+    }));
+    return updated;
+  },
+
+  deleteNote: async (id) => {
+    await fetch("/api/RiskAssessment/notes", {
+      method: "DELETE",
+      headers: { "Content-type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    set((state) => ({ notes: state.notes.filter((n) => n.id !== id) }));
+  },
+}));
+

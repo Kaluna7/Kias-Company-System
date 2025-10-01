@@ -1,12 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewAccountingInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
-import { useMemo, useEffect } from "react";
-import { useAccountingStore } from "@/app/utils/store";
-import { DataTable } from "@/app/components/DataTable";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewAccountingInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useMemo } from "react";
+import { useAccountingStore } from "@/app/stores/RiskAssessement/accountingStore";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function AccountingTable() {
   const accountings = useAccountingStore((s) => s.accounting);

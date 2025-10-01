@@ -1,18 +1,9 @@
-// SmallHeader.jsx
 "use client";
 
 import Image from "next/image";
-import { DropDown, Search } from "./Button";
-import { fileButton, editButton, viewButton } from "../data/Data";
+import { DropDown, Search } from "../features/Button";
+import { fileButton, editButton, viewButton } from "../../data/Data";
 import { useState } from "react";
-
-/*
-  Perubahan utama:
-  - Tidak lagi import/mengandalkan modalOpeners secara default untuk action utama.
-  - Menerima prop items (array) sebagai file menu (backward compatible).
-  - Juga menerima explicit props fileItems/editItems/viewItems bila ingin custom per group.
-  - Menjalankan item.action() bila tersedia (parent harus mengirim action).
-*/
 
 export default function SmallHeader({
   label,
@@ -23,10 +14,6 @@ export default function SmallHeader({
 }) {
   const [active, setActive] = useState(null);
 
-  // Prioritas:
-  // - jika parent kirim explicit fileItems prop -> pakai
-  // - else jika parent kirim items array -> treat sebagai fileItems (backward compat)
-  // - else pakai default imports
   const fileItems =
     fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : fileButton);
   const editItems = editItemsProp ?? editItemsProp ?? editButton;
@@ -42,7 +29,6 @@ export default function SmallHeader({
   };
 
   const handleClick = (payload) => {
-    // payload idealnya object item, tapi handle juga kalau string (legacy)
     const item =
       typeof payload === "object" && payload !== null
         ? payload
@@ -60,7 +46,6 @@ export default function SmallHeader({
       return;
     }
 
-    // Primary: jalankan action yang dikirim oleh parent
     if (typeof item.action === "function") {
       try {
         item.action();
@@ -71,9 +56,7 @@ export default function SmallHeader({
       return;
     }
 
-    // Fallback: kalau item punya modal string (opsional), emit event atau log
     if (item.modal) {
-      // contoh: emit custom event (kalau kamu punya ModalHost central yang listen)
       window.dispatchEvent(
         new CustomEvent("open-modal", { detail: { name: item.modal } }),
       );

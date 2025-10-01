@@ -1,11 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewTaxInput } from "@/app/components/PopUp";
-import { usePopUp, useTaxStore } from "@/app/utils/store";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewTaxInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useTaxStore } from "@/app/stores/RiskAssessement/taxStore";
 import { useMemo } from "react";
-import { DataTable } from "@/app/components/DataTable";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 
 function TaxTable(){

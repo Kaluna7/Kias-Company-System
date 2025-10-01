@@ -1,26 +1,10 @@
-"use client";
 
-import { useEffect, useState } from "react";
-import "react-calendar/dist/Calendar.css";
-import { usePopUp, useNoteStore, viewPopUp } from "../utils/store";
 import { RiDeleteBin6Fill } from "react-icons/ri";
 import { AiOutlineEye } from "react-icons/ai";
-import dynamic from "next/dynamic";
-
-const Calendar = dynamic(() => import("react-calendar"), {
-  ssr: false,
-});
-
-export function MyCalendar() {
-  const [value, setValue] = useState(new Date());
-
-  return (
-    <div className="text-[12px] flex flex-col">
-      <h1 className="font-bold text-white text-lg">Calendar</h1>
-      <Calendar onChange={setValue} value={value} className="rounded-2xl" z />
-    </div>
-  );
-}
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useNoteStore } from "@/app/stores/RiskAssessement/notepad";
+import { viewPopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useEffect } from "react";
 
 export function Note() {
   const notes = useNoteStore((s) => s.notes);

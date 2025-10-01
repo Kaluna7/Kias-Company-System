@@ -1,11 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewWarehouseInput } from "@/app/components/PopUp";
-import { usePopUp, useWarehouseStore } from "@/app/utils/store";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewWarehouseInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useWarehouseStore } from "@/app/stores/RiskAssessement/whsStore";
 import { useMemo } from "react";
-import { DataTable } from "@/app/components/DataTable";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function WarehouseTable(){
   const warehouse = useWarehouseStore((s) => s.warehouse);

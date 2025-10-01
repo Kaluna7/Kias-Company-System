@@ -1,11 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewHrdInput } from "@/app/components/PopUp";
-import { usePopUp, useHrdStore } from "@/app/utils/store";
-import { useMemo, useEffect } from "react";
-import { DataTable } from "@/app/components/DataTable";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewHrdInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useHrdStore } from "@/app/stores/RiskAssessement/hrdStore";
+import { useMemo } from "react";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function HrdTable() {
   const hrds = useHrdStore((s) => s.hrd);

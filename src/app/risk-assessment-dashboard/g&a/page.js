@@ -1,12 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewGeneralAffairInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
-import { useMemo, useEffect } from "react";
-import { useGeneralAffairStore } from "@/app/utils/store";
-import { DataTable } from "@/app/components/DataTable";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewGeneralAffairInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useMemo } from "react";
+import { useGeneralAffairStore } from "@/app/stores/RiskAssessement/gaStore";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function GeneralAffairTable() {
   const generalAffair = useGeneralAffairStore((s) => s.generalAffair);

@@ -1,12 +1,12 @@
 "use client";
-import LargeSidebar from "../components/LargeSidebar";
-import { ButtonRiskAssessment } from "../components/Button";
+import LargeSidebar from "../components/ui/LargeSidebar";
+import { ButtonRiskAssessment } from "../components/features/Button";
 import { buttonRiskAssessment } from "../data/Data";
-import RightSidebar from "../components/RightSidebar";
-import { usePopUp } from "../utils/store";
-import { NewNotePad, ViewNote } from "../components/PopUp";
-import { EditNotePad } from "../components/PopUp";
-import { viewPopUp } from "../utils/store";
+import RightSidebar from "../components/layout/RightSidebar";
+import { usePopUp } from "../stores/RiskAssessement/popupStore";
+import { NewNotePad, ViewNote } from "../components/ui/NotePad";
+import { EditNotePad } from "../components/ui/PopUpRiskAssessmentInput";
+import { viewPopUp } from "../stores/RiskAssessement/popupStore";
 
 export default function RiskAssessmentDashboard() {
   const { isOpen, closePopUp } = usePopUp();

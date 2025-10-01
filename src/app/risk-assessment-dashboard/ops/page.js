@@ -1,11 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewOperationalInput } from "@/app/components/PopUp";
-import { useOperationalStore, usePopUp } from "@/app/utils/store";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewOperationalInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useOperationalStore } from "@/app/stores/RiskAssessement/opsStore";
 import { useMemo } from "react";
-import { DataTable } from "@/app/components/DataTable";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 
 function OperationalTable(){

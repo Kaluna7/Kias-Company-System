@@ -1,12 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewSDPInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
-import { useMemo, useEffect } from "react";
-import { useStorePlanningStore } from "@/app/utils/store";
-import { DataTable } from "@/app/components/DataTable";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewSDPInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/store";
+import { useMemo } from "react";
+import { useStorePlanningStore } from "@/app/stores/RiskAssessement/sdpStore";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function StorePlanningTable() {
   const sdps = useStorePlanningStore((s) => s.sdp);

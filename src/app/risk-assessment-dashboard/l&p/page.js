@@ -1,12 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewLpInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
-import { useMemo, useEffect } from "react";
-import { useLossPreventionStore } from "@/app/utils/store";
-import { DataTable } from "@/app/components/DataTable";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewLpInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { useMemo } from "react";
+import { useLossPreventionStore } from "@/app/stores/RiskAssessement/lpStore";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function LossPreventionTable() {
   const lossPreventions = useLossPreventionStore((s) => s.lp);

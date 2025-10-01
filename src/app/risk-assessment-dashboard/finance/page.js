@@ -1,12 +1,12 @@
 "use client";
 
-import SmallSidebar from "@/app/components/SmallSidebar";
-import SmallHeader from "@/app/components/SmallHeader";
-import { NewFinanceInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
+import SmallHeader from "@/app/components/layout/SmallHeader";
+import { NewFinanceInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
 import { useMemo } from "react";
-import { useFinanceStore } from "@/app/utils/store";
-import { DataTable } from "@/app/components/DataTable";
+import { useFinanceStore } from "@/app/stores/RiskAssessement/financeStore";
+import { DataTable } from "@/app/components/ui/DataTable";
 
 function FinanceTable() {
   const finances = useFinanceStore((s) => s.finance);
