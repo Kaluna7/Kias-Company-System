@@ -131,3 +131,37 @@ export const ListAssessmentForm = [
       "- FAST:  Likely to occur with little or no warning - MODERATE:  Likely to occur within  2 to 4 weeks. - SLOW:  Likely to occur in four weeks or more.",
   },
 ];
+
+
+
+// FORM NEW DATA CONFIG
+
+// formConfig.js
+export const LABEL_TO_KEY = {
+  "Category": "category",
+  "Sub Department": "sub_department",
+  "SOP Related / Standard": "sop_related",
+  "Risk Description": "risk_description",
+  "Risk Details": "risk_details",
+  "Impact Description": "impact_description",
+  "Impact Level": "impact_level",
+  "Probability Level": "probability_level",
+  "Priority Level": "priority_level",
+  "Mitigation Strategy": "mitigation_strategy",
+  "Owner": "owners",
+  "Root Cause Category": "root_cause_category",
+  "Onset TimeFrame": "onset_timeframe",
+};
+
+export const NUMERIC_FIELDS = new Set([
+  "impact_level",
+  "probability_level",
+  "priority_level",
+]);
+
+export const TEXTAREA_LABELS = new Set([
+  "Risk Details",
+  "Mitigation Strategy",
+  "Impact Description",
+  "Risk Description",
+]);

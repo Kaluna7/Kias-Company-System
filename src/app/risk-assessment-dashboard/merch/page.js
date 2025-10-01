@@ -5,6 +5,21 @@ import SmallHeader from "@/app/components/SmallHeader";
 import { NewMerchandiseInput } from "@/app/components/PopUp";
 import { usePopUp } from "@/app/utils/store";
 import { useMemo } from "react";
+import { useMerchandiseStore } from "@/app/utils/store";
+import { DataTable } from "@/app/components/DataTable";
+
+
+
+function MerchandiseTable(){
+  const merchandises = useMerchandiseStore((s) => s.merchandise);
+  const loadMerchandise = useMerchandiseStore((s) => s.loadMerchandise);
+  return(
+    <DataTable 
+    items={merchandises}
+    load={loadMerchandise}
+    />
+  );
+}
 
 export default function Merchandise() {
   const isOpen = usePopUp((s) => s.isOpen);
@@ -21,14 +36,15 @@ export default function Merchandise() {
   );
 
   return (
-    <main className="flex flex-row w-max h-full">
-      <SmallSidebar />
-      <div className="flex flex-col">
-        <SmallHeader label={"Risk Assessment Form Merchandise"} items={items} />
-        <div className="mt-12 ml-14">
-          {isOpen && <NewMerchandiseInput onClose={closePopUp} />}
-        </div>
-      </div>
-    </main>
+     <main className="flex flex-row w-full h-full min-h-screen">
+          <SmallSidebar />
+          <div className="flex flex-col flex-1">
+            <SmallHeader label="Risk Assessment Form Merchandise" items={items} />
+            <div className="mt-12 ml-14 flex-1">
+              {isOpen && <NewMerchandiseInput onClose={closePopUp} />}
+              <MerchandiseTable />
+            </div>
+          </div>
+        </main>
   );
 }

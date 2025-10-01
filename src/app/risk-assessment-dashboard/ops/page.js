@@ -3,8 +3,21 @@
 import SmallSidebar from "@/app/components/SmallSidebar";
 import SmallHeader from "@/app/components/SmallHeader";
 import { NewOperationalInput } from "@/app/components/PopUp";
-import { usePopUp } from "@/app/utils/store";
+import { useOperationalStore, usePopUp } from "@/app/utils/store";
 import { useMemo } from "react";
+import { DataTable } from "@/app/components/DataTable";
+
+
+function OperationalTable(){
+  const operational = useOperationalStore((s) => s.operational);
+  const loadOperational = useOperationalStore((s) => s.loadOperational);
+  return(
+    <DataTable 
+    items={operational}
+    load={loadOperational}
+    />
+  );
+}
 
 export default function Operational() {
   const isOpen = usePopUp((s) => s.isOpen);
@@ -21,14 +34,15 @@ export default function Operational() {
   );
 
   return (
-    <main className="flex flex-row w-max h-full">
-      <SmallSidebar />
-      <div className="flex flex-col">
-        <SmallHeader label={"Risk Assessment Form Operational"} items={items} />
-        <div className="mt-12 ml-14">
-          {isOpen && <NewOperationalInput onClose={closePopUp} />}
-        </div>
+<main className="flex flex-row w-full h-full min-h-screen">
+    <SmallSidebar />
+    <div className="flex flex-col flex-1">
+      <SmallHeader label="Risk Assessment Form Operational" items={items} />
+      <div className="mt-12 ml-14 flex-1">
+        {isOpen && <NewOperationalInput onClose={closePopUp} />}
+        <OperationalTable />
       </div>
-    </main>
+    </div>
+  </main>
   );
 }

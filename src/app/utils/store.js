@@ -495,7 +495,7 @@ export const useWarehouseStore = create((set) => ({
       const res = await fetch("/api/whs");
       if (!res.ok) throw new Error("Failed to fetch warehouse");
       const data = await res.json();
-      set({ generalAffair: data });
+      set({ warehouse: data });
       return data;
     } catch (err) {
       console.error("loadWarehouse error:", err);
