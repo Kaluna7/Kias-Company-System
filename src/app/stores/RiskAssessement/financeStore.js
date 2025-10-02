@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export const useFinanceStore = create((set, get) => ({
   finance: [],
-  currentFilter: "published", // default
+  currentFilter: "published",
 
   loadFinance: async (status = "published") => {
     try {
@@ -37,9 +37,7 @@ export const useFinanceStore = create((set, get) => ({
     }
   },
 
-  // Optimistic: langsung pindahkan ke draft di state
   moveToDraft: async (id) => {
-    // update dulu di state
     set((state) => ({
       finance: state.finance.filter((f) => f.risk_id !== id),
     }));
@@ -53,25 +51,25 @@ export const useFinanceStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to move to draft");
       }
       const updated = await res.json();
-      // kalau lagi lihat "draft", tambahin item ke list
+// If look the draft, add get item to list
       if (get().currentFilter === "draft") {
         set((state) => ({ finance: [updated, ...state.finance] }));
       }
       return updated;
     } catch (err) {
       console.error("moveToDraft error:", err);
-      // rollback (load ulang data agar konsisten)
+      // roll back to load for more consistant
       get().loadFinance(get().currentFilter);
       throw err;
     }
   },
 
-  // Optimistic update status
+  // make update more optimized
   updateStatus: async (id, newStatus) => {
     // simpan dulu state lama
     const prev = get().finance;
 
-    // update langsung di state
+    // update direcly on state
     set((state) => ({
       finance: state.finance.map((f) =>
         f.risk_id === id ? { ...f, status: newStatus } : f
@@ -89,7 +87,7 @@ export const useFinanceStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to update status");
       }
       const updated = await res.json();
-      // replace dengan versi dari server
+     // replace with server version
       set((state) => ({
         finance: state.finance.map((f) =>
           f.risk_id === id ? updated : f
@@ -98,7 +96,7 @@ export const useFinanceStore = create((set, get) => ({
       return updated;
     } catch (err) {
       console.error("updateStatus error:", err);
-      // rollback ke state lama kalau gagal
+      // rollback server more long if fail
       set({ finance: prev });
       throw err;
     }

@@ -10,19 +10,22 @@ export default function SmallHeader({
   fileItems: fileItemsProp = null,
   editItems: editItemsProp = null,
   viewItems: viewItemsProp = null,
+  onSearch, // callback dikirim dari parent
 }) {
   const [active, setActive] = useState(null);
+
+  // Default array button
   const fileButton = [];
-    
   const editButton = [];
-    
   const viewButton = [];
-  
+
+  // Pastikan tidak undefined
   const fileItems =
     fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : fileButton);
-  const editItems = editItemsProp ?? editItemsProp ?? editButton;
+  const editItems = editItemsProp ?? editButton;
   const viewItems = viewItemsProp ?? viewButton;
 
+  // Cari item berdasarkan name
   const findItemFromName = (name) => {
     return (
       fileItems.find((i) => i.name === name) ||
@@ -32,6 +35,7 @@ export default function SmallHeader({
     );
   };
 
+  // Handle click dropdown
   const handleClick = (payload) => {
     const item =
       typeof payload === "object" && payload !== null
@@ -72,9 +76,18 @@ export default function SmallHeader({
     setActive(null);
   };
 
+  // Handle search input
+  const handleSearch = (value) => {
+    console.log("[SmallHeader] search:", value);
+    if (typeof onSearch === "function") {
+      onSearch(value); // kirim ke parent
+    }
+  };
+
   return (
-    <div className="w-full z-200">
+    <div className="w-full z-[200]">
       <header className="w-full bg-[#141D38] h-12 flex items-center justify-between fixed border-b border-white">
+        {/* Logo */}
         <Image
           src="/images/kias-logo.png"
           width={45}
@@ -83,6 +96,7 @@ export default function SmallHeader({
           className="ml-1"
         />
 
+        {/* Dropdown menus */}
         <div className="flex flex-row gap-4 ml-[-140px]">
           <DropDown
             items={fileItems}
@@ -110,8 +124,10 @@ export default function SmallHeader({
           />
         </div>
 
-        <Search />
+        {/* Search */}
+        <Search onSearch={handleSearch} />
 
+        {/* Label */}
         <h1 className="text-[#141D38] mr-10 rounded-2xl bg-white text-sm font-bold px-4 py-1 inset-shadow-sm inset-shadow-[#141D38]/50">
           {label}
         </h1>

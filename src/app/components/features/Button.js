@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { BsSearch } from "react-icons/bs";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 
 export function ButtonRiskAssessment({ name, href, logo }) {
   return (
@@ -90,17 +90,33 @@ export function DropDown({
 
 // SEARCH
 
-export function Search() {
+
+export function Search({ onSearch }) {
+  const [value, setValue] = useState("");
+
+  const handleChange = (e) => {
+    const newVal = e.target.value;
+    setValue(newVal);
+    if (onSearch) onSearch(newVal); // kirim ke parent
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (onSearch) onSearch(value);
+  };
+
   return (
-    <div className="relative bg-white flex flex-row rounded-2xl p-1 gap-1 w-[30%]">
+    <form
+      onSubmit={handleSubmit}
+      className="relative bg-white flex flex-row rounded-2xl p-1 gap-1 w-[30%]"
+    >
       <input
         type="text"
-        placeholder="Search..."
+        placeholder="🔎Search"
+        value={value}
+        onChange={handleChange}
         className="w-full bg-white px-6 rounded-2xl"
       />
-      <button className="p-1 bg-yellow-300 rounded-2xl cursor-pointer">
-        <BsSearch />
-      </button>
-    </div>
+    </form>
   );
 }

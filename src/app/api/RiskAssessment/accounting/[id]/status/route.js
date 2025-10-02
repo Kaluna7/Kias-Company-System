@@ -13,14 +13,14 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
 
-    const finances = await prisma.finance.findMany({
+    const finances = await prisma.accounting.findMany({
       where: status ? { status } : undefined,
       orderBy: { risk_id: "desc" },
     });
 
     return new Response(JSON.stringify(finances), { status: 200 });
   } catch (err) {
-    console.error("GET /api/finance error:", err);
+    console.error("GET /api/accounting error:", err);
     return new Response(
       JSON.stringify({ error: err.message ?? "Server error" }),
       { status: 500 },
@@ -33,7 +33,7 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
-    const created = await prisma.finance.create({
+    const created = await prisma.accounting.create({
       data: {
         category: body.category ?? null,
         sub_department: body.sub_department ?? null,
@@ -53,7 +53,7 @@ export async function POST(req) {
 
     return new Response(JSON.stringify(created), { status: 201 });
   } catch (err) {
-    console.error("POST /api/finance error:", err);
+    console.error("POST /api/accounting error:", err);
     return new Response(
       JSON.stringify({ error: err.message ?? "Server error" }),
       { status: 500 },
