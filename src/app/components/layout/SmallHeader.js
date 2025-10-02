@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { DropDown, Search } from "../features/Button";
-import { fileButton, editButton, viewButton } from "../../data/Data";
 import { useState } from "react";
 
 export default function SmallHeader({
@@ -13,7 +12,12 @@ export default function SmallHeader({
   viewItems: viewItemsProp = null,
 }) {
   const [active, setActive] = useState(null);
-
+  const fileButton = [];
+    
+  const editButton = [];
+    
+  const viewButton = [];
+  
   const fileItems =
     fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : fileButton);
   const editItems = editItemsProp ?? editItemsProp ?? editButton;

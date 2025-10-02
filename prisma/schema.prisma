@@ -31,6 +31,7 @@ model finance {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   risk_id_no          String? @db.VarChar(20)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model accounting {
@@ -49,6 +50,7 @@ model accounting {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model general_affair {
@@ -67,6 +69,7 @@ model general_affair {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model hrd {
@@ -85,6 +88,7 @@ model hrd {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model lp {
@@ -103,6 +107,7 @@ model lp {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model merchandise {
@@ -121,6 +126,7 @@ model merchandise {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model mis {
@@ -139,6 +145,7 @@ model mis {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model operational {
@@ -157,6 +164,7 @@ model operational {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model sdp {
@@ -175,6 +183,7 @@ model sdp {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model tax {
@@ -193,6 +202,7 @@ model tax {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }
 
 model warehouse {
@@ -211,4 +221,5 @@ model warehouse {
   owners              String? @db.VarChar(35)
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
+  status              String? @default("published") @db.VarChar(20)
 }

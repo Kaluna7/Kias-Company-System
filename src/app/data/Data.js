@@ -57,21 +57,12 @@ export const buttonRiskAssessment = [
 ];
 
 export const fileButton = [
-  { name: "New Data" },
-  { name: "Delete Data" },
-  { name: "Export Data" },
 ];
 
 export const editButton = [
-  { name: "New Data" },
-  { name: "Delete Data" },
-  { name: "Export Data" },
 ];
 
 export const viewButton = [
-  { name: "New Data" },
-  { name: "Delete Data" },
-  { name: "Export Data" },
 ];
 
 // LIST INPUT POP UP RISK ASSESSMENT FORM

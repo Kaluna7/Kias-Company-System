@@ -3,7 +3,7 @@
 import SmallSidebar from "@/app/components/layout/SmallSidebar";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { NewSDPInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
-import { usePopUp } from "@/app/stores/store";
+import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
 import { useMemo } from "react";
 import { useStorePlanningStore } from "@/app/stores/RiskAssessement/sdpStore";
 import { DataTable } from "@/app/components/ui/DataTable";
@@ -28,7 +28,7 @@ export default function SDP() {
   const items = useMemo(
     () => [
       { name: "New Data", action: () => openPopUp() },
-      { name: "Delete Data", action: () => console.log("del") },
+      { name: "Convert To Draft", action: () => console.log("del") },
       { name: "Export Data", action: () => console.log("export") },
     ],
     [openPopUp],

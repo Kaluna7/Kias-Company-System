@@ -1,17 +1,15 @@
-"use client";
-
 import { create } from "zustand";
 
-
-export const useFinanceStore = create((set) => ({
+export const useFinanceStore = create((set, get) => ({
   finance: [],
+  currentFilter: "published", // default
 
-  loadFinance: async () => {
+  loadFinance: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/finance");
+      const res = await fetch(`/api/RiskAssessment/finance?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch finances");
       const data = await res.json();
-      set({ finance: data });
+      set({ finance: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadFinance error:", err);
@@ -31,11 +29,77 @@ export const useFinanceStore = create((set) => ({
         throw new Error(errBody?.error || "Failed to create finance");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
       set((state) => ({ finance: [newItem, ...state.finance] }));
       return newItem;
     } catch (err) {
       console.error("createFinance error:", err);
+      throw err;
+    }
+  },
+
+  // Optimistic: langsung pindahkan ke draft di state
+  moveToDraft: async (id) => {
+    // update dulu di state
+    set((state) => ({
+      finance: state.finance.filter((f) => f.risk_id !== id),
+    }));
+
+    try {
+      const res = await fetch(`/api/RiskAssessment/finance/${id}/draft`, {
+        method: "PUT",
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to move to draft");
+      }
+      const updated = await res.json();
+      // kalau lagi lihat "draft", tambahin item ke list
+      if (get().currentFilter === "draft") {
+        set((state) => ({ finance: [updated, ...state.finance] }));
+      }
+      return updated;
+    } catch (err) {
+      console.error("moveToDraft error:", err);
+      // rollback (load ulang data agar konsisten)
+      get().loadFinance(get().currentFilter);
+      throw err;
+    }
+  },
+
+  // Optimistic update status
+  updateStatus: async (id, newStatus) => {
+    // simpan dulu state lama
+    const prev = get().finance;
+
+    // update langsung di state
+    set((state) => ({
+      finance: state.finance.map((f) =>
+        f.risk_id === id ? { ...f, status: newStatus } : f
+      ),
+    }));
+
+    try {
+      const res = await fetch(`/api/RiskAssessment/finance/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to update status");
+      }
+      const updated = await res.json();
+      // replace dengan versi dari server
+      set((state) => ({
+        finance: state.finance.map((f) =>
+          f.risk_id === id ? updated : f
+        ),
+      }));
+      return updated;
+    } catch (err) {
+      console.error("updateStatus error:", err);
+      // rollback ke state lama kalau gagal
+      set({ finance: prev });
       throw err;
     }
   },

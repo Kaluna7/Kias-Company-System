@@ -8,11 +8,16 @@ function toIntOrNull(v) {
   return Number.isNaN(n) ? null : n;
 }
 
-export async function GET() {
+export async function GET(req) {
   try {
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get("status"); // ?status=draft / ?status=published
+
     const finances = await prisma.finance.findMany({
+      where: status ? { status } : undefined,
       orderBy: { risk_id: "desc" },
     });
+
     return new Response(JSON.stringify(finances), { status: 200 });
   } catch (err) {
     console.error("GET /api/finance error:", err);
@@ -22,6 +27,7 @@ export async function GET() {
     );
   }
 }
+
 
 export async function POST(req) {
   try {
