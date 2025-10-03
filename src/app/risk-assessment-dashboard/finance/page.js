@@ -71,29 +71,27 @@ export default function Finance() {
       "Status": f.status || "",
     }));
   
-    // Buat worksheet
     const worksheet = XLSX.utils.json_to_sheet([], { origin: 6 });
     
-    // Definisikan styles - HAPUS BORDER DARI JUDUL
     const titleStyle = {
       font: { sz: 16, bold: true, color: { rgb: "2C3E50" } },
       alignment: { horizontal: "center", vertical: "center" },
       fill: { fgColor: { rgb: "FFFFFF" } }
-      // Border dihapus dari judul
+       // Delete Border
     };
     
     const subtitleStyle = {
       font: { sz: 14, bold: true, color: { rgb: "34495E" } },
       alignment: { horizontal: "center", vertical: "center" },
       fill: { fgColor: { rgb: "FFFFFF" } }
-      // Border dihapus dari subtitle
+       // Delete Border
     };
     
     const dateStyle = {
       font: { sz: 10, italic: true, color: { rgb: "666666" } },
       alignment: { horizontal: "center" },
       fill: { fgColor: { rgb: "FFFFFF" } }
-      // Border dihapus dari date
+      // Delete Border
     };
     
     const headerStyle = {

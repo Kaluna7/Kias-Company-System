@@ -130,14 +130,14 @@ export function DataTable({
                 </th>
               ))}
               {convertMode && (
-                <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">
+                <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 flex-1 items-center">
                   Action
                   <button
                     onClick={onCloseConvert}
-                    className="ml-2 text-red-500 hover:text-red-700 font-bold text-xs"
+                    className="ml-2 text-red-500 hover:text-red-700 font-bold text-xs bg-blue-400"
                   >
                     ❌
-                  </button>
+                  </button> 
                 </th>
               )}
             </tr>
