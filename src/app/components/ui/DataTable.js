@@ -10,7 +10,9 @@ export function DataTable({
   convertMode = false,
   onCloseConvert,
   viewDraft = false,
-  searchQuery = "", // query dari parent
+  editMode = false,
+  onEditRow = () => {},
+  searchQuery = "",
 }) {
   const updateStatus = useFinanceStore((s) => s.updateStatus);
   const moveToDraft = useFinanceStore((s) => s.moveToDraft);
@@ -21,29 +23,28 @@ export function DataTable({
     if (typeof load === "function") load();
   }, [load]);
 
-  // filtering data by searchQuery
+  // filter berdasarkan searchQuery
   const filteredItems = useMemo(() => {
-    if (!searchQuery) return items;
+    if (!searchQuery) return items || [];
     const q = searchQuery.toString().toLowerCase().trim();
-
-    return items.filter((f) =>
-      Object.values({
-        risk_id_no: f.risk_id_no,
-        category: f.category,
-        sub_department: f.sub_department,
-        sop_related: f.sop_related,
-        risk_description: f.risk_description,
-        risk_details: f.risk_details,
-        impact_description: f.impact_description,
-        mitigation_strategy: f.mitigation_strategy,
-        owners: f.owners,
-        impact_level: f.impact_level,
-        probability_level: f.probability_level,
-        priority_level: f.priority_level,
-        root_cause_category: f.root_cause_category,
-        onset_timeframe: f.onset_timeframe,
-        status: f.status,
-      })
+    return (items || []).filter((f) =>
+      [
+        f.risk_id_no,
+        f.category,
+        f.sub_department,
+        f.sop_related,
+        f.risk_description,
+        f.risk_details,
+        f.impact_description,
+        f.mitigation_strategy,
+        f.owners,
+        f.priority_level,
+        f.impact_level,
+        f.probability_level,
+        f.root_cause_category,
+        f.onset_timeframe,
+        f.status,
+      ]
         .filter(Boolean)
         .some((val) => val.toString().toLowerCase().includes(q))
     );
@@ -90,15 +91,15 @@ export function DataTable({
             <col style={{ width: "7%" }} />
             <col style={{ width: "8%" }} />
             <col style={{ width: "6%" }} />
-            <col style={{ width: "10%" }} /> 
-            <col style={{ width: "14%" }} /> 
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "14%" }} />
             <col style={{ width: "10%" }} />
             <col style={{ width: "4%" }} />
             <col style={{ width: "4%" }} />
             <col style={{ width: "4%" }} />
-            <col style={{ width: "14%" }} /> 
+            <col style={{ width: "14%" }} />
             <col style={{ width: "6%" }} />
-            <col style={{ width: "20%" }} /> 
+            <col style={{ width: "20%" }} />
             <col style={{ width: "4%" }} />
             <col style={{ width: "4%" }} />
           </colgroup>
@@ -122,22 +123,20 @@ export function DataTable({
                 "Onset Timeframe",
                 "Status",
               ].map((h) => (
-                <th
-                  key={h}
-                  className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"
-                >
+                <th key={h} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">
                   {h}
                 </th>
               ))}
-              {convertMode && (
-                <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 flex-1 items-center">
+
+              {/* Action column muncul jika convertMode atau editMode aktif */}
+              {(convertMode || editMode) && (
+                <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">
                   Action
-                  <button
-                    onClick={onCloseConvert}
-                    className="ml-2 text-red-500 hover:text-red-700 font-bold text-xs bg-blue-400"
-                  >
-                    ❌
-                  </button> 
+                  {convertMode && (
+                    <button onClick={onCloseConvert} className="ml-2 text-red-500 hover:text-red-700 font-bold text-xs">
+                      ❌
+                    </button>
+                  )}
                 </th>
               )}
             </tr>
@@ -145,12 +144,7 @@ export function DataTable({
 
           <tbody>
             {filteredItems.map((f, idx) => (
-              <tr
-                key={f.risk_id}
-                className={`${
-                  idx % 2 === 0 ? "bg-white" : "bg-gray-50"
-                } hover:bg-gray-100`}
-              >
+              <tr key={f.risk_id} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
                 {[
                   f.risk_id_no ?? `A.2.1.${f.risk_id}`,
                   f.category ?? "-",
@@ -169,82 +163,69 @@ export function DataTable({
                 ].map((val, i) => {
                   let extraClass = "";
 
-                  // Highlight khusus kolom Priority Level
+                  // highlight priority level
                   if (i === 9) {
                     const num = parseInt(val, 10);
                     if (!isNaN(num)) {
-                      if (num <= 2)
-                        extraClass =
-                          "bg-green-100 text-green-800 font-semibold";
-                      else if (num > 2 && num <= 6)
-                        extraClass =
-                          "bg-yellow-100 text-yellow-800 font-semibold";
-                      else if (num > 6)
-                        extraClass = "bg-red-100 text-red-800 font-semibold";
+                      if (num <= 2) extraClass = "bg-green-100 text-green-800 font-semibold";
+                      else if (num > 2 && num <= 6) extraClass = "bg-yellow-100 text-yellow-800 font-semibold";
+                      else if (num > 6) extraClass = "bg-red-100 text-red-800 font-semibold";
                     }
                   }
 
-                  // Untuk kolom dengan text panjang (kiri-align)
                   if ([4, 5, 6, 10, 12].includes(i)) {
                     return (
-                      <td
-                        key={i}
-                        className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top ${extraClass}`}
-                        title={typeof val === "string" ? val : undefined}
-                      >
+                      <td key={i} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                         {val}
                       </td>
                     );
                   }
 
-                  // Untuk kolom center-align
                   return (
-                    <td
-                      key={i}
-                      className={`p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap ${extraClass}`}
-                      title={typeof val === "string" ? val : undefined}
-                    >
+                    <td key={i} className={`p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                       {val}
                     </td>
                   );
                 })}
 
                 <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">
-                  <span
-                    className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                      f.status === "draft"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-green-100 text-green-800"
-                    }`}
-                  >
+                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${f.status === "draft" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
                     {f.status ?? "published"}
                   </span>
                 </td>
 
-                {convertMode && (
+                {(convertMode || editMode) && (
                   <td className="p-1 text-center border border-gray-200">
                     <div className="flex items-center justify-center gap-2">
-                      {!viewDraft && f.status !== "draft" && (
+                      {/* jika editMode aktif & kita sedang melihat draft -> tampilkan tombol Edit */}
+                      {editMode && viewDraft && (
                         <button
-                          title="Move to Draft"
-                          className="p-1 move text-xs"
-                          onClick={() =>
-                            openConfirm({ id: f.risk_id, action: "draft" })
-                          }
+                          title="Edit"
+                          className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                          onClick={() => onEditRow(f)}
                         >
-                          📥
+                          ✏️ Edit
                         </button>
                       )}
 
-                      {viewDraft && f.status === "draft" && (
+                      {/* jika convertMode aktif: tampilkan Publish di viewDraft, atau Move to Draft di published */}
+                      {convertMode && viewDraft && f.status === "draft" && (
                         <button
                           title="Move to Published"
                           className="px-2 py-1 bg-green-600 text-white rounded text-xs"
-                          onClick={() =>
-                            openConfirm({ id: f.risk_id, action: "publish" })
-                          }
+                          onClick={() => openConfirm({ id: f.risk_id, action: "publish" })}
                         >
                           Publish
+                        </button>
+                      )}
+
+                      {convertMode && !viewDraft && f.status !== "draft" && (
+                        <button
+                          title="Move to Draft"
+                          className="p-1"
+                          onClick={() => openConfirm({ id: f.risk_id, action: "draft" })}
+                        >
+                          📥
                         </button>
                       )}
                     </div>
@@ -258,16 +239,8 @@ export function DataTable({
 
       {confirmOpen && confirmPayload && (
         <ConfirmModal
-          title={
-            confirmPayload.action === "publish"
-              ? "Move to Published"
-              : "Confirm"
-          }
-          message={
-            confirmPayload.action === "publish"
-              ? "Are you sure you want to move this data to Published?"
-              : "Are you sure you want to move this data to Draft?"
-          }
+          title={confirmPayload.action === "publish" ? "Move to Published" : "Confirm"}
+          message={confirmPayload.action === "publish" ? "Are you sure you want to move this data to Published?" : "Are you sure you want to move this data to Draft?"}
           onClose={closeConfirm}
           onConfirm={handleConfirm}
         />

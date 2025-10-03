@@ -37,6 +37,26 @@ export const useFinanceStore = create((set, get) => ({
     }
   },
 
+  updateFinance: async (id, payload) => {
+    try {
+      const res = await fetch(`/api/RiskAssessment/finance/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to update finance");
+      }
+      const updated = await res.json();
+      set((s) => ({ finance: s.finance.map((f) => (f.risk_id === updated.risk_id ? updated : f)) }));
+      return updated;
+    } catch (err) {
+      console.error("updateFinance error:", err);
+      throw err;
+    }
+  },
+
   moveToDraft: async (id) => {
     set((state) => ({
       finance: state.finance.filter((f) => f.risk_id !== id),
