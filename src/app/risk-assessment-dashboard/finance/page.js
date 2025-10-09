@@ -15,6 +15,7 @@ export default function Finance() {
   const [editMode, setEditMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState(null); 
 
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
@@ -22,45 +23,50 @@ export default function Finance() {
 
   const loadFinance = useFinanceStore((s) => s.loadFinance);
 
-  // header items: Convert toggles convertMode; when enabling convertMode disable editMode
-  const items = useMemo(
-    () => [
-      { name: "New Data", action: () => { setSelectedItem(null); openPopUp(); } },
-      {
-        name: viewDraft ? (convertMode ? "Cancel Convert" : "Convert To Publish") : (convertMode ? "Cancel Convert" : "Convert To Draft"),
-        action: () => {
-          // toggle convert mode; when enabling convertMode, make sure editMode is false
-          setConvertMode((prev) => {
-            const next = !prev;
-            if (next) setEditMode(false);
-            return next;
-          });
-        },
-      },
-      {
-        name: "Export Data",
-        action: () => {
-          const finances = useFinanceStore.getState().finance; // ambil data dari store
-      
-          if (!finances || finances.length === 0) {
-            alert("Tidak ada data untuk diexport");
-            return;
-          }
-      
-          const status = viewDraft ? "Draft" : "Published";
-          const now = new Date();
-          const fileName = `Finance_${status}_${now.toISOString().slice(0,10).replace(/-/g, "")}.xlsx`;
-      
-          exportToStyledExcel(finances, "Finance", status, now, fileName);
-        },
-        className: "bg-green-500 hover:bg-green-600 text-white",
-      }
-      
-    ],
-    [openPopUp, viewDraft, convertMode]
-  );
+  const items = useMemo(() => {
+    const base = [];
 
-  // view menu: switch between Draft / Published
+    if (!viewDraft) {
+      base.push({
+        name: "New Data",
+        action: () => {
+          setSelectedItem(null);
+          openPopUp();
+        },
+      });
+    }
+
+    base.push({
+      name: viewDraft
+        ? (convertMode ? "Cancel Convert" : "Convert To Publish")
+        : (convertMode ? "Cancel Convert" : "Convert To Draft"),
+      action: () => {
+        setConvertMode((prev) => {
+          const next = !prev;
+          if (next) setEditMode(false);
+          return next;
+        });
+      },
+    });
+
+    base.push({
+      name: "Export Data",
+      action: () => {
+        const finances = useFinanceStore.getState().finance;
+        if (!finances || finances.length === 0) {
+          alert("Tidak ada data untuk diexport");
+          return;
+        }
+
+        const status = viewDraft ? "Draft" : "Published";
+        exportToStyledExcel(finances, null, status, "Finance");
+      },
+      className: "bg-green-500 hover:bg-green-600 text-white",
+    });
+
+    return base;
+  }, [openPopUp, viewDraft, convertMode]);
+
   const viewItems = useMemo(
     () => [
       {
@@ -85,7 +91,6 @@ export default function Finance() {
     [loadFinance]
   );
 
-  // edit menu (visible only when viewing draft)
   const editItems = useMemo(
     () =>
       viewDraft
@@ -93,7 +98,6 @@ export default function Finance() {
             {
               name: "Edit Data",
               action: () => {
-                // toggle edit mode; when enabling editMode, disable convertMode
                 setEditMode((prev) => {
                   const next = !prev;
                   if (next) setConvertMode(false);
@@ -106,28 +110,65 @@ export default function Finance() {
     [viewDraft]
   );
 
-  // callback when user clicks Edit (on a row)
-  const handleEditRow = (item) => {
-    setSelectedItem(item);
-    openPopUp();
-  };
+  const sortByItems = useMemo(
+    () => [
+      {
+        name: "Priority Level High to Low",
+        action: () => setSortOption({ key: "priority_level", order: "desc" }),
+      },
+      {
+        name: "Priority Level Low to High",
+        action: () => setSortOption({ key: "priority_level", order: "asc" }),
+      },
+      {
+        name: "Risk ID No High to Low",
+        action: () => setSortOption({ key: "risk_id_no", order: "desc" }),
+      },
+      {
+        name: "Risk ID No Low to High",
+        action: () => setSortOption({ key: "risk_id_no", order: "asc" }),
+      },
+    ],
+    []
+  );
 
-  // Finance table wrapper to pass loader and states
   function FinanceTableWrapper() {
-    const load = useCallback(() => loadFinance(viewDraft ? "draft" : "published"), [loadFinance, viewDraft]);
-    useEffect(() => { load(); }, [load]);
+    const load = useCallback(
+      () => loadFinance(viewDraft ? "draft" : "published"),
+      [loadFinance, viewDraft]
+    );
+
+    useEffect(() => {
+      load();
+    }, [load]);
 
     const finances = useFinanceStore((s) => s.finance);
 
+    const sortedFinances = useMemo(() => {
+      if (!sortOption || !finances) return finances;
+
+      return [...finances].sort((a, b) => {
+        const valA = a[sortOption.key];
+        const valB = b[sortOption.key];
+        if (valA === undefined || valB === undefined) return 0;
+
+        if (sortOption.order === "asc") return valA > valB ? 1 : -1;
+        else return valA < valB ? 1 : -1;
+      });
+    }, [finances, sortOption]);
+
     return (
       <DataTable
-        items={finances}
+        items={sortedFinances}
         load={load}
         convertMode={convertMode}
         onCloseConvert={() => setConvertMode(false)}
         viewDraft={viewDraft}
         editMode={editMode}
-        onEditRow={handleEditRow}
+        onEditRow={(item) => {
+          setSelectedItem(item);
+          openPopUp();
+        }}
         searchQuery={searchQuery}
       />
     );
@@ -142,6 +183,7 @@ export default function Finance() {
           items={items}
           viewItems={viewItems}
           editItems={editItems}
+          sortByItems={sortByItems}
           onSearch={setSearchQuery}
         />
         <div className="mt-12 ml-14 flex-1">
@@ -150,10 +192,9 @@ export default function Finance() {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                // jika selesai editing, refresh list
                 loadFinance(viewDraft ? "draft" : "published");
               }}
-              defaultData={selectedItem} // NewFinanceInput harus support ini
+              defaultData={selectedItem}
             />
           )}
 

@@ -10,22 +10,20 @@ export default function SmallHeader({
   fileItems: fileItemsProp = null,
   editItems: editItemsProp = null,
   viewItems: viewItemsProp = null,
-  onSearch, // callback dikirim dari parent
+  sortByItems: sortByItemsProp = null,
+  onSearch,
 }) {
   const [active, setActive] = useState(null);
 
-  // Default array button
-  const fileButton = [];
-  const editButton = [];
-  const viewButton = [];
-
-  // Pastikan tidak undefined
+  // Default array kosong agar tidak undefined
   const fileItems =
-    fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : fileButton);
-  const editItems = editItemsProp ?? editButton;
-  const viewItems = viewItemsProp ?? viewButton;
+    fileItemsProp ?? (Array.isArray(itemsProp) ? itemsProp : []);
+  const editItems = editItemsProp ?? [];
+  const viewItems = viewItemsProp ?? [];
+  const sortByItems = sortByItemsProp ?? [];
 
-  // Cari item berdasarkan name
+
+  // Fungsi mencari item
   const findItemFromName = (name) => {
     return (
       fileItems.find((i) => i.name === name) ||
@@ -35,19 +33,12 @@ export default function SmallHeader({
     );
   };
 
-  // Handle click dropdown
+  // Klik dropdown item
   const handleClick = (payload) => {
     const item =
       typeof payload === "object" && payload !== null
         ? payload
         : findItemFromName(payload);
-
-    console.log(
-      "[SmallHeader] clicked payload:",
-      payload,
-      "=> resolved item:",
-      item,
-    );
 
     if (!item) {
       setActive(null);
@@ -72,16 +63,12 @@ export default function SmallHeader({
       return;
     }
 
-    console.log("[SmallHeader] no action/modal for item:", item);
     setActive(null);
   };
 
-  // Handle search input
+  // Handle pencarian
   const handleSearch = (value) => {
-    console.log("[SmallHeader] search:", value);
-    if (typeof onSearch === "function") {
-      onSearch(value); // kirim ke parent
-    }
+    if (typeof onSearch === "function") onSearch(value);
   };
 
   return (
@@ -98,30 +85,55 @@ export default function SmallHeader({
 
         {/* Dropdown menus */}
         <div className="flex flex-row gap-4 ml-[-140px]">
-          <DropDown
-            items={fileItems}
-            label="File"
-            onSelect={handleClick}
-            isOpen={active === "File"}
-            onToggle={() => setActive(active === "File" ? null : "File")}
-            onClose={() => setActive(null)}
-          />
-          <DropDown
-            items={editItems}
-            label="Edit"
-            onSelect={handleClick}
-            isOpen={active === "Edit"}
-            onToggle={() => setActive(active === "Edit" ? null : "Edit")}
-            onClose={() => setActive(null)}
-          />
+          {/* Hanya tampil jika ada items di File */}
+          {fileItems.length > 0 && (
+            <DropDown
+              items={fileItems}
+              label="File"
+              onSelect={handleClick}
+              isOpen={active === "File"}
+              onToggle={() =>
+                setActive(active === "File" ? null : "File")
+              }
+              onClose={() => setActive(null)}
+            />
+          )}
+
+          {/* Hanya tampil jika ada items di Edit */}
+          {editItems.length > 0 && (
+            <DropDown
+              items={editItems}
+              label="Edit"
+              onSelect={handleClick}
+              isOpen={active === "Edit"}
+              onToggle={() =>
+                setActive(active === "Edit" ? null : "Edit")
+              }
+              onClose={() => setActive(null)}
+            />
+          )}
+
+          {/* View selalu muncul */}
           <DropDown
             items={viewItems}
             label="View"
             onSelect={handleClick}
             isOpen={active === "View"}
-            onToggle={() => setActive(active === "View" ? null : "View")}
+            onToggle={() =>
+              setActive(active === "View" ? null : "View")
+            }
             onClose={() => setActive(null)}
           />
+
+          <DropDown
+  items={sortByItems}
+  label="Sort By"
+  onSelect={handleClick}
+  isOpen={active === "Sort By"}
+  onToggle={() => setActive(active === "Sort By" ? null : "Sort By")}
+  onClose={() => setActive(null)}
+/>
+
         </div>
 
         {/* Search */}
