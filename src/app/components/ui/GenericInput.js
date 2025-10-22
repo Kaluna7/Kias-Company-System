@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { SELECT_OPTIONS as SELECT_OPTIONS_RAW, OPTIONAL_FIELDS as OPTIONAL_FIELDS_RAW } from "../../data/Data";
+import { SELECT_OPTIONS as SELECT_OPTIONS_RAW, OPTIONAL_FIELDS as OPTIONAL_FIELDS_RAW } from "../../data/riskAssessmentConfig";
 
 const SELECT_OPTIONS = SELECT_OPTIONS_RAW || {};
 const OPTIONAL_FIELDS = new Set(Array.isArray(OPTIONAL_FIELDS_RAW) ? OPTIONAL_FIELDS_RAW : []);

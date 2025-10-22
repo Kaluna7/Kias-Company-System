@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useNoteStore } from "@/app/stores/RiskAssessement/notepad";
+import { useNoteStore } from "@/app/stores/ComponentsStore/notepad";
 // NOTEPAD
 
 export function NewNotePad({ onClose }) {

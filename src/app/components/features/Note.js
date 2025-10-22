@@ -1,9 +1,9 @@
 
 import { RiDeleteBin6Fill } from "react-icons/ri";
 import { AiOutlineEye } from "react-icons/ai";
-import { usePopUp } from "@/app/stores/RiskAssessement/popupStore";
-import { useNoteStore } from "@/app/stores/RiskAssessement/notepad";
-import { viewPopUp } from "@/app/stores/RiskAssessement/popupStore";
+import { usePopUp } from "@/app/stores/ComponentsStore/popupStore";
+import { useNoteStore } from "@/app/stores/ComponentsStore/notepad";
+import { viewPopUp } from "@/app/stores/ComponentsStore/popupStore";
 import { useEffect } from "react";
 
 export function Note() {

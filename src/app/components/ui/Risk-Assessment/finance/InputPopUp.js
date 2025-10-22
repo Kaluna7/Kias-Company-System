@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { GenericInputModal } from "./GenericInput";
 import { useFinanceStore } from "@/app/stores/RiskAssessement/financeStore";
 
-// NewFinanceInput — versi yang aman terhadap Rules of Hooks
 export function NewFinanceInput({ onClose, defaultData = null }) {
   const createFinance = useFinanceStore((s) => s.createFinance);
   const updateFinanceFromStore = useFinanceStore((s) => s.updateFinance);
@@ -13,11 +12,10 @@ export function NewFinanceInput({ onClose, defaultData = null }) {
   const [loadingModule, setLoadingModule] = useState(true);
   const [moduleError, setModuleError] = useState(null);
 
-  // Dynamic import dijalankan di effect — ini tidak mengubah urutan Hook
   useEffect(() => {
     let mounted = true;
     setLoadingModule(true);
-    import("../../data/riskAssessmentConfig")
+    import("../../data/Data")
       .then((mod) => {
         if (!mounted) return;
         setDataModule(mod);
@@ -36,7 +34,6 @@ export function NewFinanceInput({ onClose, defaultData = null }) {
     };
   }, []);
 
-  // --- prepare safe values (dipanggil setiap render, hooks berikut juga dipanggil)
   const Data = dataModule || {};
 
   const LIST_FORM_RAW = Array.isArray(Data.ListAssessmentForm)
@@ -70,15 +67,12 @@ export function NewFinanceInput({ onClose, defaultData = null }) {
     ? Data.TextareaLabels
     : [];
 
-  // convert arrays -> Set (HOOK: useMemo) — dipanggil setiap render tapi urutannya tetap sama
   const numericFields = useMemo(() => new Set(NUMERIC_FIELDS_RAW || []), [NUMERIC_FIELDS_RAW]);
   const textareaLabels = useMemo(() => new Set(TEXTAREA_LABELS_RAW || []), [TEXTAREA_LABELS_RAW]);
 
-  // build initialForm dari defaultData (untuk edit) — juga hook useMemo
   const initialForm = useMemo(() => {
     if (!defaultData) return null;
     const out = {};
-    // LABEL_TO_KEY_RAW adalah map label -> key
     Object.keys(LABEL_TO_KEY_RAW || {}).forEach((label) => {
       const key = LABEL_TO_KEY_RAW[label];
       if (!key) return;
@@ -87,7 +81,6 @@ export function NewFinanceInput({ onClose, defaultData = null }) {
     return out;
   }, [defaultData, LABEL_TO_KEY_RAW]);
 
-  // jika modul belum selesai di-load, tampilkan loading overlay (HOOKS tetap sudah dipanggil)
   if (loadingModule) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -122,7 +115,6 @@ export function NewFinanceInput({ onClose, defaultData = null }) {
     );
   }
 
-  // handle submit: normalisasi numeric fields lalu create/update
   const handleSubmit = async (payload) => {
     const normalized = { ...payload };
     for (const nf of numericFields) {
@@ -178,206 +170,3 @@ export function NewFinanceInput({ onClose, defaultData = null }) {
   );
 }
 
-
-
-// ACCOUNTING INPUT POP UP
-
-import { useAccountingStore } from "@/app/stores/RiskAssessement/accountingStore";
-
-export function NewAccountingInput({ onClose }) {
-  return (
-  <GenericInputModal
-  onClose={onClose}
-  createItem={useAccountingStore.getState().createAccounting}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-
-// HRD INPUT POP UP
-
-import { useHrdStore } from "@/app/stores/RiskAssessement/hrdStore";
-
-export function NewHrdInput({ onClose }) {
-
-  return (
-    <GenericInputModal
-  onClose={onClose}
-  createItem={useHrdStore.getState().createHrd}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-
-// GENERAL AFFAIR POP UP
-
-import { useGeneralAffairStore } from "@/app/stores/RiskAssessement/gaStore";
-
-export function NewGeneralAffairInput({ onClose }) {
- 
-  return (
-    <GenericInputModal
-  onClose={onClose}
-  createItem={useGeneralAffairStore.getState().createGeneralAffair}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-// STORE DESIGN & PLANNING POP UP
-
-
-import { useStorePlanningStore } from "@/app/stores/RiskAssessement/sdpStore";
-
-export function NewSDPInput({ onClose }) {
-  
-  return (
-   <GenericInputModal
-  onClose={onClose}
-  createItem={useStorePlanningStore.getState().createStorePlanning}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-// TAX POP UP
-
-import { useTaxStore } from "@/app/stores/RiskAssessement/taxStore";
-
-export function NewTaxInput({ onClose }) {
- 
-  return (
-    <GenericInputModal
-  onClose={onClose}
-  createItem={useTaxStore.getState().createTax}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-// LOSS & PREVENTION POP UP
-
-import { useLossPreventionStore } from "@/app/stores/RiskAssessement/lpStore";
-
-export function NewLpInput({ onClose }) {
- 
-  return (
-     <GenericInputModal
-  onClose={onClose}
-  createItem={useLossPreventionStore.getState().createLossPrevention}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-// MIS POP UP
-
-import { useMisStore } from "@/app/stores/RiskAssessement/misStore";
-
-export function NewMisInput({ onClose }) {
- 
-  return (
-     <GenericInputModal
-  onClose={onClose}
-  createItem={useMisStore.getState().createMis}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-// MERCHANDISE POP UP
-
-import { useMerchandiseStore } from "@/app/stores/RiskAssessement/merchStore";
-
-export function NewMerchandiseInput({ onClose }) {
-
-  return (
-    <GenericInputModal
-  onClose={onClose}
-  createItem={useMerchandiseStore.getState().createMerchandise}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-
-// OPERATIONAL POP UP
-
-import { useOperationalStore } from "@/app/stores/RiskAssessement/opsStore";
-
-export function NewOperationalInput({ onClose }) {
-  
-  return (
-   <GenericInputModal
-  onClose={onClose}
-  createItem={useOperationalStore.getState().createOperational}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}
-
-
-// WAREHOUSE POP UP
-
-import { useWarehouseStore } from "@/app/stores/RiskAssessement/whsStore";
-
-export function NewWarehouseInput({ onClose }) {
- 
-  return (
-    <GenericInputModal
-  onClose={onClose}
-  createItem={useWarehouseStore.getState().createWarehouse}
-  title="New Data"
-  listForm={ListAssessmentForm}
-  labelToKey={LABEL_TO_KEY}
-  numericFields={NUMERIC_FIELDS}
-  textareaLabels={TEXTAREA_LABELS}
-/>
-  );
-}

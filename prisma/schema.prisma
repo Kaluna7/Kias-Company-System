@@ -15,6 +15,7 @@ model notes {
   created_at  DateTime? @default(now()) @db.Timestamp(6)
 }
 
+
 model finance {
   risk_id             Int     @id @default(autoincrement())
   category            String? @db.VarChar(50)
@@ -32,6 +33,8 @@ model finance {
   onset_timeframe     String? @db.VarChar(35)
   risk_id_no          String? @db.VarChar(20)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 FinanceAp[]
 }
 
 model accounting {
@@ -51,6 +54,8 @@ model accounting {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 AccountingAp[]
 }
 
 model general_affair {
@@ -70,6 +75,8 @@ model general_affair {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 GeneralAffairAp[]
 }
 
 model hrd {
@@ -89,6 +96,8 @@ model hrd {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 HrdAp[]
 }
 
 model lp {
@@ -108,6 +117,8 @@ model lp {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 LpAp[]
 }
 
 model merchandise {
@@ -127,6 +138,8 @@ model merchandise {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 MerchandiseAp[]
 }
 
 model mis {
@@ -146,6 +159,8 @@ model mis {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 MisAp[]
 }
 
 model operational {
@@ -165,6 +180,8 @@ model operational {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 OperationalAp[]
 }
 
 model sdp {
@@ -184,6 +201,8 @@ model sdp {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 SdpAp[]
 }
 
 model tax {
@@ -203,6 +222,8 @@ model tax {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 TaxAp[]
 }
 
 model warehouse {
@@ -222,4 +243,187 @@ model warehouse {
   root_cause_category String?
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
+
+  aps                 WarehouseAp[]
+}
+
+/* -------------------------
+   Per-table AP models
+   (each contains ap fields + FK to parent)
+   ------------------------- */
+
+model FinanceAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  finance_risk_id  Int
+  finance          finance @relation(fields: [finance_risk_id], references: [risk_id], onDelete: Cascade)
+  
+  @@map("finance_ap")
+}
+
+model AccountingAp {
+  ap_id             Int     @id @default(autoincrement())
+  ap_code           String? @db.VarChar(50)
+  substantive_test  String?
+  objective         String?
+  procedures        String?
+  method            String?
+  description       String?
+  application       String?
+
+  accounting_risk_id Int
+  accounting         accounting @relation(fields: [accounting_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("accounting_ap")
+}
+
+model GeneralAffairAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  general_affair_risk_id Int
+  general_affair         general_affair @relation(fields: [general_affair_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("general_affair_ap")
+}
+
+model HrdAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  hrd_risk_id Int
+  hrd         hrd @relation(fields: [hrd_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("hrd_ap")
+}
+
+model LpAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  lp_risk_id Int
+  lp         lp @relation(fields: [lp_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("lp_ap")
+}
+
+model MerchandiseAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  merchandise_risk_id Int
+  merchandise         merchandise @relation(fields: [merchandise_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("merchandise_ap")
+}
+
+model MisAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  mis_risk_id Int
+  mis         mis @relation(fields: [mis_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("mis_ap")
+}
+
+model OperationalAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  operational_risk_id Int
+  operational         operational @relation(fields: [operational_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("operational_ap")
+}
+
+model SdpAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  sdp_risk_id Int
+  sdp         sdp @relation(fields: [sdp_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("sdp_ap")
+}
+
+model TaxAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  tax_risk_id Int
+  tax         tax @relation(fields: [tax_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("tax_ap")
+}
+
+model WarehouseAp {
+  ap_id            Int     @id @default(autoincrement())
+  ap_code          String? @db.VarChar(50)
+  substantive_test String?
+  objective        String?
+  procedures       String?
+  method           String?
+  description      String?
+  application      String?
+
+  warehouse_risk_id Int
+  warehouse         warehouse @relation(fields: [warehouse_risk_id], references: [risk_id], onDelete: Cascade)
+
+  @@map("warehouse_ap")
 }

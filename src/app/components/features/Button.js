@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BsSearch } from "react-icons/bs";
 import { useRef, useEffect, useState } from "react";
 
-export function ButtonRiskAssessment({ name, href, logo }) {
+export function ButtonDashboard({ name, href, logo }) {
   return (
     <ul>
       <li>

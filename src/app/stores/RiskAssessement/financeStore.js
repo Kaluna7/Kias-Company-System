@@ -3,9 +3,9 @@
 import { create } from "zustand";
 
 
-export const useFinanceStore = create((set) => ({
+export const useFinanceStore = create((set , get) => ({
   finance: [],
-  currentFilter: "published", // default
+  currentFilter: "published",
 
   loadFinance: async (status = "published") => {
     try {
@@ -53,6 +53,39 @@ export const useFinanceStore = create((set) => ({
       return updated;
     } catch (err) {
       console.error("moveToDraft error:", err);
+      throw err;
+    }
+  },
+
+  updateStatus: async (id, newStatus) => {
+    const prev = get().finance;
+
+    set((state) => ({
+      finance: state.finance.map((f) =>
+        f.risk_id === id ? { ...f, status: newStatus } : f
+      ),
+    }));
+
+    try {
+      const res = await fetch(`/api/RiskAssessment/finance/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error || "Failed to update status");
+      }
+      const updated = await res.json();
+      set((state) => ({
+        finance: state.finance.map((f) =>
+          f.risk_id === id ? updated : f
+        ),
+      }));
+      return updated;
+    } catch (err) {
+      console.error("updateStatus error:", err);
+      set({ finance: prev });
       throw err;
     }
   },
