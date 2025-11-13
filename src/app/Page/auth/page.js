@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import useUserStore from "@/app/stores/useStore"; // ← tambahkan ini
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
@@ -11,13 +12,14 @@ export default function AuthPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
 
+  const setUser = useUserStore((state) => state.setUser); // ✅ ambil setter
+
   const handleLogin = async (e) => {
     e?.preventDefault();
     setErrorMsg("");
     setIsLoading(true);
 
     try {
-      // small client-side validation
       if (!email.trim() || !password) {
         setErrorMsg("Please enter email and password");
         setIsLoading(false);
@@ -26,7 +28,6 @@ export default function AuthPage() {
 
       console.log("[CLIENT] attempting signIn with:", { email });
 
-      // signIn with credentials provider
       const res = await signIn("credentials", {
         redirect: false,
         email: email.trim(),
@@ -38,7 +39,16 @@ export default function AuthPage() {
       if (res?.error) {
         setErrorMsg(res.error || "Invalid credentials");
       } else {
-        // success — redirect to dashboard (or role-based later)
+        // ✅ Ambil session user dari NextAuth
+        const session = await getSession();
+
+        // Misalnya session.user = { name, email, role }
+        if (session?.user) {
+          setUser(session.user); // ✅ simpan ke store
+          console.log("[AUTH] user stored:", session.user);
+        }
+
+        // redirect ke dashboard
         router.push("/Page/dashboard");
       }
     } catch (err) {
@@ -56,10 +66,18 @@ export default function AuthPage() {
         <p className="text-gray-600">Sign in to your account</p>
       </div>
 
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">
+      <form
+        onSubmit={handleLogin}
+        className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md"
+      >
         <div className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Email Address
+            </label>
             <input
               id="email"
               name="email"
@@ -73,7 +91,12 @@ export default function AuthPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Password
+            </label>
             <input
               id="password"
               name="password"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import SmallSidebar from "@/app/components/layout/SmallSidebar";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { NewFinanceInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
@@ -10,23 +11,27 @@ import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 
 export default function Finance() {
+  const { data: session } = useSession();
+  const role = session?.user?.role;
+  const isAdmin = role === "admin";
+
   const [convertMode, setConvertMode] = useState(false);
   const [viewDraft, setViewDraft] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortOption, setSortOption] = useState(null); 
+  const [sortOption, setSortOption] = useState(null);
 
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
   const closePopUp = usePopUp((s) => s.closePopUp);
-
   const loadFinance = useFinanceStore((s) => s.loadFinance);
 
+  // ✅ Menu tombol utama (hanya admin yang punya tombol New Data + Export)
   const items = useMemo(() => {
     const base = [];
 
-    if (!viewDraft) {
+    if (isAdmin && !viewDraft) {
       base.push({
         name: "New Data",
         action: () => {
@@ -36,39 +41,47 @@ export default function Finance() {
       });
     }
 
-    base.push({
-      name: viewDraft
-        ? (convertMode ? "Cancel Convert" : "Convert To Publish")
-        : (convertMode ? "Cancel Convert" : "Convert To Draft"),
-      action: () => {
-        setConvertMode((prev) => {
-          const next = !prev;
-          if (next) setEditMode(false);
-          return next;
-        });
-      },
-    });
+    if (isAdmin) {
+      base.push({
+        name: viewDraft
+          ? convertMode
+            ? "Cancel Convert"
+            : "Convert To Publish"
+          : convertMode
+          ? "Cancel Convert"
+          : "Convert To Draft",
+        action: () => {
+          setConvertMode((prev) => {
+            const next = !prev;
+            if (next) setEditMode(false);
+            return next;
+          });
+        },
+      });
 
-    base.push({
-      name: "Export Data",
-      action: () => {
-        const finances = useFinanceStore.getState().finance;
-        if (!finances || finances.length === 0) {
-          alert("Tidak ada data untuk diexport");
-          return;
-        }
+      base.push({
+        name: "Export Data",
+        action: () => {
+          const finances = useFinanceStore.getState().finance;
+          if (!finances || finances.length === 0) {
+            alert("Tidak ada data untuk diexport");
+            return;
+          }
 
-        const status = viewDraft ? "Draft" : "Published";
-        exportToStyledExcel(finances, null, status, "Finance");
-      },
-      className: "bg-green-500 hover:bg-green-600 text-white",
-    });
+          const status = viewDraft ? "Draft" : "Published";
+          exportToStyledExcel(finances, null, status, "Finance");
+        },
+        className: "bg-green-500 hover:bg-green-600 text-white",
+      });
+    }
 
     return base;
-  }, [openPopUp, viewDraft, convertMode]);
+  }, [isAdmin, openPopUp, viewDraft, convertMode]);
 
-  const viewItems = useMemo(
-    () => [
+  // ✅ Tombol "View Draft / Published" hanya admin
+  const viewItems = useMemo(() => {
+    if (!isAdmin) return [];
+    return [
       {
         name: "View Draft",
         action: async () => {
@@ -87,13 +100,12 @@ export default function Finance() {
           await loadFinance("published");
         },
       },
-    ],
-    [loadFinance]
-  );
+    ];
+  }, [isAdmin, loadFinance]);
 
   const editItems = useMemo(
     () =>
-      viewDraft
+      isAdmin && viewDraft
         ? [
             {
               name: "Edit Data",
@@ -107,7 +119,7 @@ export default function Finance() {
             },
           ]
         : [],
-    [viewDraft]
+    [isAdmin, viewDraft]
   );
 
   const sortByItems = useMemo(
@@ -181,7 +193,7 @@ export default function Finance() {
         <SmallHeader
           label="Risk Assessment Form Finance"
           items={items}
-          viewItems={viewItems}
+          viewItems={isAdmin ? viewItems : []} 
           editItems={editItems}
           sortByItems={sortByItems}
           onSearch={setSearchQuery}
@@ -197,7 +209,6 @@ export default function Finance() {
               defaultData={selectedItem}
             />
           )}
-
           <FinanceTableWrapper />
         </div>
       </div>

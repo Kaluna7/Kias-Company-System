@@ -1,5 +1,7 @@
 "use client";
+
 import { useEffect, useState, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { useFinanceStore } from "@/app/stores/AuditProgram/financeStore";
 import DataTableAudit from "@/app/components/ui/AuditProgram/DataTableAudit";
 import SmallHeader from "@/app/components/layout/SmallHeader";
@@ -9,6 +11,10 @@ import { GenericInputModal } from "@/app/components/ui/GenericInput";
 export default function FinancePage() {
   const { data, loading, error, fetchFinanceData } = useFinanceStore();
 
+  const { data: session, status } = useSession();
+  const role = session?.user?.role ?? null;
+  const isAdmin = role === "admin";
+
   const [showModal, setShowModal] = useState({
     open: false,
     mode: null,
@@ -16,24 +22,26 @@ export default function FinancePage() {
   });
   const [isPlanningMode, setIsPlanningMode] = useState(false);
 
+  // ambil data awal
   useEffect(() => {
     fetchFinanceData().catch(() => {});
   }, [fetchFinanceData]);
 
-  const fileItems = useMemo(
-    () => [
+  // File menu hanya untuk admin
+  const fileItems = useMemo(() => {
+    if (!isAdmin) return [];
+    return [
       {
         name: "New Planning",
         modal: "new-planning",
       },
-    ],
-    []
-  );
+    ];
+  }, [isAdmin]);
 
-  // buka planning mode dari event global (mis. SmallHeader dispatch)
+  // buka planning mode (event global)
   useEffect(() => {
     const handler = (e) => {
-      if (e.detail?.name === "new-planning") {
+      if (e?.detail?.name === "new-planning") {
         setIsPlanningMode(true);
       }
     };
@@ -41,10 +49,10 @@ export default function FinancePage() {
     return () => window.removeEventListener("open-modal", handler);
   }, []);
 
-  // buka modal add-ap ketika tombol pensil di DataTableAudit dispatch
+  // buka modal add-ap
   useEffect(() => {
     const handler = (e) => {
-      if (e.detail?.name === "add-ap") {
+      if (e?.detail?.name === "add-ap") {
         setShowModal({
           open: true,
           mode: "add-ap",
@@ -68,15 +76,13 @@ export default function FinancePage() {
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => null);
-      throw new Error(txt || "Gagal menambahkan Audit Program");
+      throw new Error(txt || "Failed to add Audit Program");
     }
     await fetchFinanceData();
-    // parent akan menutup modal karena GenericInputModal memanggil onClose setelah onSubmit resolves
     setShowModal({ open: false, mode: null, selectedRow: null });
     setIsPlanningMode(false);
   };
 
-  // ▶ listForm untuk modal — label harus sesuai yang GenericInputModal akan render
   const listFormAp = [
     { label: "AP Code", placeholder: "Masukkan kode AP" },
     { label: "Substantive Test", placeholder: "Masukkan tes substantif" },
@@ -87,7 +93,6 @@ export default function FinancePage() {
     { label: "Application", placeholder: "Aplikasi / sistem terkait" },
   ];
 
-  // ▶ labelToKey: mapping label -> key yang akan dipakai di payload (harus cocok dengan backend)
   const labelToKeyAp = {
     "AP Code": "ap_code",
     "Substantive Test": "substantive_test",
@@ -98,7 +103,6 @@ export default function FinancePage() {
     Application: "application",
   };
 
-  // kalau mau jadikan beberapa field sebagai textarea pada modalmu, pakai textareaLabels
   const textareaLabels = new Set(["Procedures", "Description"]);
 
   return (
@@ -111,24 +115,32 @@ export default function FinancePage() {
           onSearch={(v) => fetchFinanceData({ q: v })}
         />
         <div className="mt-12 ml-14 flex-1">
-          {loading && <p className="text-center text-gray-500 py-6">Loading data...</p>}
-          {error && <p className="text-center text-red-500 py-6">Error: {error}</p>}
+          {loading && (
+            <p className="text-center text-gray-500 py-6">Loading data...</p>
+          )}
+          {error && (
+            <p className="text-center text-red-500 py-6">Error: {error}</p>
+          )}
           {!loading && (
             <DataTableAudit data={data} isPlanningMode={isPlanningMode} />
           )}
         </div>
       </div>
 
-      {/* Modal Add AP — gunakan GenericInputModal milikmu (tidak diubah) */}
+      {/* Modal Add AP */}
       {showModal.open && showModal.mode === "add-ap" && (
         <GenericInputModal
           title={`Add AP for ${showModal.selectedRow?.risk_id_no ?? ""}`}
-          onClose={() => setShowModal({ open: false, mode: null, selectedRow: null })}
-          onSubmit={(payload) => handleSubmitNewFinanceAp(showModal.selectedRow?.risk_id, payload)}
+          onClose={() =>
+            setShowModal({ open: false, mode: null, selectedRow: null })
+          }
+          onSubmit={(payload) =>
+            handleSubmitNewFinanceAp(showModal.selectedRow?.risk_id, payload)
+          }
           listForm={listFormAp}
           labelToKey={labelToKeyAp}
           textareaLabels={textareaLabels}
-          numericFields={new Set()} // tidak ada numeric field untuk AP; ubah jika perlu
+          numericFields={new Set()}
           initialForm={null}
         />
       )}
