@@ -1,7 +1,7 @@
 // pages/Page/sop-review/finance.js
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import SOPSidebar from "@/app/components/layout/Sop-Review/Sidebar-Sop";
 
@@ -12,8 +12,56 @@ export default function FinanceSopReview() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+
+  // modal for viewing single comment (preview & save)
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [commentModalText, setCommentModalText] = useState("");
+  const [commentModalTitle, setCommentModalTitle] = useState("");
+  const [commentModalPending, setCommentModalPending] = useState(false);
+  const [commentModalIndex, setCommentModalIndex] = useState(null);
+
   const reindex = (list) => list.map((item, idx) => ({ ...item, no: idx + 1 }));
 
+  // Fetch existing rows on mount
+  useEffect(() => {
+    let mounted = true;
+    async function fetchRows() {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const res = await fetch("/api/SopReview/finance", { method: "GET" });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = json?.error || `HTTP ${res.status}`;
+          setLoadError(msg);
+          setSopData([]);
+        } else {
+          const rows = Array.isArray(json.rows) ? json.rows : [];
+          const normalized = rows.map((r, idx) => ({
+            id: r.id ?? null,
+            no: r.no ?? (idx + 1),
+            sop_related: (r.sop_related || "").toString(),
+            status: r.status || "DRAFT",
+            comment: r.comment || "",
+            reviewer: r.reviewer || ""
+          }));
+          if (mounted) setSopData(reindex(normalized));
+        }
+      } catch (err) {
+        console.error("Fetch existing sops error:", err);
+        setLoadError(String(err));
+        setSopData([]);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+    fetchRows();
+    return () => { mounted = false; };
+  }, []);
+
+  // when SOPSidebar calls onSopParsed, include comment/id if present
   const handleSopParsed = (parsedSops) => {
     if (!Array.isArray(parsedSops) || parsedSops.length === 0) return;
 
@@ -21,10 +69,11 @@ export default function FinanceSopReview() {
       const existingTitles = new Set(prev.map((p) => (p.sop_related || "").trim().toLowerCase()));
       const newItems = parsedSops
         .map((it) => ({
+          id: it.id ?? null,
           sop_related: (it.sop_related || it.name || "").trim(),
-          status: "DRAFT",
-          comment: "",
-          reviewer: ""
+          status: it.status || "DRAFT",
+          comment: it.comment || "",
+          reviewer: it.reviewer || ""
         }))
         .filter((it) => it.sop_related && !existingTitles.has(it.sop_related.toLowerCase()));
 
@@ -58,6 +107,18 @@ export default function FinanceSopReview() {
       reviewer: it.reviewer || null
     }));
 
+  // helper: post and safe-parse JSON
+  async function postJson(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const text = await res.text().catch(() => "");
+    try { return text ? JSON.parse(text) : {}; } catch (e) { return { success:false, error:"Invalid JSON response", rawText: text }; }
+  }
+
+  // save all rows to server (unchanged)
   const saveAllToServer = async () => {
     if (sopData.length === 0) {
       alert("Tidak ada SOP untuk disimpan.");
@@ -92,8 +153,26 @@ export default function FinanceSopReview() {
         console.error("Save error:", json);
       } else {
         setSaveMessage({ type: "success", text: `Berhasil menyimpan ${json.inserted?.length ?? sopData.length} SOP.` });
-        // optionally clear table:
-        // setSopData([]);
+        // merge returned rows into state (match by sop_related)
+        if (Array.isArray(json.inserted) && json.inserted.length > 0) {
+          setSopData(prev => {
+            const map = new Map(json.inserted.map(r => [ (r.sop_related||"").trim().toLowerCase(), r ]));
+            return reindex(prev.map(row => {
+              const key = (row.sop_related||"").trim().toLowerCase();
+              if (map.has(key)) {
+                const r = map.get(key);
+                return {
+                  ...row,
+                  id: r.id ?? row.id ?? null,
+                  comment: r.comment ?? row.comment ?? "",
+                  status: r.status ?? row.status,
+                  reviewer: r.reviewer ?? row.reviewer
+                };
+              }
+              return row;
+            }));
+          });
+        }
       }
     } catch (err) {
       console.error("Network/save error:", err);
@@ -117,6 +196,97 @@ export default function FinanceSopReview() {
       default:
         return "bg-gray-100 text-gray-700 border border-gray-200";
     }
+  };
+
+  // ========== NEW FLOW: preview modal + save to DB ==========
+  // 1) request preview comment for a given row (shows modal)
+  const genCommentForRow = async (index) => {
+    const row = sopData[index];
+    if (!row || !row.sop_related) { alert("Tidak ada teks SOP untuk di-generate."); return; }
+    try {
+      // call preview endpoint
+      const res = await postJson("/api/SopReview/finance/generate-comments-preview", { items: [{ id: row.id ?? null, sop_related: row.sop_related }] });
+      console.log("generate-preview response:", res);
+      if (res && res.success && Array.isArray(res.comments) && res.comments.length > 0) {
+        const commentObj = res.comments[0];
+        const comment = commentObj?.comment ?? "";
+        // show modal with preview
+        setCommentModalText(comment);
+        setCommentModalTitle(row.sop_related?.slice(0,80) || `Langkah ${row.no}`);
+        setCommentModalIndex(index);
+        setCommentModalOpen(true);
+      } else {
+        console.error("Preview failed:", res);
+        alert("Gagal meng-generate komentar preview. Cek console.");
+      }
+    } catch (err) {
+      console.error("genCommentForRow error:", err);
+      alert("Error saat generate komentar preview. Cek console.");
+    }
+  };
+
+  // 2) Save comment from modal -> call server generate-comments (which will update DB)
+  const saveCommentFromModal = async () => {
+    if (commentModalIndex == null) return;
+    const idx = commentModalIndex;
+    const row = sopData[idx];
+    if (!row) { alert("Baris tidak ditemukan."); return; }
+    const previewComment = (commentModalText || "").trim();
+    if (!previewComment) { alert("Tidak ada komentar untuk disimpan."); return; }
+
+    setCommentModalPending(true);
+
+    try {
+      // Call generate-comments (server will generate & update). We pass same item so server will generate then update.
+      // If you prefer server to accept our preview and update DB without regen, you'd need a separate update endpoint.
+      const res = await postJson("/api/SopReview/finance/generate-comments", { items: [{ id: row.id ?? null, sop_related: row.sop_related }] });
+      console.log("generate-comments save response:", res);
+
+      if (res && res.success && Array.isArray(res.updated) && res.updated.length > 0) {
+        // Merge updated rows into state: match by id (preferred) or sop_related
+        setSopData(prev => {
+          const mapById = new Map(res.updated.filter(r => r.id != null).map(r => [r.id, r]));
+          const mapByText = new Map(res.updated.map(r => [(r.sop_related||"").trim().toLowerCase(), r]));
+          return reindex(prev.map(rowLocal => {
+            const keyText = (rowLocal.sop_related || "").trim().toLowerCase();
+            if (rowLocal.id != null && mapById.has(rowLocal.id)) {
+              const r = mapById.get(rowLocal.id);
+              return { ...rowLocal, comment: r.comment ?? rowLocal.comment, status: r.status ?? rowLocal.status, reviewer: r.reviewer ?? rowLocal.reviewer, id: r.id ?? rowLocal.id };
+            } else if (mapByText.has(keyText)) {
+              const r = mapByText.get(keyText);
+              return { ...rowLocal, comment: r.comment ?? rowLocal.comment, status: r.status ?? rowLocal.status, reviewer: r.reviewer ?? rowLocal.reviewer, id: r.id ?? rowLocal.id };
+            }
+            return rowLocal;
+          }));
+        });
+
+        alert("Komentar tersimpan dan UI terupdate.");
+      } else {
+        // server didn't return updated rows; fallback: apply preview locally
+        updateRow(idx, { comment: previewComment });
+        console.warn("generate-comments did not return updated rows:", res);
+        alert("Komentar diterapkan di UI (lokal). Penyimpanan di server gagal atau tidak mengembalikan data. Cek console.");
+      }
+    } catch (err) {
+      console.error("saveCommentFromModal error:", err);
+      // fallback local apply
+      updateRow(idx, { comment: previewComment });
+      alert("Gagal menyimpan ke server — komentar diterapkan secara lokal. Cek console.");
+    } finally {
+      setCommentModalPending(false);
+      setCommentModalOpen(false);
+      setCommentModalIndex(null);
+    }
+  };
+
+  // open modal to view comment (bigger) — still allow viewing existing comment
+  const viewComment = (index) => {
+    const row = sopData[index];
+    if (!row) return;
+    setCommentModalTitle(row.sop_related ? `Langkah ${row.no}` : `Langkah ${row.no}`);
+    setCommentModalText(row.comment || "(Tidak ada komentar)");
+    setCommentModalIndex(index);
+    setCommentModalOpen(true);
   };
 
   return (
@@ -150,101 +320,156 @@ export default function FinanceSopReview() {
                 disabled={sopData.length === 0 || isSaving}
                 className={`px-3 py-2 rounded-lg text-sm shadow-sm ${sopData.length === 0 || isSaving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-blue-600 text-white"}`}
               >
-                {isSaving ? "Saving..." : "Save All"}
+                {isSaving ? "Publishing..." : "Publish"}
               </button>
             </div>
           </div>
 
-          {saveMessage && (
-            <div className={`px-6 py-3 ${saveMessage.type === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-              {saveMessage.text}
-            </div>
+          {isLoading ? (
+            <div className="px-6 py-6 text-center text-sm text-gray-600">Loading SOPs from server...</div>
+          ) : loadError ? (
+            <div className="px-6 py-6 text-center text-sm text-red-600">Gagal memuat data: {loadError}</div>
+          ) : (
+            <>
+              {saveMessage && (
+                <div className={`px-6 py-3 ${saveMessage.type === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                  {saveMessage.text}
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
+                  <thead className="bg-gradient-to-r from-gray-800 to-black">
+                    <tr>
+                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-12">No</th>
+                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">SOP Related</th>
+                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-28">Status</th>
+                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Comment Review</th>
+                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-32">Reviewer</th>
+                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-44">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sopData.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors duration-150 align-top">
+                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{row.no}</td>
+
+                        <td className="px-4 py-4">
+                          <textarea
+                            value={row.sop_related}
+                            onChange={(e) => updateRow(idx, { sop_related: e.target.value })}
+                            className="w-full resize-none border border-gray-200 rounded-md p-2 text-sm"
+                            rows={2}
+                          />
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <select
+                            value={row.status || ""}
+                            onChange={(e) => updateRow(idx, { status: e.target.value })}
+                            className={`w-full px-2 py-1 rounded-md text-sm ${getStatusBadge(row.status)}`}
+                          >
+                            <option value="">Not set</option>
+                            <option value="DRAFT">DRAFT</option>
+                            <option value="IN REVIEW">IN REVIEW</option>
+                            <option value="APPROVED">APPROVED</option>
+                            <option value="REJECTED">REJECTED</option>
+                          </select>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <input
+                            value={row.comment || ""}
+                            onChange={(e) => updateRow(idx, { comment: e.target.value })}
+                            className="w-full border border-gray-200 rounded-md p-2 text-sm"
+                            placeholder="Reviewer comment..."
+                          />
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <input
+                            value={row.reviewer || ""}
+                            onChange={(e) => updateRow(idx, { reviewer: e.target.value })}
+                            className="w-full border border-gray-200 rounded-md p-2 text-sm"
+                            placeholder="Reviewer username..."
+                          />
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => genCommentForRow(idx)}
+                              title="Generate comment preview"
+                              className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md text-sm"
+                            >
+                              Gen Comment
+                            </button>
+
+                            <button
+                              onClick={() => viewComment(idx)}
+                              title="View comment"
+                              className="px-2 py-1 bg-gray-50 text-gray-700 border border-gray-100 rounded-md text-sm"
+                            >
+                              View
+                            </button>
+
+                            <button
+                              onClick={() => removeRow(idx)}
+                              title="Hapus"
+                              className="px-2 py-1 bg-red-50 text-red-700 border border-red-100 rounded-md text-sm"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {sopData.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
+                          No SOPs yet. Upload a PDF to extract SOP items.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse">
-              <thead className="bg-gradient-to-r from-gray-800 to-black">
-                <tr>
-                  <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-12">No</th>
-                  <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">SOP Related</th>
-                  <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-28">Status</th>
-                  <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Comment Review</th>
-                  <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-32">Reviewer</th>
-                  <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-20">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {sopData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50 transition-colors duration-150 align-top">
-                    <td className="px-4 py-4 text-sm font-medium text-gray-900">{row.no}</td>
-
-                    <td className="px-4 py-4">
-                      <textarea
-                        value={row.sop_related}
-                        onChange={(e) => updateRow(idx, { sop_related: e.target.value })}
-                        className="w-full resize-none border border-gray-200 rounded-md p-2 text-sm"
-                        rows={2}
-                      />
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <select
-                        value={row.status || ""}
-                        onChange={(e) => updateRow(idx, { status: e.target.value })}
-                        className={`w-full px-2 py-1 rounded-md text-sm ${getStatusBadge(row.status)}`}
-                      >
-                        <option value="">Not set</option>
-                        <option value="DRAFT">DRAFT</option>
-                        <option value="IN REVIEW">IN REVIEW</option>
-                        <option value="APPROVED">APPROVED</option>
-                        <option value="REJECTED">REJECTED</option>
-                      </select>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <input
-                        value={row.comment}
-                        onChange={(e) => updateRow(idx, { comment: e.target.value })}
-                        className="w-full border border-gray-200 rounded-md p-2 text-sm"
-                        placeholder="Reviewer comment..."
-                      />
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <input
-                        value={row.reviewer}
-                        onChange={(e) => updateRow(idx, { reviewer: e.target.value })}
-                        className="w-full border border-gray-200 rounded-md p-2 text-sm"
-                        placeholder="Reviewer username..."
-                      />
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => removeRow(idx)}
-                          title="Hapus"
-                          className="px-2 py-1 bg-red-50 text-red-700 border border-red-100 rounded-md text-sm"
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-                {sopData.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
-                      No SOPs yet. Upload a PDF to extract SOP items.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
+
+      {/* Comment modal */}
+      {commentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-lg w-[min(800px,95vw)] max-h-[80vh] overflow-auto">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h3 className="text-lg font-semibold">{commentModalTitle}</h3>
+              <button className="text-gray-600" onClick={() => { setCommentModalOpen(false); setCommentModalIndex(null); }}>✕</button>
+            </div>
+            <div className="p-4">
+              <label className="text-xs text-gray-600">Generated comment preview</label>
+              <textarea
+                value={commentModalText}
+                onChange={(e) => setCommentModalText(e.target.value)}
+                className="w-full h-40 p-3 border rounded text-sm mt-2"
+              />
+              <div className="text-xs text-gray-500 mt-2">Edit jika perlu, lalu tekan Save untuk menyimpan ke DB (baris akan terupdate langsung).</div>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t">
+              <button className="px-3 py-1 rounded bg-gray-200 text-sm" onClick={() => { setCommentModalOpen(false); setCommentModalIndex(null); }}>Cancel</button>
+              <button
+                className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+                onClick={saveCommentFromModal}
+                disabled={commentModalPending}
+              >
+                {commentModalPending ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

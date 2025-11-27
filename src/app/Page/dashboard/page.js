@@ -26,7 +26,7 @@ export default function DashboardPage() {
   // ---- Derived data (declared BEFORE effects that use them)
   const auditItems = [
     { id: "A1", title: "SOP Review", category: "planning", href: "/Page/sop-review/" },
-    { id: "B1", title: "Worksheet", category: "execution", href: "/Page/risk-assessment-dashboard/worksheet/" },
+    { id: "B1", title: "Worksheet", category: "execution", href: "/Page/worksheet/" },
     { id: "C1", title: "Audit Review", category: "review", href: "/Page/risk-assessment-dashboard/review/" },
     { id: "A2", title: "Risk Assessment", category: "planning", href: "/Page/risk-assessment-dashboard" },
     { id: "B2", title: "Finding", category: "execution", href: "/Page/risk-assessment-dashboard/finding/" },

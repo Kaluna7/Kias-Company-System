@@ -20,6 +20,7 @@
     "next-auth": "^4.24.13",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.394",
+    "pdfjs-serverless": "^1.1.0",
     "pg": "^8.16.3",
     "prettier": "^3.6.2",
     "prisma": "^6.15.0",
