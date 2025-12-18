@@ -399,3 +399,36 @@ model WarehouseAp {
 
   @@map("warehouse_ap")
 }
+
+model sop_finance {
+  id               Int       @id @default(autoincrement())
+  department_name  String?   @default("Finance")
+  sop_status       String?   @db.VarChar(50)
+  preparer_status  String?   @db.VarChar(50)
+  preparer_name    String?   @db.VarChar(255)
+  preparer_date    DateTime? @db.Date
+  reviewer_comment String?
+  reviewer_status  String?   @db.VarChar(50)
+  reviewer_name    String?   @db.VarChar(255)
+  reviewer_date    DateTime? @db.Date
+}
+
+model sops_finance {
+  id          Int       @id @default(autoincrement())
+  no          Int?
+  sop_related String
+  status      String?   @db.VarChar(50)
+  comment     String?
+  reviewer    String?   @db.VarChar(200)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model users {
+  id            String    @id @default(dbgenerated("gen_random_uuid()"))
+  name          String
+  email         String    @unique
+  password_hash String
+  role          String
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+}

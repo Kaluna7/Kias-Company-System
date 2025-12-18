@@ -29,11 +29,12 @@ export default function DashboardPage() {
     { id: "B1", title: "Worksheet", category: "execution", href: "/Page/worksheet/" },
     { id: "C1", title: "Audit Review", category: "review", href: "/Page/risk-assessment-dashboard/review/" },
     { id: "A2", title: "Risk Assessment", category: "planning", href: "/Page/risk-assessment-dashboard" },
-    { id: "B2", title: "Finding", category: "execution", href: "/Page/risk-assessment-dashboard/finding/" },
+    { id: "B2", title: "Finding", category: "execution", href: "/Page/audit-finding/" },
     { id: "C2", title: "Report", category: "review", href: "/Page/risk-assessment-dashboard/report/" },
     { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
     { id: "B3", title: "Evidences", category: "execution", href: "/Page/risk-assessment-dashboard/evidences/" },
     { id: "C3", title: "Guidelines", category: "review", href: "/Page/risk-assessment-dashboard/guidelines/" },
+    { id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" },
   ];
 
   const filteredItems = activeCategory === "all"
@@ -221,6 +222,18 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+        <footer>
+          <div className="w-full h-full bg-gradient-to-r from-[#141D38] to-[#2D3A5A] rounded-2xl shadow-2xl p-8 border border-gray-700/50 mt-10">
+          <div className="flex flex-row items-center justify-between">
+            <h1 className="text-white text-5xl font-bold">Note</h1>
+            <a className="text-lg font-bold bg-white/10 backdrop-blur-sm border border-white/20 p-2 rounded-2xl text-white cursor-pointer hover:bg-white/20">New Note</a>
+          </div>
+            
+            <div className="w-full h-100 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 mt-15">
+
+            </div>
+          </div>
+        </footer>
 
       </div>
     </div>

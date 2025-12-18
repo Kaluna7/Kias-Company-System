@@ -1,19 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf"; // pastikan terinstal: pdfjs-dist
-
-/**
- * SOP Sidebar (fixed + comment-preview modal)
- *
- * Flow:
- * - User uploads PDF -> client reconstructs text preview
- * - Client sends base64 PDF to /api/Ai/extract-steps as { data: base64, text: fullText }
- * - Server returns steps -> parsedPreview
- * - User clicks "Append parsed →" -> open modal, call preview endpoint to generate comments for parsedPreview
- * - User can edit comments in modal; click "Save & Append" -> call onSopParsed(parsedWithComments)
- * - Parent will update UI immediately (no refresh)
- */
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
 /* ========== Helpers ========== */
 
@@ -80,6 +68,17 @@ export default function SOPSidebar({
   reviewerStatus,
   onPreparerStatusChange,
   onReviewerStatusChange,
+  preparerName = "",
+  preparerDate = "",
+  reviewerComment = "",
+  reviewerName = "",
+  reviewerDate = "",
+  onPreparerNameChange,
+  onPreparerDateChange,
+  onReviewerCommentChange,
+  onReviewerNameChange,
+  onReviewerDateChange,
+  onSaveSidebar,
   onSopParsed,
 }) {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -427,6 +426,7 @@ export default function SOPSidebar({
           <div className="flex gap-2 mt-2">
             <button onClick={() => setShowRaw(s => !s)} className="px-2 py-1 bg-gray-100 rounded text-xs">Toggle raw text preview</button>
             <button onClick={openAppendModal} disabled={parsing || aiInProgress} className={`px-2 py-1 rounded text-xs ${parsing || aiInProgress ? "bg-gray-200 text-gray-500" : "bg-green-600 text-white"}`}>{aiInProgress ? "AI..." : "Append parsed →"}</button>
+            <button onClick={() => onSaveSidebar?.()} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Save</button>
           </div>
 
           <div className="w-full mt-3">
@@ -442,7 +442,7 @@ export default function SOPSidebar({
             <div className="w-full mt-3">
               <div className="text-xs font-semibold text-gray-700 mb-1">Server / full raw text (truncated)</div>
               <textarea readOnly value={fullTextPreview.slice(0, 300000)} className="w-full h-48 p-2 text-xs border rounded" />
-              <div className="text-xs text-gray-500 mt-1">Jika AI gagal, copy ~600–1200 karakter area 'Prosedur' di atas dan kirimkan untuk tuning prompt.</div>
+              <div className="text-xs text-gray-500 mt-1">Jika AI gagal, copy ~600–1200 karakter area &apos;Prosedur&apos; di atas dan kirimkan untuk tuning prompt.</div>
             </div>
           )}
         </div>
@@ -459,9 +459,19 @@ export default function SOPSidebar({
         </div>
         <div className="text-xs">
           <div className="text-gray-700">Preparer:</div>
-          <div className="bg-gray-100 h-8 rounded-lg flex items-center px-3 text-gray-600">Nama Preparer</div>
+          <input
+            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
+            placeholder="Nama Preparer"
+            value={preparerName}
+            onChange={(e) => onPreparerNameChange?.(e.target.value)}
+          />
           <div className="text-gray-700 mt-2">Date:</div>
-          <div className="bg-gray-100 h-8 rounded-lg flex items-center px-3 text-gray-600">DD/MM/YYYY</div>
+          <input
+            type="date"
+            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
+            value={preparerDate}
+            onChange={(e) => onPreparerDateChange?.(e.target.value)}
+          />
         </div>
       </div>
 
@@ -470,7 +480,12 @@ export default function SOPSidebar({
         <div className="bg-gradient-to-r from-gray-800 to-black text-white px-3 py-2 font-semibold rounded-lg">Reviewer</div>
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1">Comment :</label>
-          <textarea className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm" placeholder="Enter reviewer comment..." />
+          <textarea
+            className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm"
+            placeholder="Enter reviewer comment..."
+            value={reviewerComment}
+            onChange={(e) => onReviewerCommentChange?.(e.target.value)}
+          />
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1">SOP Review Status</label>
@@ -480,10 +495,59 @@ export default function SOPSidebar({
         </div>
         <div className="text-xs">
           <div className="text-gray-700">Reviewer:</div>
-          <div className="bg-gray-100 h-8 rounded-lg flex items-center px-3 text-gray-600">Nama Reviewer</div>
+          <input
+            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
+            placeholder="Nama Reviewer"
+            value={reviewerName}
+            onChange={(e) => onReviewerNameChange?.(e.target.value)}
+          />
           <div className="text-gray-700 mt-2">Date:</div>
-          <div className="bg-gray-100 h-8 rounded-lg flex items-center px-3 text-gray-600">DD/MM/YYYY</div>
+          <input
+            type="date"
+            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
+            value={reviewerDate}
+            onChange={(e) => onReviewerDateChange?.(e.target.value)}
+          />
         </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="mt-6">
+        <button
+          onClick={async () => {
+            try {
+              const payload = {
+                department_name: department,
+                sop_status: sopStatus,
+                preparer_status: preparerStatus,
+                preparer_name: preparerName || null,
+                preparer_date: preparerDate || null,
+                reviewer_status: reviewerStatus,
+                reviewer_name: reviewerName || null,
+                reviewer_date: reviewerDate || null,
+                reviewer_comment: reviewerComment || null,
+              };
+              const res = await fetch("/api/SopReview/finance/meta", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              const json = await res.json().catch(() => ({}));
+              if (res.ok) {
+                alert("Data sidebar berhasil disimpan ke database.");
+                onSaveSidebar?.(payload);
+              } else {
+                alert("Gagal menyimpan: " + (json?.error || "Unknown error"));
+              }
+            } catch (err) {
+              console.error("Save sidebar error:", err);
+              alert("Gagal menyimpan data sidebar.");
+            }
+          }}
+          className="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Save
+        </button>
       </div>
 
       {/* Modal: preview comments */}

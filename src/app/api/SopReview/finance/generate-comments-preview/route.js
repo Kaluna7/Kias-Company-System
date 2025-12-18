@@ -66,7 +66,7 @@ function isEchoOfStep(comment, step, threshold = 0.35) {
 function buildSinglePromptStrict(item) {
   const step = (item.sop_related || "").replace(/\n+/g, " ").trim().slice(0, 1400);
   return [
-    "Anda adalah asisten HR profesional. Buat TEPAT SATU KALIMAT (1 sentence) dalam bahasa Indonesia sebagai komentar reviewer untuk langkah SOP di bawah.",
+    "Anda adalah asisten HR profesional. Buat TEPAT SATU KALIMAT (1 sentence) dalam bahasa Inggris sebagai komentar reviewer untuk langkah SOP di bawah.",
     "PERSYARATAN (WAJIB):",
     "1) KELUARKAN HANYA 1 KALIMAT. Jangan keluarkan teks lain.",
     "2) Jangan menyalin atau mengulang langsung frasa lengkap dari langkah. Tidak lebih dari 30% kata yang sama.",

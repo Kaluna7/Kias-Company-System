@@ -54,4 +54,9 @@ export const buttonSopReview = [
       name: "Warehouse",
       href: "/Page/risk-assessment-dashboard/whs/",
     },
+    {
+      logo: "/",
+      name: "Report",
+      href: "/Page/sop-review/report/",
+    },
   ];

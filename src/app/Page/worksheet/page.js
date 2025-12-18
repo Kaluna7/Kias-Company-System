@@ -89,7 +89,7 @@ export default function Worksheet() {
 
         {/* Worksheets Grid */}
         <div className="mb-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Department Worksheets</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Worksheets by Department</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {worksheets.map((worksheet, index) => (
               <Link 

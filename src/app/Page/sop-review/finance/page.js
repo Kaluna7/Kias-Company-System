@@ -12,6 +12,14 @@ export default function FinanceSopReview() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
 
+  const departmentName = "Finance";
+  const sopStatusValue = "AVAILABLE";
+  const [preparerName, setPreparerName] = useState("");
+  const [preparerDate, setPreparerDate] = useState("");
+  const [reviewerName, setReviewerName] = useState("");
+  const [reviewerDate, setReviewerDate] = useState("");
+  const [reviewerComment, setReviewerComment] = useState("");
+
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -24,6 +32,12 @@ export default function FinanceSopReview() {
 
   const reindex = (list) => list.map((item, idx) => ({ ...item, no: idx + 1 }));
 
+  // safely parse JSON, return both parsed and raw text for better error logs
+  const safeJson = async (res) => {
+    const raw = await res.text().catch(() => "");
+    try { return { data: raw ? JSON.parse(raw) : {}, raw }; } catch (e) { return { data: null, raw }; }
+  };
+
   // Fetch existing rows on mount
   useEffect(() => {
     let mounted = true;
@@ -31,14 +45,21 @@ export default function FinanceSopReview() {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const res = await fetch("/api/SopReview/finance", { method: "GET" });
-        const json = await res.json().catch(() => ({}));
+        const [res, metaRes] = await Promise.all([
+          fetch("/api/SopReview/finance", { method: "GET" }),
+          fetch("/api/SopReview/finance/meta", { method: "GET" }),
+        ]);
+        const [{ data: json, raw: rawSteps }, { data: metaJson, raw: rawMeta }] = await Promise.all([
+          safeJson(res),
+          safeJson(metaRes),
+        ]);
+
         if (!res.ok) {
-          const msg = json?.error || `HTTP ${res.status}`;
+          const msg = (json && json.error) || `HTTP ${res.status} | ${rawSteps || "no body"}`;
           setLoadError(msg);
           setSopData([]);
         } else {
-          const rows = Array.isArray(json.rows) ? json.rows : [];
+          const rows = Array.isArray(json?.rows) ? json.rows : [];
           const normalized = rows.map((r, idx) => ({
             id: r.id ?? null,
             no: r.no ?? (idx + 1),
@@ -48,6 +69,21 @@ export default function FinanceSopReview() {
             reviewer: r.reviewer || ""
           }));
           if (mounted) setSopData(reindex(normalized));
+        }
+
+        if (metaRes.ok && Array.isArray(metaJson?.rows) && metaJson.rows.length > 0) {
+          const latest = metaJson.rows[0];
+          if (mounted) {
+            setPreparerStatus(latest.preparer_status || "DRAFT");
+            setReviewerStatus(latest.reviewer_status || "DRAFT");
+            setPreparerName(latest.preparer_name || "");
+            setPreparerDate(latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "");
+            setReviewerComment(latest.reviewer_comment || "");
+            setReviewerName(latest.reviewer_name || "");
+            setReviewerDate(latest.reviewer_date ? String(latest.reviewer_date).slice(0, 10) : "");
+          }
+        } else if (!metaRes.ok) {
+          console.error("Load meta failed:", rawMeta);
         }
       } catch (err) {
         console.error("Fetch existing sops error:", err);
@@ -107,6 +143,26 @@ export default function FinanceSopReview() {
       reviewer: it.reviewer || null
     }));
 
+  const handleSidebarSaveDraft = (sidebarData) => {
+    try {
+      // Save to state (local draft)
+      if (sidebarData?.preparerStatus) setPreparerStatus(sidebarData.preparerStatus);
+      if (sidebarData?.reviewerStatus) setReviewerStatus(sidebarData.reviewerStatus);
+      if (sidebarData?.preparerName !== undefined) setPreparerName(sidebarData.preparerName || "");
+      if (sidebarData?.preparerDate !== undefined) setPreparerDate(sidebarData.preparerDate || "");
+      if (sidebarData?.reviewerName !== undefined) setReviewerName(sidebarData.reviewerName || "");
+      if (sidebarData?.reviewerDate !== undefined) setReviewerDate(sidebarData.reviewerDate || "");
+      if (sidebarData?.reviewerComment !== undefined) setReviewerComment(sidebarData.reviewerComment || "");
+      
+      setSaveMessage({ type: "success", text: "Draft sidebar disimpan (lokal). Klik Publish untuk menyimpan ke server." });
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (err) {
+      console.error("Save sidebar error:", err);
+      setSaveMessage({ type: "error", text: "Gagal menyimpan draft sidebar." });
+      setTimeout(() => setSaveMessage(null), 3000);
+    }
+  };
+
   // helper: post and safe-parse JSON
   async function postJson(url, body) {
     const res = await fetch(url, {
@@ -138,22 +194,50 @@ export default function FinanceSopReview() {
     setSaveMessage(null);
 
     try {
-      const payload = preparePayload(sopData);
-      const res = await fetch("/api/SopReview/finance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      const stepsPayload = preparePayload(sopData);
+      const metaPayload = {
+        department_name: departmentName,
+        sop_status: sopStatusValue,
+        preparer_status: preparerStatus,
+        preparer_name: preparerName || null,
+        preparer_date: preparerDate || null,
+        reviewer_comment: reviewerComment || null,
+        reviewer_status: reviewerStatus,
+        reviewer_name: reviewerName || null,
+        reviewer_date: reviewerDate || null,
+      };
 
-      const json = await res.json().catch(() => ({}));
+      const [metaRes, res] = await Promise.all([
+        fetch("/api/SopReview/finance/meta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(metaPayload),
+        }),
+        fetch("/api/SopReview/finance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(stepsPayload)
+        })
+      ]);
 
-      if (!res.ok) {
-        const errMsg = json?.error || json?.message || `HTTP ${res.status}`;
-        setSaveMessage({ type: "error", text: `Gagal menyimpan: ${errMsg}` });
-        console.error("Save error:", json);
+      const [{ data: metaJson, raw: rawMeta }, { data: json, raw: rawSteps }] = await Promise.all([
+        safeJson(metaRes),
+        safeJson(res),
+      ]);
+
+      const stepsOk = res.ok;
+      const metaOk = metaRes.ok;
+
+      if (!stepsOk || !metaOk) {
+        const errMeta = !metaOk ? (metaJson?.error || `Meta HTTP ${metaRes.status} | ${rawMeta || "no body"}`) : null;
+        const errSteps = !stepsOk ? (json?.error || json?.message || `SOP HTTP ${res.status} | ${rawSteps || "no body"}`) : null;
+        setSaveMessage({
+          type: "error",
+          text: `Gagal menyimpan${errMeta ? ` meta: ${errMeta}` : ""}${errSteps ? ` | SOP: ${errSteps}` : ""}`,
+        });
+        console.error("Save error meta/steps:", { metaJson, json, rawMeta, rawSteps });
       } else {
-        setSaveMessage({ type: "success", text: `Berhasil menyimpan ${json.inserted?.length ?? sopData.length} SOP.` });
-        // merge returned rows into state (match by sop_related)
+        setSaveMessage({ type: "success", text: `Berhasil menyimpan meta & ${json.inserted?.length ?? sopData.length} SOP.` });
         if (Array.isArray(json.inserted) && json.inserted.length > 0) {
           setSopData(prev => {
             const map = new Map(json.inserted.map(r => [ (r.sop_related||"").trim().toLowerCase(), r ]));
@@ -298,12 +382,23 @@ export default function FinanceSopReview() {
       <div className="flex flex-col lg:flex-row mt-6 justify-between gap-20 px-4 sm:px-6 lg:px-8 pb-8">
         <div className="lg:w-80">
           <SOPSidebar
-            department="Finance"
-            sopStatus="Available"
+            department={departmentName}
+            sopStatus={sopStatusValue}
             preparerStatus={preparerStatus}
             reviewerStatus={reviewerStatus}
             onPreparerStatusChange={setPreparerStatus}
             onReviewerStatusChange={setReviewerStatus}
+            preparerName={preparerName}
+            preparerDate={preparerDate}
+            reviewerComment={reviewerComment}
+            reviewerName={reviewerName}
+            reviewerDate={reviewerDate}
+            onPreparerNameChange={setPreparerName}
+            onPreparerDateChange={setPreparerDate}
+            onReviewerCommentChange={setReviewerComment}
+            onReviewerNameChange={setReviewerName}
+            onReviewerDateChange={setReviewerDate}
+            onSaveSidebar={handleSidebarSaveDraft}
             onSopParsed={handleSopParsed}
           />
         </div>
@@ -318,7 +413,7 @@ export default function FinanceSopReview() {
               <button
                 onClick={saveAllToServer}
                 disabled={sopData.length === 0 || isSaving}
-                className={`px-3 py-2 rounded-lg text-sm shadow-sm ${sopData.length === 0 || isSaving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-blue-600 text-white"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all ${sopData.length === 0 || isSaving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
               >
                 {isSaving ? "Publishing..." : "Publish"}
               </button>
