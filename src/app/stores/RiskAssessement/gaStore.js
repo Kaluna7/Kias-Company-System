@@ -2,15 +2,16 @@
 
 import { create } from "zustand";
 
-export const useGeneralAffairStore = create((set) => ({
+export const useGeneralAffairStore = create((set, get) => ({
   generalAffair: [],
+  currentFilter: "published",
 
-  loadGeneralAffair: async () => {
+  loadGeneralAffair: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/g&a");
+      const res = await fetch(`/api/RiskAssessment/g&a?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch general affair");
       const data = await res.json();
-      set({ generalAffair: data });
+      set({ generalAffair: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadGeneralAffair error:", err);

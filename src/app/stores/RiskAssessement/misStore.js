@@ -2,15 +2,16 @@
 
 import { create } from "zustand";
 
-export const useMisStore = create((set) => ({
+export const useMisStore = create((set, get) => ({
   mis: [],
+  currentFilter: "published",
 
-  loadMis: async () => {
+  loadMis: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/mis");
+      const res = await fetch(`/api/RiskAssessment/mis?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch mis");
       const data = await res.json();
-      set({ mis: data });
+      set({ mis: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadMis error:", err);

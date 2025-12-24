@@ -3,15 +3,16 @@
 import { create } from "zustand";
 
 
-export const useLossPreventionStore = create((set) => ({
+export const useLossPreventionStore = create((set, get) => ({
   lp: [],
+  currentFilter: "published",
 
-  loadLossPrevention: async () => {
+  loadLossPrevention: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/l&p");
+      const res = await fetch(`/api/RiskAssessment/l&p?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch loss prevention");
       const data = await res.json();
-      set({ lp: data });
+      set({ lp: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadLossPrevention error:", err);

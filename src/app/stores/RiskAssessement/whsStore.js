@@ -3,15 +3,16 @@
 import { create } from "zustand";
 
 
-export const useWarehouseStore = create((set) => ({
+export const useWarehouseStore = create((set, get) => ({
   warehouse: [],
+  currentFilter: "published",
 
-  loadWarehouse: async () => {
+  loadWarehouse: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/whs");
+      const res = await fetch(`/api/RiskAssessment/whs?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch warehouse");
       const data = await res.json();
-      set({ warehouse: data });
+      set({ warehouse: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadWarehouse error:", err);

@@ -3,15 +3,16 @@
 import { create } from "zustand";
 
 
-export const useOperationalStore = create((set) => ({
+export const useOperationalStore = create((set, get) => ({
   operational: [],
+  currentFilter: "published",
 
-  loadOperational: async () => {
+  loadOperational: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/ops");
+      const res = await fetch(`/api/RiskAssessment/ops?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch operational");
       const data = await res.json();
-      set({ operational: data });
+      set({ operational: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadOperational error:", err);

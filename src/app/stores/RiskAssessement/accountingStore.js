@@ -2,15 +2,16 @@
 
 import { create } from "zustand";
 
-export const useAccountingStore = create((set) => ({
+export const useAccountingStore = create((set, get) => ({
   accounting: [],
+  currentFilter: "published",
 
-  loadAccounting: async () => {
+  loadAccounting: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/accounting");
+      const res = await fetch(`/api/RiskAssessment/accounting?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch accounting");
       const data = await res.json();
-      set({ accounting: data });
+      set({ accounting: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadAccounting error:", err);

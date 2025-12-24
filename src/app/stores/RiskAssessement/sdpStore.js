@@ -2,15 +2,16 @@
 
 import { create } from "zustand";
 
-export const useStorePlanningStore = create((set) => ({
+export const useStorePlanningStore = create((set, get) => ({
   sdp: [],
+  currentFilter: "published",
 
-  loadStorePlanning: async () => {
+  loadStorePlanning: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/sdp");
+      const res = await fetch(`/api/RiskAssessment/sdp?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch store planning");
       const data = await res.json();
-      set({ sdp: data });
+      set({ sdp: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadStorePlanning error:", err);

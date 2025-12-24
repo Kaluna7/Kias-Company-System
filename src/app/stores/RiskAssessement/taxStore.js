@@ -3,15 +3,16 @@
 import { create } from "zustand";
 
 
-export const useTaxStore = create((set) => ({
+export const useTaxStore = create((set, get) => ({
   tax: [],
+  currentFilter: "published",
 
-  loadTax: async () => {
+  loadTax: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/tax");
+      const res = await fetch(`/api/RiskAssessment/tax?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch tax");
       const data = await res.json();
-      set({ tax: data });
+      set({ tax: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadTax error:", err);

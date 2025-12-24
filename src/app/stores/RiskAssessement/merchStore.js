@@ -2,15 +2,16 @@
 
 import { create } from "zustand";
 
-export const useMerchandiseStore = create((set) => ({
+export const useMerchandiseStore = create((set, get) => ({
   merchandise: [],
+  currentFilter: "published",
 
-  loadMerchandise: async () => {
+  loadMerchandise: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/merch");
+      const res = await fetch(`/api/RiskAssessment/merch?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch merchandise");
       const data = await res.json();
-      set({ merchandise: data });
+      set({ merchandise: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadMerchandise error:", err);

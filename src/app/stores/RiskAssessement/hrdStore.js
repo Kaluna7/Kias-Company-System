@@ -2,15 +2,16 @@
 
 import { create } from "zustand";
 
-export const useHrdStore = create((set) => ({
+export const useHrdStore = create((set, get) => ({
   hrd: [],
+  currentFilter: "published",
 
-  loadHrd: async () => {
+  loadHrd: async (status = "published") => {
     try {
-      const res = await fetch("/api/RiskAssessment/hrd");
+      const res = await fetch(`/api/RiskAssessment/hrd?status=${status}`);
       if (!res.ok) throw new Error("Failed to fetch Hrd");
       const data = await res.json();
-      set({ hrd: data });
+      set({ hrd: data, currentFilter: status });
       return data;
     } catch (err) {
       console.error("loadHrd error:", err);
