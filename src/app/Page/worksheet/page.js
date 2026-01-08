@@ -91,10 +91,27 @@ export default function Worksheet() {
         <div className="mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Worksheets by Department</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {worksheets.map((worksheet, index) => (
+            {worksheets.map((worksheet, index) => {
+              // Map worksheet ID to department folder
+              const deptMap = {
+                'B1.1': 'finance',
+                'B1.2': 'accounting',
+                'B1.3': 'hrd',
+                'B1.4': 'g&a',
+                'B1.5': 'sdp',
+                'B1.6': 'tax',
+                'B1.7': 'l&p',
+                'B1.8': 'mis',
+                'B1.9': 'merch',
+                'B1.10': 'ops',
+                'B1.11': 'whs'
+              };
+              const deptPath = deptMap[worksheet.id] || worksheet.id.toLowerCase();
+              
+              return (
               <Link 
                 key={worksheet.id}
-                href={`/worksheet/${worksheet.id}`}
+                href={`/Page/worksheet/${deptPath}`}
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
               >
                 <div className="flex justify-between items-start mb-3">
@@ -125,7 +142,37 @@ export default function Worksheet() {
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
+            {/* Report Card */}
+            <Link
+              href="/Page/worksheet/report"
+              className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <h3 className="text-lg font-semibold text-gray-800">REPORT</h3>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  Report
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-sm text-gray-500">All Departments</span>
+                <span className="text-sm font-medium text-gray-700">-</span>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Available
+                </span>
+                <div className="text-blue-600 flex items-center">
+                  <span className="text-sm font-medium">Open</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
 

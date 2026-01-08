@@ -13,6 +13,7 @@ export default function SmallHeader({
   viewItems: viewItemsProp = null,
   sortByItems: sortByItemsProp = null,
   onSearch,
+  showSearch = true,
 }) {
   const { data: session, status } = useSession();
   const [active, setActive] = useState(null);
@@ -137,7 +138,7 @@ export default function SmallHeader({
         </div>
 
         {/* Search */}
-        <Search onSearch={handleSearch} />
+        {showSearch && <Search onSearch={handleSearch} />}
 
         {/* Label */}
         <h1 className="text-[#141D38] mr-10 rounded-2xl bg-white text-sm font-bold px-4 py-1 inset-shadow-sm inset-shadow-[#141D38]/50">

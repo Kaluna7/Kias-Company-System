@@ -108,10 +108,27 @@ export default function B2AuditFinding() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {auditFindings.map((finding) => (
+            {auditFindings.map((finding) => {
+              // Map finding ID to department folder
+              const deptMap = {
+                'B2.1': 'finance',
+                'B2.2': 'accounting',
+                'B2.3': 'hrd',
+                'B2.4': 'g&a',
+                'B2.5': 'sdp',
+                'B2.6': 'tax',
+                'B2.7': 'l&p',
+                'B2.8': 'mis',
+                'B2.9': 'merch',
+                'B2.10': 'ops',
+                'B2.11': 'whs'
+              };
+              const deptPath = deptMap[finding.id] || finding.id.toLowerCase();
+              
+              return (
               <Link 
                 key={finding.id}
-                href={`/audit-finding/${finding.id}`}
+                href={`/Page/audit-finding/${deptPath}`}
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px] block"
               >
                 <div className="flex justify-between items-start mb-3">
@@ -148,7 +165,8 @@ export default function B2AuditFinding() {
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

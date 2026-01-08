@@ -12,15 +12,48 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
+    const includeAps = searchParams.get("includeAps") === "true";
 
     const finances = await prisma.finance.findMany({
       where: status ? { status } : undefined,
+      include: includeAps ? { aps: true } : undefined,
       orderBy: { risk_id: "desc" },
     });
 
+    // If includeAps is true, return risk data with substantive_test from first AP (for evidence page)
+    if (includeAps) {
+      const flattened = finances.map((p) => {
+        // Get first AP's substantive_test if exists
+        const firstAp = p.aps && p.aps.length > 0 ? p.aps[0] : null;
+        return {
+          risk_id: p.risk_id,
+          risk_id_no: p.risk_id_no ?? "",
+          category: p.category ?? "",
+          sub_department: p.sub_department ?? "",
+          sop_related: p.sop_related ?? "",
+          risk_description: p.risk_description ?? "",
+          risk_details: p.risk_details ?? "",
+          impact_description: p.impact_description ?? "",
+          impact_level: p.impact_level ?? null,
+          probability_level: p.probability_level ?? null,
+          priority_level: p.priority_level ?? 0,
+          mitigation_strategy: p.mitigation_strategy ?? "",
+          owners: p.owners ?? "",
+          root_cause_category: p.root_cause_category ?? "",
+          onset_timeframe: p.onset_timeframe ?? "",
+          status: p.status ?? "",
+
+          // Use risk_id_no as AP Code
+          ap_code: p.risk_id_no ?? "",
+          substantive_test: firstAp?.substantive_test ?? p.risk_description ?? "",
+        };
+      });
+      return new Response(JSON.stringify(flattened), { status: 200 });
+    }
+
     return new Response(JSON.stringify(finances), { status: 200 });
   } catch (err) {
-    console.error("GET /api/finance error:", err);
+    console.error("GET /api/RiskAssessment/finance error:", err);
     return new Response(
       JSON.stringify({ error: err.message ?? "Server error" }),
       { status: 500 },

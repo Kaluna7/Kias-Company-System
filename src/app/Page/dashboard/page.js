@@ -32,7 +32,7 @@ export default function DashboardPage() {
     { id: "B2", title: "Finding", category: "execution", href: "/Page/audit-finding/" },
     { id: "C2", title: "Report", category: "review", href: "/Page/risk-assessment-dashboard/report/" },
     { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
-    { id: "B3", title: "Evidences", category: "execution", href: "/Page/risk-assessment-dashboard/evidences/" },
+    { id: "B3", title: "Evidences", category: "execution", href: "/Page/evidence/" },
     { id: "C3", title: "Guidelines", category: "review", href: "/Page/risk-assessment-dashboard/guidelines/" },
     { id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" },
   ];

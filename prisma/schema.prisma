@@ -432,3 +432,63 @@ model users {
   created_at    DateTime? @default(now()) @db.Timestamptz(6)
   updated_at    DateTime? @default(now()) @db.Timestamptz(6)
 }
+
+model audit_finding_accounting {
+  id                 Int       @id @default(autoincrement())
+  risk_id            String?   @db.VarChar(50)
+  risk_description   String?
+  risk_details       String?
+  ap_code            String?   @db.VarChar(50)
+  substantive_test   String?
+  risk               Int?
+  check_yn            String?   @db.VarChar(10)
+  method             String?   @db.VarChar(100)
+  preparer           String?   @db.VarChar(255)
+  finding_result     String?   @db.VarChar(100)
+  finding_description String?
+  recommendation     String?
+  auditee            String?   @db.VarChar(255)
+  completion_status  String?   @db.VarChar(50)
+  completion_date    DateTime? @db.Date
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@map("audit_finding_accounting")
+}
+
+model worksheet_finance {
+  id                  Int       @id @default(autoincrement())
+  department          String?   @default("FINANCE") @db.VarChar(100)
+  preparer            String?   @db.VarChar(255)
+  reviewer            String?   @db.VarChar(255)
+  preparer_date       DateTime? @db.Date
+  reviewer_date       DateTime? @db.Date
+  status_documents    String?   @db.VarChar(100)
+  status_worksheet    String?   @default("IN PROGRESS") @db.VarChar(50)
+  status_wp           String?   @default("Not Checked") @db.VarChar(50)
+  file_path           String?
+  audit_area          String?   @db.VarChar(100)
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @updatedAt @db.Timestamptz(6)
+
+  @@map("worksheet_finance")
+}
+
+model evidence {
+  id                Int       @id @default(autoincrement())
+  department        String    @db.VarChar(100)
+  preparer          String?   @db.VarChar(255)
+  ap_id             Int?
+  ap_code           String?   @db.VarChar(50)
+  substantive_test  String?
+  file_url          String?
+  file_name         String?
+  status            String?   @default("IN PROGRESS") @db.VarChar(50)
+  overall_status    String?   @default("IN PROGRESS") @db.VarChar(50)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime? @updatedAt @db.Timestamptz(6)
+
+  @@map("evidence")
+  @@index([department])
+  @@index([ap_id])
+}

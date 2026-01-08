@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
 import SOPSidebar from "@/app/components/layout/Sop-Review/Sidebar-Sop";
 
 export default function FinanceSopReview() {
@@ -374,164 +375,207 @@ export default function FinanceSopReview() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="mb-10">
-        <SmallHeader label="Finance SOP Review" />
-      </div>
-
-      <div className="flex flex-col lg:flex-row mt-6 justify-between gap-20 px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="lg:w-80">
-          <SOPSidebar
-            department={departmentName}
-            sopStatus={sopStatusValue}
-            preparerStatus={preparerStatus}
-            reviewerStatus={reviewerStatus}
-            onPreparerStatusChange={setPreparerStatus}
-            onReviewerStatusChange={setReviewerStatus}
-            preparerName={preparerName}
-            preparerDate={preparerDate}
-            reviewerComment={reviewerComment}
-            reviewerName={reviewerName}
-            reviewerDate={reviewerDate}
-            onPreparerNameChange={setPreparerName}
-            onPreparerDateChange={setPreparerDate}
-            onReviewerCommentChange={setReviewerComment}
-            onReviewerNameChange={setReviewerName}
-            onReviewerDateChange={setReviewerDate}
-            onSaveSidebar={handleSidebarSaveDraft}
-            onSopParsed={handleSopParsed}
-          />
-        </div>
-
-        <div className="flex-1 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">SOP Review List</h2>
-              <p className="text-sm text-gray-600 mt-1">Manage and review Standard Operating Procedures</p>
+    <main className="flex flex-row w-full h-full min-h-screen bg-[#E6F0FA]">
+      <SmallSidebar />
+      <div className="flex flex-col flex-1">
+        <SmallHeader label="Finance SOP Review" showSearch={false} />
+        <div className="mt-12 ml-14 flex-1 p-6">
+          <div className="bg-white rounded-xl shadow-lg p-8 max-w-[95%] mx-auto">
+            {/* Header Section */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-gray-800">Finance SOP Review</h2>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={saveAllToServer}
+                    disabled={sopData.length === 0 || isSaving}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      sopData.length === 0 || isSaving
+                        ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {isSaving ? "Publishing..." : "Publish"}
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div>
+                  <span className="text-sm font-semibold text-gray-700">PREPARER STATUS: </span>
+                  <span className={`text-sm font-semibold px-2 py-1 rounded ${
+                    preparerStatus === "COMPLETED" || preparerStatus === "APPROVED"
+                      ? "bg-yellow-100 text-red-600"
+                      : preparerStatus === "PROGRESS" || preparerStatus === "IN REVIEW"
+                      ? "bg-red-100 text-red-600"
+                      : preparerStatus === "DRAFT"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "text-red-600"
+                  }`}>
+                    {preparerStatus || "---"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-gray-700">REVIEWER STATUS: </span>
+                  <span className={`text-sm font-semibold px-2 py-1 rounded ${
+                    reviewerStatus === "PROGRESS" || reviewerStatus === "IN REVIEW"
+                      ? "bg-red-100 text-red-600"
+                      : reviewerStatus === "APPROVED"
+                      ? "bg-green-100 text-green-800"
+                      : reviewerStatus === "DRAFT"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "text-yellow-600"
+                  }`}>
+                    {reviewerStatus || "---"}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={saveAllToServer}
-                disabled={sopData.length === 0 || isSaving}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all ${sopData.length === 0 || isSaving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-              >
-                {isSaving ? "Publishing..." : "Publish"}
-              </button>
+
+            {saveMessage && (
+              <div className={`mb-4 px-4 py-3 rounded-md ${
+                saveMessage.type === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+              }`}>
+                {saveMessage.text}
+              </div>
+            )}
+
+            <div className="flex gap-6">
+              {/* Left Panel */}
+              <div className="w-80 flex-shrink-0">
+                <SOPSidebar
+                  department={departmentName}
+                  sopStatus={sopStatusValue}
+                  preparerStatus={preparerStatus}
+                  reviewerStatus={reviewerStatus}
+                  onPreparerStatusChange={setPreparerStatus}
+                  onReviewerStatusChange={setReviewerStatus}
+                  preparerName={preparerName}
+                  preparerDate={preparerDate}
+                  reviewerComment={reviewerComment}
+                  reviewerName={reviewerName}
+                  reviewerDate={reviewerDate}
+                  onPreparerNameChange={setPreparerName}
+                  onPreparerDateChange={setPreparerDate}
+                  onReviewerCommentChange={setReviewerComment}
+                  onReviewerNameChange={setReviewerName}
+                  onReviewerDateChange={setReviewerDate}
+                  onSaveSidebar={handleSidebarSaveDraft}
+                  onSopParsed={handleSopParsed}
+                />
+              </div>
+
+              {/* Main Table - Right Side */}
+              <div className="flex-1 min-w-0">
+                {isLoading ? (
+                  <div className="p-4 text-center text-sm text-gray-600 bg-white rounded-lg border border-gray-200">Loading SOPs from server...</div>
+                ) : loadError ? (
+                  <div className="p-4 text-center text-sm text-red-600 bg-white rounded-lg border border-gray-200">Gagal memuat data: {loadError}</div>
+                ) : (
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full table-fixed border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 w-12">NO</th>
+                            <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">SOP RELATED</th>
+                            <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 w-32">STATUS</th>
+                            <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">COMMENT REVIEW</th>
+                            <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 w-32">REVIEWER</th>
+                            <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 w-40">ACTIONS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sopData.map((row, idx) => (
+                            <tr key={idx} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
+                              <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">{row.no}</td>
+
+                              <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top">
+                                <textarea
+                                  value={row.sop_related}
+                                  onChange={(e) => updateRow(idx, { sop_related: e.target.value })}
+                                  className="w-full bg-transparent border-none focus:outline-none resize-none"
+                                  rows={2}
+                                  placeholder="SOP Related..."
+                                />
+                              </td>
+
+                              <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">
+                                <select
+                                  value={row.status || ""}
+                                  onChange={(e) => updateRow(idx, { status: e.target.value })}
+                                  className={`w-full bg-transparent border-none focus:outline-none text-center text-xs ${getStatusBadge(row.status)}`}
+                                >
+                                  <option value="">Not set</option>
+                                  <option value="DRAFT">DRAFT</option>
+                                  <option value="IN REVIEW">IN REVIEW</option>
+                                  <option value="APPROVED">APPROVED</option>
+                                  <option value="REJECTED">REJECTED</option>
+                                </select>
+                              </td>
+
+                              <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top">
+                                <input
+                                  value={row.comment || ""}
+                                  onChange={(e) => updateRow(idx, { comment: e.target.value })}
+                                  className="w-full bg-transparent border-none focus:outline-none"
+                                  placeholder="Reviewer comment..."
+                                />
+                              </td>
+
+                              <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">
+                                <input
+                                  value={row.reviewer || ""}
+                                  onChange={(e) => updateRow(idx, { reviewer: e.target.value })}
+                                  className="w-full bg-transparent border-none focus:outline-none text-center"
+                                  placeholder="Reviewer username..."
+                                />
+                              </td>
+
+                              <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">
+                                <div className="flex gap-1 justify-center items-center flex-wrap">
+                                  <button
+                                    onClick={() => genCommentForRow(idx)}
+                                    title="Generate comment preview"
+                                    className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs hover:bg-blue-100 whitespace-nowrap"
+                                  >
+                                    Gen
+                                  </button>
+
+                                  <button
+                                    onClick={() => viewComment(idx)}
+                                    title="View comment"
+                                    className="px-2 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded text-xs hover:bg-gray-100 whitespace-nowrap"
+                                  >
+                                    View
+                                  </button>
+
+                                  <button
+                                    onClick={() => removeRow(idx)}
+                                    title="Hapus"
+                                    className="px-2 py-1 bg-red-50 text-red-700 border border-red-200 rounded text-xs hover:bg-red-100 whitespace-nowrap"
+                                  >
+                                    Del
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+
+                          {sopData.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="p-4 text-center text-xs text-gray-500 border border-gray-200">
+                                No SOPs yet. Upload a PDF to extract SOP items.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          {isLoading ? (
-            <div className="px-6 py-6 text-center text-sm text-gray-600">Loading SOPs from server...</div>
-          ) : loadError ? (
-            <div className="px-6 py-6 text-center text-sm text-red-600">Gagal memuat data: {loadError}</div>
-          ) : (
-            <>
-              {saveMessage && (
-                <div className={`px-6 py-3 ${saveMessage.type === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-                  {saveMessage.text}
-                </div>
-              )}
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
-                  <thead className="bg-gradient-to-r from-gray-800 to-black">
-                    <tr>
-                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-12">No</th>
-                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">SOP Related</th>
-                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-28">Status</th>
-                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Comment Review</th>
-                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-32">Reviewer</th>
-                      <th className="border-b border-gray-300 px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider w-44">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {sopData.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50 transition-colors duration-150 align-top">
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{row.no}</td>
-
-                        <td className="px-4 py-4">
-                          <textarea
-                            value={row.sop_related}
-                            onChange={(e) => updateRow(idx, { sop_related: e.target.value })}
-                            className="w-full resize-none border border-gray-200 rounded-md p-2 text-sm"
-                            rows={2}
-                          />
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <select
-                            value={row.status || ""}
-                            onChange={(e) => updateRow(idx, { status: e.target.value })}
-                            className={`w-full px-2 py-1 rounded-md text-sm ${getStatusBadge(row.status)}`}
-                          >
-                            <option value="">Not set</option>
-                            <option value="DRAFT">DRAFT</option>
-                            <option value="IN REVIEW">IN REVIEW</option>
-                            <option value="APPROVED">APPROVED</option>
-                            <option value="REJECTED">REJECTED</option>
-                          </select>
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <input
-                            value={row.comment || ""}
-                            onChange={(e) => updateRow(idx, { comment: e.target.value })}
-                            className="w-full border border-gray-200 rounded-md p-2 text-sm"
-                            placeholder="Reviewer comment..."
-                          />
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <input
-                            value={row.reviewer || ""}
-                            onChange={(e) => updateRow(idx, { reviewer: e.target.value })}
-                            className="w-full border border-gray-200 rounded-md p-2 text-sm"
-                            placeholder="Reviewer username..."
-                          />
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => genCommentForRow(idx)}
-                              title="Generate comment preview"
-                              className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md text-sm"
-                            >
-                              Gen Comment
-                            </button>
-
-                            <button
-                              onClick={() => viewComment(idx)}
-                              title="View comment"
-                              className="px-2 py-1 bg-gray-50 text-gray-700 border border-gray-100 rounded-md text-sm"
-                            >
-                              View
-                            </button>
-
-                            <button
-                              onClick={() => removeRow(idx)}
-                              title="Hapus"
-                              className="px-2 py-1 bg-red-50 text-red-700 border border-red-100 rounded-md text-sm"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {sopData.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
-                          No SOPs yet. Upload a PDF to extract SOP items.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -565,6 +609,6 @@ export default function FinanceSopReview() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
