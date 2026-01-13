@@ -126,6 +126,22 @@ export default function Evidence() {
               </Link>
               );
             })}
+            
+            {/* Report Card */}
+            <Link 
+              href="/Page/evidence/report"
+              className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-800">REPORT</h3>
+                <div className="text-blue-600 flex items-center">
+                  <span className="text-sm font-medium">Open</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
 
