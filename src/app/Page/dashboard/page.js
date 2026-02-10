@@ -27,13 +27,13 @@ export default function DashboardPage() {
   const auditItems = [
     { id: "A1", title: "SOP Review", category: "planning", href: "/Page/sop-review/" },
     { id: "B1", title: "Worksheet", category: "execution", href: "/Page/worksheet/" },
-    { id: "C1", title: "Audit Review", category: "review", href: "/Page/risk-assessment-dashboard/review/" },
+    { id: "C1", title: "Audit Review", category: "review", href: "/Page/audit-review/" },
     { id: "A2", title: "Risk Assessment", category: "planning", href: "/Page/risk-assessment-dashboard" },
     { id: "B2", title: "Finding", category: "execution", href: "/Page/audit-finding/" },
     { id: "C2", title: "Report", category: "review", href: "/Page/risk-assessment-dashboard/report/" },
     { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
     { id: "B3", title: "Evidences", category: "execution", href: "/Page/evidence/" },
-    { id: "C3", title: "Guidelines", category: "review", href: "/Page/risk-assessment-dashboard/guidelines/" },
+    { id: "C3", title: "Guidelines", category: "review", href: "/Page/audit-review/guidelines/" },
     { id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" },
   ];
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
+import SmallSidebar from "@/app/components/layout/SmallSidebar";
 
 export default function SDPAuditFinding() {
   const [filePath, setFilePath] = useState("");
