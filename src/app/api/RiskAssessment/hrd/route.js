@@ -1,4 +1,5 @@
 import { PrismaClient } from "@/generated/prisma";
+import { backfillRiskIdNoForRows, ensureRiskIdNo } from "../_shared/riskIdNo";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -8,12 +9,48 @@ function toIntOrNull(v) {
   return Number.isNaN(n) ? null : n;
 }
 
-export async function GET() {
+export async function GET(req) {
   try {
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get("status");
+    const includeAps = searchParams.get("includeAps") === "true";
+
     const hrds = await prisma.hrd.findMany({
+      where: status ? { status } : undefined,
+      include: includeAps ? { aps: true } : undefined,
       orderBy: { risk_id: "desc" },
     });
-    return new Response(JSON.stringify(hrds), { status: 200 });
+
+    const safeHrd = await backfillRiskIdNoForRows(prisma.hrd, hrds);
+
+    if (includeAps) {
+      const flattened = safeHrd.map((p) => {
+        const firstAp = p.aps && p.aps.length > 0 ? p.aps[0] : null;
+        return {
+          risk_id: p.risk_id,
+          risk_id_no: p.risk_id_no ?? "",
+          category: p.category ?? "",
+          sub_department: p.sub_department ?? "",
+          sop_related: p.sop_related ?? "",
+          risk_description: p.risk_description ?? "",
+          risk_details: p.risk_details ?? "",
+          impact_description: p.impact_description ?? "",
+          impact_level: p.impact_level ?? null,
+          probability_level: p.probability_level ?? null,
+          priority_level: p.priority_level ?? 0,
+          mitigation_strategy: p.mitigation_strategy ?? "",
+          owners: p.owners ?? "",
+          root_cause_category: p.root_cause_category ?? "",
+          onset_timeframe: p.onset_timeframe ?? "",
+          status: p.status ?? "",
+          ap_code: p.risk_id_no ?? "",
+          substantive_test: firstAp?.substantive_test ?? p.risk_description ?? "",
+        };
+      });
+      return new Response(JSON.stringify(flattened), { status: 200 });
+    }
+
+    return new Response(JSON.stringify(safeHrd), { status: 200 });
   } catch (err) {
     console.error("GET /api/hrd error:", err);
     return new Response(
@@ -45,8 +82,8 @@ export async function POST(req) {
       },
     });
 
-    // created should already contain risk_id_no because trigger runs BEFORE INSERT
-    return new Response(JSON.stringify(created), { status: 201 });
+    const risk_id_no = await ensureRiskIdNo(prisma.hrd, created.risk_id, created.risk_id_no);
+    return new Response(JSON.stringify({ ...created, risk_id_no }), { status: 201 });
   } catch (err) {
     console.error("POST /api/hrd error:", err);
     return new Response(

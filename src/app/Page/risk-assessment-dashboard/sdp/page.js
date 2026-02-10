@@ -2,13 +2,14 @@
 
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import SmallSidebar from "@/app/components/layout/SmallSidebar";
 import SmallHeader from "@/app/components/layout/SmallHeader";
+import { Search } from "@/app/components/features/Button";
 import { NewSDPInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
 import { usePopUp } from "@/app/stores/ComponentsStore/popupStore";
 import { useStorePlanningStore } from "@/app/stores/RiskAssessement/sdpStore";
 import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
+import { compareCode } from "@/app/utils/compareCode";
 
 export default function SDP() {
   const { data: session } = useSession();
@@ -164,6 +165,11 @@ export default function SDP() {
         const valB = b[sortOption.key];
         if (valA === undefined || valB === undefined) return 0;
 
+        if (sortOption.key === "risk_id_no") {
+          const cmp = compareCode(valA, valB);
+          return sortOption.order === "asc" ? cmp : -cmp;
+        }
+
         if (sortOption.order === "asc") return valA > valB ? 1 : -1;
         else return valA < valB ? 1 : -1;
       });
@@ -187,18 +193,21 @@ export default function SDP() {
   }
 
   return (
-    <main className="flex flex-row w-full h-full min-h-screen">
-      <SmallSidebar />
-      <div className="flex flex-col flex-1">
+    <main className="flex flex-col w-full h-screen overflow-hidden">
+      <div className="flex flex-col flex-1 w-full h-full">
         <SmallHeader
           label="Risk Assessment Form SDP"
-          items={items}
+          fileItems={items}
           viewItems={isAdmin ? viewItems : []} 
           editItems={editItems}
           sortByItems={sortByItems}
           onSearch={setSearchQuery}
         />
-        <div className="mt-12 ml-14 flex-1">
+        <div className="flex-1 w-full h-full overflow-hidden mt-20 md:mt-14">
+          {/* Search bar untuk mobile - di atas table */}
+          <div className="md:hidden px-4 pt-4 pb-2">
+            <Search onSearch={setSearchQuery} />
+          </div>
           {isOpen && (
             <NewSDPInput
               onClose={() => {

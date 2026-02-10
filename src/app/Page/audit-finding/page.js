@@ -1,8 +1,76 @@
 // app/b2-audit/page.js
 import Link from 'next/link';
 import Image from 'next/image';
+import { headers } from 'next/headers';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-export default function B2AuditFinding() {
+// Map department name to deptKey for user assignment checking
+function getDeptKeyFromDepartmentName(deptName) {
+  const deptMap = {
+    "FINANCE": "finance",
+    "ACCOUNTING": "accounting",
+    "HRD": "hrd",
+    "G&A": "g&a",
+    "STORE DESIGN PLANNER": "sdp",
+    "TAX": "tax",
+    "SECURITY L&P": "l&p",
+    "MIS": "mis",
+    "MERCHANDISE": "merch",
+    "OPERATIONAL": "ops",
+    "WAREHOUSE": "whs",
+  };
+  return deptMap[deptName] || null;
+}
+
+export default async function B2AuditFinding() {
+  // Get user session and assignments
+  const session = await getServerSession(authOptions);
+  const userName = session?.user?.name || "";
+  const isAdmin = (session?.user?.role || "").toLowerCase() === "admin";
+  
+  // Get user assignments for Audit Finding module
+  let allowedDepartments = [];
+  if (!isAdmin && userName) {
+    try {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      const baseUrl = `${protocol}://${host}`;
+      
+      const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=audit-finding`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success) {
+          allowedDepartments = data.allowedDepartments || [];
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load user assignments:", err.message);
+    }
+  }
+  
+  // Create Set of allowed department names for quick lookup
+  // Match by department name (case-insensitive) and also by deptKey
+  const allowedDeptNames = new Set(
+    allowedDepartments.map(d => d.name.toUpperCase())
+  );
+  const allowedDeptKeys = new Set(
+    allowedDepartments.map(d => d.key)
+  );
+  
+  const isDepartmentEnabled = (deptName) => {
+    // Admin can access all departments
+    if (isAdmin) return true;
+    // If no assignments, disable all departments
+    if (allowedDepartments.length === 0) return false;
+    // Check if department is in allowed list (by name or by deptKey)
+    const deptKey = getDeptKeyFromDepartmentName(deptName);
+    return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
+  };
+
   const auditFindings = [
     { id: 'B2.1', department: 'FINANCE', statusWP: 'Not Checked', process: 'IN PROGRESS' },
     { id: 'B2.2', department: 'ACCOUNTING', statusWP: 'Not Checked', process: 'IN PROGRESS' },
@@ -27,7 +95,7 @@ export default function B2AuditFinding() {
               <div className="flex items-center justify-center md:justify-start space-x-3">
                 <div>
                   <Image
-                    src="/images/kias-logo.png"
+                    src="/images/kias-logo.webp"
                     width={100}
                     height={100}
                     alt='kias logo'
@@ -37,6 +105,17 @@ export default function B2AuditFinding() {
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-white">B2 AUDIT FINDING</h3>
                 <p className="text-blue-100 mt-1">Audit Management System</p>
+              </div>
+              <div className="flex items-center">
+                <Link
+                  href="/Page/audit-finding/report"
+                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Report
+                </Link>
               </div>
             </div>
           </div>
@@ -124,8 +203,49 @@ export default function B2AuditFinding() {
                 'B2.11': 'whs'
               };
               const deptPath = deptMap[finding.id] || finding.id.toLowerCase();
+              const isEnabled = isDepartmentEnabled(finding.department);
+              const isDisabled = !isEnabled;
               
-              return (
+              return isDisabled ? (
+                <div
+                  key={finding.id}
+                  className="bg-gray-100 rounded-xl shadow-sm p-5 border border-gray-200 opacity-60 cursor-not-allowed"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-1 rounded mb-2 inline-block">
+                        {finding.id}
+                      </span>
+                      <h3 className="text-lg font-semibold text-gray-600">{finding.department}</h3>
+                    </div>
+                    <div className="flex flex-col items-end space-y-1">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                        {finding.statusWP}
+                      </span>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                        {finding.process}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-xs text-gray-500">Status: Locked</span>
+                      </div>
+                      <div className="text-gray-400 flex items-center">
+                        <span className="text-sm font-medium">Locked</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <Link 
                 key={finding.id}
                 href={`/Page/audit-finding/${deptPath}`}
@@ -167,6 +287,43 @@ export default function B2AuditFinding() {
               </Link>
               );
             })}
+            
+            {/* Report Card - Added after all department cards */}
+            <Link 
+              href="/Page/audit-finding/report"
+              className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px] block"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded mb-2 inline-block">
+                    REPORT
+                  </span>
+                  <h3 className="text-lg font-semibold text-gray-800">Report</h3>
+                </div>
+                <div className="flex flex-col items-end space-y-1">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Published Data
+                  </span>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="text-xs text-gray-500">Status: Active</span>
+                  </div>
+                  <div className="text-blue-600 flex items-center">
+                    <span className="text-sm font-medium">Open</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
       </div>

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "KIAS Dashboard",
-  description: "Sistem login dengan role-based (admin, reviewer, user)",
+  title: "KIAS AUDIT SYSTEM",
+  description: "Enjoy your work with this system & earn your money",
 };
 
 export default function RootLayout({ children }) {

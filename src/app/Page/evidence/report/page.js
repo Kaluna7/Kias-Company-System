@@ -1,7 +1,5 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import SmallHeader from "@/app/components/layout/SmallHeader";
-import SmallSidebar from "@/app/components/layout/SmallSidebar";
 
 export default function EvidenceReport() {
   const [data, setData] = useState([]);
@@ -16,7 +14,14 @@ export default function EvidenceReport() {
       'FINANCE': '/api/evidence/finance',
       'ACCOUNTING': '/api/evidence/accounting',
       'OPERATIONAL': '/api/evidence/ops',
-      // Add more departments as they are implemented
+      'HRD': '/api/evidence/hrd',
+      'G&A': '/api/evidence/g&a',
+      'SDP': '/api/evidence/sdp',
+      'TAX': '/api/evidence/tax',
+      'L&P': '/api/evidence/l&p',
+      'MIS': '/api/evidence/mis',
+      'MERCHANDISE': '/api/evidence/merch',
+      'WAREHOUSE': '/api/evidence/whs',
     };
     setLoading(true);
     setError(null);
@@ -36,6 +41,11 @@ export default function EvidenceReport() {
             json.data.forEach(row => {
               allData.push({
                 ...row,
+                // normalize: new API returns `attachment`, old one had `file_url`
+                file_url: row.file_url || row.attachment || "",
+                // meta is returned per department
+                preparer: row.preparer || json?.meta?.preparer || "",
+                overall_status: row.overall_status || json?.meta?.overall_status || "",
                 department: dept,
               });
             });
@@ -74,14 +84,20 @@ export default function EvidenceReport() {
   };
 
   return (
-    <main className="flex flex-row w-full h-full min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <SmallSidebar />
-      <div className="flex flex-col flex-1">
-        <SmallHeader label="EVIDENCE REPORT" showSearch={false} />
-        <div className="mt-12 ml-14 flex-1 p-6">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-[95%] mx-auto border border-gray-200">
-            {loading && <div className="text-sm text-gray-600 mb-4">Memuat data...</div>}
-            {error && <div className="text-sm text-red-600 mb-4">Gagal memuat data: {error}</div>}
+    <main className="min-h-screen w-full bg-[#E6F0FA]">
+      <div className="px-3 sm:px-4 pt-6 pb-4 flex flex-col h-full">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="text-sm text-slate-700 font-semibold">B3.1 EVIDENCE REPORT</div>
+          <button
+            onClick={loadData}
+            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-md"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+          {loading && <div className="text-sm text-gray-600 mb-4">Loading...</div>}
+          {error && <div className="text-sm text-red-600 mb-4">Failed to load data: {error}</div>}
 
             <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm mt-4">
               <table className="min-w-full table-fixed border-collapse text-xs">
@@ -124,7 +140,7 @@ export default function EvidenceReport() {
                 <tbody>
                   {data.map((row, idx) => (
                     <tr
-                      key={`${row.department}-${row.id || idx}`}
+                      key={`${row.department}-${row.ap_id ?? row.id ?? idx}-${row.ap_code || ""}`}
                       className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}
                     >
                       {/* Department */}
@@ -199,7 +215,6 @@ export default function EvidenceReport() {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Modal View Data */}
       {viewOpen && selectedRow && (
@@ -301,15 +316,13 @@ export default function EvidenceReport() {
                       {selectedRow.file_url && (
                         <a
                           href={selectedRow.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1"
+                          download={selectedRow.file_name || `evidence_${selectedRow.department || ""}_${selectedRow.ap_code || ""}`}
+                          className="px-3 py-1.5 bg-slate-800 text-white rounded text-xs hover:bg-slate-900 flex items-center gap-1"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
                           </svg>
-                          View
+                          Download
                         </a>
                       )}
                     </div>

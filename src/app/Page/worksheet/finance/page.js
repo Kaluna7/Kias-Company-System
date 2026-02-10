@@ -9,17 +9,42 @@ export default function FinanceWorksheet() {
   const [preparerDate, setPreparerDate] = useState("");
   const [reviewerDate, setReviewerDate] = useState("");
   const [statusDocuments, setStatusDocuments] = useState("");
-  const [statusWorksheet, setStatusWorksheet] = useState("IN PROGRESS");
+  const [statusWorksheet, setStatusWorksheet] = useState("Draft");
   const [statusWP, setStatusWP] = useState("Not Checked");
   const [filePath, setFilePath] = useState("");
   const [auditArea, setAuditArea] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [notification, setNotification] = useState(null); // { type: 'success' | 'error', message: string }
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      setFilePath(file.name);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("department", "finance");
+
+        const response = await fetch("/api/worksheet/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await response.json();
+        if (response.ok && data?.fileUrl) {
+          setFilePath(data.fileUrl);
+          showNotification("success", "File uploaded successfully.");
+        } else {
+          showNotification("error", "Failed to upload file: " + (data?.error || "Unknown error."));
+        }
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        showNotification("error", "Error while uploading file: " + (error.message || "Unknown error."));
+      }
     }
+  };
+
+  const showNotification = (type, message) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const handleSave = async () => {
@@ -46,25 +71,31 @@ export default function FinanceWorksheet() {
 
       const data = await response.json();
       if (data.success) {
-        alert("Data berhasil disimpan!");
+        showNotification("success", "Data has been saved successfully.");
       } else {
-        alert("Gagal menyimpan data: " + (data.error || "Unknown error"));
+        showNotification(
+          "error",
+          "Failed to save data: " + (data.error || "Unknown error.")
+        );
       }
     } catch (error) {
       console.error("Error saving data:", error);
-      alert("Error menyimpan data: " + error.message);
+      showNotification(
+        "error",
+        "Error while saving data: " + (error.message || "Unknown error.")
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <main className="flex flex-row w-full h-full min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="flex flex-col flex-1">
+    <main className="flex flex-col w-full h-screen overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex flex-col flex-1 w-full h-full overflow-hidden">
         <SmallHeader label="B.1.1 WORKSHEET - FINANCE" showSearch={false} />
-        <div className="mt-12 ml-14 flex-1 p-6">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-7xl mx-auto border border-gray-200">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="flex-1 w-full h-full overflow-y-auto mt-20 md:mt-14 p-4 md:p-6">
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8 max-w-7xl mx-auto border border-gray-200">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
               {/* Left Section */}
               <div className="space-y-6">
                 {/* Files Section */}
@@ -122,6 +153,55 @@ export default function FinanceWorksheet() {
                     </div>
                   </div>
                 </div>
+
+                {/* Status Documents */}
+                <div>
+                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
+                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    STATUS DOCUMENTS
+                  </label>
+                  <input
+                    type="text"
+                    value={statusDocuments}
+                    onChange={(e) => setStatusDocuments(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    placeholder="Enter status"
+                  />
+                </div>
+
+                {/* Status Worksheet */}
+                <div>
+                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
+                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    STATUS WORKSHEET
+                  </label>
+                  <select
+                    value={statusWorksheet}
+                    onChange={(e) => setStatusWorksheet(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Available">Available</option>
+                    <option value="Not Available">Not Available</option>
+                  </select>
+                </div>
+
+                {/* Status WP */}
+                <div>
+                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
+                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    STATUS WP
+                  </label>
+                  <div className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 font-medium">
+                    {statusWP}
+                  </div>
+                </div>
               </div>
 
               {/* Right Section */}
@@ -160,86 +240,38 @@ export default function FinanceWorksheet() {
                   />
                 </div>
 
-                {/* Preparer Date */}
-                <div>
-                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
-                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    PREPARER DATE
-                  </label>
-                  <input
-                    type="date"
-                    value={preparerDate}
-                    onChange={(e) => setPreparerDate(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
-                  />
-                </div>
-
-                {/* Reviewer Date */}
-                <div>
-                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
-                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    REVIEWER DATE
-                  </label>
-                  <input
-                    type="date"
-                    value={reviewerDate}
-                    onChange={(e) => setReviewerDate(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
-                  />
-                </div>
-
-                {/* Status Documents */}
-                <div>
-                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
-                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    STATUS DOCUMENTS
-                  </label>
-                  <input
-                    type="text"
-                    value={statusDocuments}
-                    onChange={(e) => setStatusDocuments(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
-                    placeholder="Enter status"
-                  />
-                </div>
-
-                {/* Status Worksheet */}
-                <div>
-                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
-                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    STATUS WORKSHEET
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-4 py-2 rounded-lg font-semibold text-sm ${
-                        statusWorksheet === "IN PROGRESS"
-                          ? "bg-yellow-100 text-yellow-800 border border-yellow-200"
-                          : "bg-gray-100 text-gray-800 border border-gray-200"
-                      }`}
-                    >
-                      {statusWorksheet}
-                    </span>
+                {/* Dates */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Preparer Date */}
+                  <div>
+                    <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
+                      <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      PREPARER DATE
+                    </label>
+                    <input
+                      type="date"
+                      value={preparerDate}
+                      onChange={(e) => setPreparerDate(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    />
                   </div>
-                </div>
 
-                {/* Status WP */}
-                <div>
-                  <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
-                    <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    STATUS WP
-                  </label>
-                  <div className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 font-medium">
-                    {statusWP}
+                  {/* Reviewer Date */}
+                  <div>
+                    <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
+                      <svg className="w-4 h-4 text-[#141D38]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      REVIEWER DATE
+                    </label>
+                    <input
+                      type="date"
+                      value={reviewerDate}
+                      onChange={(e) => setReviewerDate(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    />
                   </div>
                 </div>
 
@@ -264,6 +296,7 @@ export default function FinanceWorksheet() {
                     <option value="Medan">Medan</option>
                   </select>
                 </div>
+
               </div>
             </div>
             
@@ -295,6 +328,76 @@ export default function FinanceWorksheet() {
           </div>
         </div>
       </div>
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div
+            className={`flex items-start gap-3 rounded-lg shadow-lg border px-4 py-3 bg-white max-w-sm ${
+              notification.type === "success"
+                ? "border-emerald-200"
+                : "border-red-200"
+            }`}
+          >
+            <div className="mt-0.5">
+              {notification.type === "success" ? (
+                <svg
+                  className="w-5 h-5 text-emerald-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-5 h-5 text-red-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 8v4m0 4h.01M21 12A9 9 0 113 12a9 9 0 0118 0z"
+                  />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">
+                {notification.type === "success" ? "Success" : "Error"}
+              </p>
+              <p className="text-sm text-gray-700 mt-0.5">
+                {notification.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setNotification(null)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

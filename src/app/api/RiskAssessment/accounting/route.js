@@ -1,4 +1,5 @@
 import { PrismaClient } from "@/generated/prisma";
+import { backfillRiskIdNoForRows, ensureRiskIdNo } from "../_shared/riskIdNo";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -19,10 +20,11 @@ export async function GET(req) {
       include: includeAps ? { aps: true } : undefined,
       orderBy: { risk_id: "desc" },
     });
+    const safeAccountings = await backfillRiskIdNoForRows(prisma.accounting, accountings);
 
     // If includeAps is true, return risk data with substantive_test from first AP (for evidence page)
     if (includeAps) {
-      const flattened = accountings.map((p) => {
+      const flattened = safeAccountings.map((p) => {
         // Get first AP's substantive_test if exists
         const firstAp = p.aps && p.aps.length > 0 ? p.aps[0] : null;
         return {
@@ -51,7 +53,7 @@ export async function GET(req) {
       return new Response(JSON.stringify(flattened), { status: 200 });
     }
 
-    return new Response(JSON.stringify(accountings), { status: 200 });
+    return new Response(JSON.stringify(safeAccountings), { status: 200 });
   } catch (err) {
     console.error("GET /api/RiskAssessment/accounting error:", err);
     return new Response(
@@ -83,8 +85,8 @@ export async function POST(req) {
       },
     });
 
-    // created should already contain risk_id_no because trigger runs BEFORE INSERT
-    return new Response(JSON.stringify(created), { status: 201 });
+    const risk_id_no = await ensureRiskIdNo(prisma.accounting, created.risk_id, created.risk_id_no);
+    return new Response(JSON.stringify({ ...created, risk_id_no }), { status: 201 });
   } catch (err) {
     console.error("POST /api/accounting error:", err);
     return new Response(

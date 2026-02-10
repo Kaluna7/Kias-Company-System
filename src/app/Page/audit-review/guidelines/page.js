@@ -11,7 +11,7 @@ export default function AuditReviewGuidelinesPage() {
           <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">
             <div className="flex flex-row justify-between items-center">
               <div className="flex items-center justify-center md:justify-start space-x-3">
-                <Image src="/images/kias-logo.png" width={100} height={100} alt="kias logo" />
+                <Image src="/images/kias-logo.webp" width={100} height={100} alt="kias logo" />
               </div>
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-white">C.1 AUDIT REVIEW - GUIDELINES</h3>

@@ -7,7 +7,7 @@ export default function LargeSidebar() {
   return (
     <div className="h-full max-w-[16%] w-full flex flex-col gap-20 p-6 rounded-2xl bg-[#141D38] ">
       <Image
-        src="/images/kias-logo.png"
+        src="/images/kias-logo.webp"
         width={100}
         height={100}
         alt="kias logo"

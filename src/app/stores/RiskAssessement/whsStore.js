@@ -7,6 +7,8 @@ export const useWarehouseStore = create((set, get) => ({
   warehouse: [],
   currentFilter: "published",
 
+  setWarehouse: (data) => set({ warehouse: data }),
+
   loadWarehouse: async (status = "published") => {
     try {
       const res = await fetch(`/api/RiskAssessment/whs?status=${status}`);

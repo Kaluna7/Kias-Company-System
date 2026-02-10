@@ -6,6 +6,8 @@ export const useHrdStore = create((set, get) => ({
   hrd: [],
   currentFilter: "published",
 
+  setHrd: (data) => set({ hrd: data }),
+
   loadHrd: async (status = "published") => {
     try {
       const res = await fetch(`/api/RiskAssessment/hrd?status=${status}`);

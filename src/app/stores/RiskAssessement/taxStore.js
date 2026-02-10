@@ -7,6 +7,8 @@ export const useTaxStore = create((set, get) => ({
   tax: [],
   currentFilter: "published",
 
+  setTax: (data) => set({ tax: data }),
+
   loadTax: async (status = "published") => {
     try {
       const res = await fetch(`/api/RiskAssessment/tax?status=${status}`);

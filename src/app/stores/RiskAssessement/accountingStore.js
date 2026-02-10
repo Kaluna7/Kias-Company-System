@@ -6,6 +6,8 @@ export const useAccountingStore = create((set, get) => ({
   accounting: [],
   currentFilter: "published",
 
+  setAccounting: (data) => set({ accounting: data }),
+
   loadAccounting: async (status = "published") => {
     try {
       const res = await fetch(`/api/RiskAssessment/accounting?status=${status}`);

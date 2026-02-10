@@ -7,6 +7,8 @@ export const useFinanceStore = create((set , get) => ({
   finance: [],
   currentFilter: "published",
 
+  setFinance: (data) => set({ finance: data }),
+
   loadFinance: async (status = "published") => {
     try {
       const res = await fetch(`/api/RiskAssessment/finance?status=${status}`);

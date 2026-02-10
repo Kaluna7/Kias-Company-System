@@ -6,24 +6,49 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 /* ========== Helpers ========== */
 
 async function ensureWorkerAvailable() {
+  // Use worker that matches the installed pdfjs-dist version (5.4.530)
+  // Priority 1: Use unpkg CDN with exact version 5.4.530
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://unpkg.com/pdfjs-dist@5.4.530/build/pdf.worker.min.mjs";
+    pdfjsLib.GlobalWorkerOptions.disableWorker = false;
+    // Verify worker is accessible
+    const test = await fetch(pdfjsLib.GlobalWorkerOptions.workerSrc, { method: "HEAD" }).catch(() => null);
+    if (test && test.ok) {
+      return true;
+    }
+  } catch (e) {
+    console.warn("Failed to load worker from unpkg:", e);
+  }
+  
+  // Priority 2: Try jsdelivr CDN with version 5.4.530
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.530/build/pdf.worker.min.mjs";
+    pdfjsLib.GlobalWorkerOptions.disableWorker = false;
+    return true;
+  } catch (e) {
+    console.warn("Failed to load worker from jsdelivr:", e);
+  }
+  
+  // Priority 3: Try local worker file (may be outdated)
   try {
     const local = "/pdf.worker.min.js";
     const r = await fetch(local, { method: "HEAD" }).catch(() => null);
     if (r && r.ok) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = local;
       pdfjsLib.GlobalWorkerOptions.disableWorker = false;
+      console.warn("Using local worker file - ensure it matches version 5.4.530");
       return true;
     }
-  } catch (e) {}
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
-    pdfjsLib.GlobalWorkerOptions.disableWorker = false;
-    return true;
   } catch (e) {
-    pdfjsLib.GlobalWorkerOptions.disableWorker = true;
-    return false;
+    console.warn("Failed to load local worker:", e);
   }
+  
+  // Last resort: disable worker
+  console.error("All worker sources failed, disabling worker. PDF parsing may be slower.");
+  pdfjsLib.GlobalWorkerOptions.disableWorker = true;
+  return false;
 }
 
 // Convert ArrayBuffer -> base64 using Blob + FileReader (safe)
@@ -63,6 +88,7 @@ function sanitizeStepText(s) {
 
 export default function SOPSidebar({
   department = "Finance",
+  apiPath = "finance",
   sopStatus = "AVAILABLE",
   preparerStatus,
   reviewerStatus,
@@ -235,7 +261,7 @@ export default function SOPSidebar({
   /* ---------- Call comment preview endpoint (batch) ---------- */
   async function callGenerateCommentsPreview(items) {
     try {
-      const res = await fetch("/api/SopReview/finance/generate-comments-preview", {
+      const res = await fetch(`/api/SopReview/${apiPath}/generate-comments-preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items }),
@@ -258,7 +284,7 @@ export default function SOPSidebar({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") {
-      alert("Hanya file PDF yang diperbolehkan.");
+      alert("Only PDF files are allowed.");
       return;
     }
 
@@ -301,14 +327,14 @@ export default function SOPSidebar({
         const local = localParseProcedureSteps(sourceText);
         if (local && local.length > 0) {
           setParsedPreview(local);
-          setParseError("AI tidak mengembalikan langkah terstruktur — digunakan parser lokal sebagai fallback. Periksa hasil sebelum menyimpan.");
+          setParseError("AI did not return structured steps — using the local parser as a fallback. Please review the results before saving.");
         } else {
-          setParseError("AI tidak mengembalikan langkah dan parser lokal gagal. Toggle raw text preview untuk tuning prompt.");
+          setParseError("AI did not return steps and the local parser failed. Toggle raw text preview to tune the prompt.");
         }
       }
     } catch (err) {
       console.error("Error processing PDF:", err);
-      setParseError("Gagal membaca PDF: " + (err?.message || String(err)));
+      setParseError("Failed to read PDF: " + (err?.message || String(err)));
     } finally {
       setParsing(false);
       setAiInProgress(false);
@@ -319,7 +345,7 @@ export default function SOPSidebar({
   // Open modal and fetch preview comments for current parsedPreview
   const openAppendModal = async () => {
     if (!parsedPreview || parsedPreview.length === 0) {
-      alert("Tidak ada hasil parsing untuk ditambahkan.");
+      alert("No parsed results to append.");
       return;
     }
     setModalError("");
@@ -346,7 +372,7 @@ export default function SOPSidebar({
       // create modal items with empty comments
       const fallback = items.map((it, idx) => ({ no: idx + 1, sop_related: it.sop_related, comment: "" }));
       setModalItems(fallback);
-      setModalError("Gagal generate komentar otomatis — Anda dapat mengisi komentar secara manual sebelum menyimpan.");
+      setModalError("Failed to generate comments automatically — you can type comments manually before saving.");
       setModalLoading(false);
     }
   };
@@ -377,7 +403,7 @@ export default function SOPSidebar({
     onSopParsed?.(prepared);
     setModalOpen(false);
     setModalItems([]);
-    alert(`${prepared.length} item ditambahkan ke daftar (dengan komentar).`);
+    // No alerts — keep UX quiet and consistent
   };
 
   /* ---------- UI ---------- */
@@ -385,129 +411,270 @@ export default function SOPSidebar({
   const getStatusColor = (status) => {
     switch (status) {
       case "APPROVED":
-        return "bg-green-100 text-green-800 border-green-200";
+        return "bg-gradient-to-r from-green-500 to-green-600 text-white border-green-500 shadow-lg";
       case "REJECTED":
-        return "bg-red-100 text-red-800 border-red-200";
+        return "bg-gradient-to-r from-red-500 to-red-600 text-white border-red-500 shadow-lg";
       case "IN REVIEW":
-        return "bg-blue-100 text-blue-800 border-blue-200";
+        return "bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-500 shadow-lg";
+      case "AVAILABLE":
+        return "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-emerald-500 shadow-lg";
       default:
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return "bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-yellow-500 shadow-lg";
     }
   };
 
   return (
-    <aside className="bg-white w-96 p-6 rounded-xl shadow-lg border border-gray-200 space-y-6 text-sm">
-      <div className="space-y-4">
-        <div>
-          <div className="font-semibold text-gray-700 mb-1">DEPARTMENT</div>
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-3 py-2 font-bold rounded-lg shadow-sm">{department}</div>
-        </div>
+    <aside className="bg-gradient-to-br from-white via-slate-50 to-blue-50 w-96 p-6 rounded-2xl shadow-2xl border border-slate-200/50 backdrop-blur-sm space-y-6 text-sm">
+      {/* Header Section */}
+      <div className="text-center pb-4 border-b border-slate-200/60">
+        <h2 className="text-lg font-bold text-slate-800 mb-1">SOP Source & Status</h2>
+        <p className="text-xs text-slate-600">Manage department information, SOP status, documents, and team details</p>
+      </div>
 
-        <div>
-          <div className="font-semibold text-gray-700 mb-1">SOP Status</div>
-          <div className={`px-3 py-2 font-bold rounded-lg border-2 ${getStatusColor(sopStatus)}`}>{sopStatus}</div>
+      <div className="space-y-6">
+        {/* Department & SOP Status Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-4 rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-bold">🏢</span>
+              </div>
+              <span className="text-white/90 text-xs font-medium uppercase tracking-wide">Department</span>
+            </div>
+            <div className="text-white font-bold text-sm">{department}</div>
+          </div>
+
+          <div className={`p-4 rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200 ${getStatusColor(sopStatus)}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 bg-current/20 rounded-full flex items-center justify-center">
+                <span className="text-current text-xs font-bold">
+                  {sopStatus === 'AVAILABLE' ? '✅' : sopStatus === 'IN REVIEW' ? '🔄' : '📋'}
+                </span>
+              </div>
+              <span className="text-current text-xs font-medium uppercase tracking-wide">SOP Status</span>
+            </div>
+            <div className="text-current font-bold text-sm">{sopStatus}</div>
+          </div>
         </div>
       </div>
 
-      <div>
-        <div className="font-semibold text-gray-700 mb-2">SOP DOCUMENT</div>
-        <div className="border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 p-4 rounded-xl flex flex-col items-center justify-center space-y-3">
-          <label htmlFor="pdfUpload" className="cursor-pointer flex flex-col items-center text-center space-y-2 w-full">
-            <div className="text-blue-500 text-5xl">{parsing ? "⏳" : "📄"}</div>
-            <div className="text-sm text-gray-600 mt-1">
-              {selectedFile ? <span className="font-medium text-blue-600">{selectedFile.name}</span> : <div><div className="font-medium">{parsing ? "Uploading & processing..." : "Choose PDF file"}</div><div className="text-xs text-gray-500 mt-1">Max. 20MB</div></div>}
+      {/* SOP Document Section */}
+      <div className="bg-white/70 backdrop-blur-sm p-5 rounded-xl border border-slate-200/60 shadow-lg">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+            <span className="text-white text-sm">📋</span>
+          </div>
+          <span className="font-semibold text-slate-800">SOP Document</span>
+        </div>
+
+        <div className={`border-2 border-dashed rounded-xl p-6 transition-all duration-300 ${
+          selectedFile
+            ? 'border-green-300 bg-green-50/50'
+            : parsing
+              ? 'border-blue-300 bg-blue-50/50'
+              : 'border-slate-300 bg-slate-50/80 hover:border-blue-400 hover:bg-blue-50/30'
+        }`}>
+          <label htmlFor="pdfUpload" className="cursor-pointer flex flex-col items-center text-center space-y-3 w-full">
+            <div className={`text-4xl transition-transform duration-300 ${parsing ? 'animate-spin' : 'hover:scale-110'}`}>
+              {parsing ? "⏳" : selectedFile ? "📄" : "📤"}
+            </div>
+            <div className="text-sm">
+              {selectedFile ? (
+                <div className="space-y-1">
+                  <div className="font-semibold text-green-700">{selectedFile.name}</div>
+                  <div className="text-xs text-slate-500">File selected successfully</div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="font-medium text-slate-700">{parsing ? "Processing document..." : "Choose PDF file"}</div>
+                  <div className="text-xs text-slate-500">Maximum 20MB • PDF format only</div>
+                </div>
+              )}
             </div>
             <input id="pdfUpload" type="file" accept="application/pdf" onChange={handleFileChange} className="hidden" />
           </label>
 
-          {parsing && <div className="text-xs text-gray-500">Processing PDF... please wait</div>}
-          {parseError && <div className="text-xs text-red-600">{parseError}</div>}
+          {parsing && (
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-blue-600">
+              <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+              Processing PDF content...
+            </div>
+          )}
 
-          <div className="flex gap-2 mt-2">
-            <button onClick={() => setShowRaw(s => !s)} className="px-2 py-1 bg-gray-100 rounded text-xs">Toggle raw text preview</button>
-            <button onClick={openAppendModal} disabled={parsing || aiInProgress} className={`px-2 py-1 rounded text-xs ${parsing || aiInProgress ? "bg-gray-200 text-gray-500" : "bg-green-600 text-white"}`}>{aiInProgress ? "AI..." : "Append parsed →"}</button>
-            <button onClick={() => onSaveSidebar?.()} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Save</button>
+          {parseError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+              ⚠️ {parseError}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              onClick={() => setShowRaw(s => !s)}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-medium transition-colors"
+            >
+              {showRaw ? 'Hide' : 'Show'} Raw Text
+            </button>
+            <button
+              onClick={openAppendModal}
+              disabled={parsing || aiInProgress}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                parsing || aiInProgress
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-sm"
+              }`}
+            >
+              {aiInProgress ? "AI Processing..." : "📝 Append Parsed"}
+            </button>
           </div>
 
-          <div className="w-full mt-3">
-            <div className="text-xs font-semibold text-gray-700 mb-1">Parsed preview ({parsedPreview.length})</div>
-            {parsedPreview.length === 0 ? <div className="text-xs text-gray-500">No parsed items yet.</div> :
-              <ol className="list-decimal list-inside max-h-40 overflow-auto text-xs space-y-1">
-                {parsedPreview.map((p, i) => <li key={i} className="text-gray-800">{p.sop_related || p.text}</li>)}
-              </ol>
-            }
-          </div>
+          {parsedPreview.length > 0 && (
+            <div className="mt-4 p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-blue-800">📋 Parsed Preview</span>
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                  {parsedPreview.length} items
+                </span>
+              </div>
+              <div className="max-h-32 overflow-y-auto">
+                <ol className="list-decimal list-inside text-xs space-y-1 text-slate-700">
+                  {parsedPreview.map((p, i) => (
+                    <li key={i} className="leading-relaxed">{p.sop_related || p.text}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          )}
 
           {showRaw && (
-            <div className="w-full mt-3">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Server / full raw text (truncated)</div>
-              <textarea readOnly value={fullTextPreview.slice(0, 300000)} className="w-full h-48 p-2 text-xs border rounded" />
-              <div className="text-xs text-gray-500 mt-1">Jika AI gagal, copy ~600–1200 karakter area &apos;Prosedur&apos; di atas dan kirimkan untuk tuning prompt.</div>
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-slate-700">📄 Raw Text Preview</span>
+              </div>
+              <textarea
+                readOnly
+                value={fullTextPreview.slice(0, 300000)}
+                className="w-full h-32 p-3 text-xs border border-slate-200 rounded-lg bg-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Raw text content will appear here..."
+              />
+              <div className="text-xs text-slate-500 mt-2">
+                💡 If AI parsing fails, copy 600-1200 characters from the procedure section above for prompt tuning.
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Preparer */}
-      <div className="space-y-4">
-        <div className="bg-gradient-to-r from-gray-800 to-black text-white px-3 py-2 font-semibold rounded-lg">Preparer</div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
-          <select className="w-full border border-gray-300 bg-white px-3 py-2 rounded-lg text-sm" value={preparerStatus} onChange={(e) => onPreparerStatusChange?.(e.target.value)}>
-            {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
+      {/* Preparer Section */}
+      <div className="bg-white/70 backdrop-blur-sm p-5 rounded-xl border border-slate-200/60 shadow-lg">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center">
+            <span className="text-white text-sm">👤</span>
+          </div>
+          <span className="font-semibold text-slate-800">Preparer</span>
+          <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+            preparerStatus === 'APPROVED' ? 'bg-green-100 text-green-700' :
+            preparerStatus === 'REJECTED' ? 'bg-red-100 text-red-700' :
+            preparerStatus === 'IN REVIEW' ? 'bg-blue-100 text-blue-700' :
+            'bg-yellow-100 text-yellow-700'
+          }`}>
+            {preparerStatus}
+          </div>
         </div>
-        <div className="text-xs">
-          <div className="text-gray-700">Preparer:</div>
-          <input
-            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
-            placeholder="Nama Preparer"
-            value={preparerName}
-            onChange={(e) => onPreparerNameChange?.(e.target.value)}
-          />
-          <div className="text-gray-700 mt-2">Date:</div>
-          <input
-            type="date"
-            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
-            value={preparerDate}
-            onChange={(e) => onPreparerDateChange?.(e.target.value)}
-          />
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-2">Status</label>
+            <select
+              className="w-full border border-slate-200 bg-white px-3 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              value={preparerStatus}
+              onChange={(e) => onPreparerStatusChange?.(e.target.value)}
+            >
+              {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Preparer Name</label>
+              <input
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                placeholder="Enter preparer name..."
+                value={preparerName}
+                onChange={(e) => onPreparerNameChange?.(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
+              <input
+                type="date"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                value={preparerDate}
+                onChange={(e) => onPreparerDateChange?.(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Reviewer */}
-      <div className="space-y-4">
-        <div className="bg-gradient-to-r from-gray-800 to-black text-white px-3 py-2 font-semibold rounded-lg">Reviewer</div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Comment :</label>
-          <textarea
-            className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm"
-            placeholder="Enter reviewer comment..."
-            value={reviewerComment}
-            onChange={(e) => onReviewerCommentChange?.(e.target.value)}
-          />
+      {/* Reviewer Section */}
+      <div className="bg-white/70 backdrop-blur-sm p-5 rounded-xl border border-slate-200/60 shadow-lg">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center">
+            <span className="text-white text-sm">🔍</span>
+          </div>
+          <span className="font-semibold text-slate-800">Reviewer</span>
+          <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+            reviewerStatus === 'APPROVED' ? 'bg-green-100 text-green-700' :
+            reviewerStatus === 'REJECTED' ? 'bg-red-100 text-red-700' :
+            reviewerStatus === 'IN REVIEW' ? 'bg-blue-100 text-blue-700' :
+            'bg-yellow-100 text-yellow-700'
+          }`}>
+            {reviewerStatus}
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">SOP Review Status</label>
-          <select className="w-full border border-gray-300 bg-white px-3 py-2 rounded-lg text-sm" value={reviewerStatus} onChange={(e) => onReviewerStatusChange?.(e.target.value)}>
-            {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
-        </div>
-        <div className="text-xs">
-          <div className="text-gray-700">Reviewer:</div>
-          <input
-            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
-            placeholder="Nama Reviewer"
-            value={reviewerName}
-            onChange={(e) => onReviewerNameChange?.(e.target.value)}
-          />
-          <div className="text-gray-700 mt-2">Date:</div>
-          <input
-            type="date"
-            className="w-full bg-gray-100 h-9 rounded-lg flex items-center px-3 text-gray-800 border border-gray-200"
-            value={reviewerDate}
-            onChange={(e) => onReviewerDateChange?.(e.target.value)}
-          />
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-2">Comment</label>
+            <textarea
+              className="w-full h-24 border border-slate-200 rounded-lg p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all resize-none"
+              placeholder="Enter reviewer comments..."
+              value={reviewerComment}
+              onChange={(e) => onReviewerCommentChange?.(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-2">SOP Review Status</label>
+            <select
+              className="w-full border border-slate-200 bg-white px-3 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              value={reviewerStatus}
+              onChange={(e) => onReviewerStatusChange?.(e.target.value)}
+            >
+              {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Reviewer Name</label>
+              <input
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                placeholder="Enter reviewer name..."
+                value={reviewerName}
+                onChange={(e) => onReviewerNameChange?.(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
+              <input
+                type="date"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                value={reviewerDate}
+                onChange={(e) => onReviewerDateChange?.(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -527,55 +694,87 @@ export default function SOPSidebar({
                 reviewer_date: reviewerDate || null,
                 reviewer_comment: reviewerComment || null,
               };
-              const res = await fetch("/api/SopReview/finance/meta", {
+              const res = await fetch(`/api/SopReview/${apiPath}/meta`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
               });
               const json = await res.json().catch(() => ({}));
               if (res.ok) {
-                alert("Data sidebar berhasil disimpan ke database.");
+                alert("✅ Data saved successfully.");
                 onSaveSidebar?.(payload);
               } else {
-                alert("Gagal menyimpan: " + (json?.error || "Unknown error"));
+                alert("❌ Failed to save: " + (json?.error || "Unknown error"));
               }
             } catch (err) {
               console.error("Save sidebar error:", err);
-              alert("Gagal menyimpan data sidebar.");
+              alert("❌ Failed to save sidebar data.");
             }
           }}
-          className="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+          className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl"
         >
-          Save
+          💾 Save Changes
         </button>
       </div>
 
       {/* Modal: preview comments */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg w-[min(900px,95vw)] max-h-[85vh] overflow-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <h3 className="text-lg font-semibold">Preview the comment before append the comment</h3>
-              <button className="text-gray-600" onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}>✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-[min(1000px,95vw)] max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white text-lg">📝</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Review Comments Preview</h3>
+                  <p className="text-xs text-slate-600">Review and edit generated comments before appending</p>
+                </div>
+              </div>
+              <button
+                className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
+                onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="p-4">
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
               {modalLoading ? (
-                <div className="text-sm text-gray-600">Generating Comment Review. Please Wait</div>
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex items-center gap-3 text-slate-600">
+                    <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                    <span className="text-sm font-medium">Generating AI comments... Please wait</span>
+                  </div>
+                </div>
               ) : (
                 <>
-                  {modalError && <div className="text-xs text-red-600 mb-2">{modalError}</div>}
-                  <div className="space-y-3">
+                  {modalError && (
+                    <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                      ⚠️ {modalError}
+                    </div>
+                  )}
+                  <div className="space-y-4">
                     {modalItems.map((it, idx) => (
-                      <div key={idx} className="border rounded p-3 bg-gray-50">
-                        <div className="text-xs text-gray-700 font-medium mb-1"> {it.no}</div>
-                        <div className="text-sm text-gray-900 mb-2 whitespace-pre-wrap">{it.sop_related}</div>
-                        <label className="text-xs text-gray-600">Komentar (editable)</label>
+                      <div key={idx} className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">
+                            {it.no}
+                          </span>
+                          <span className="text-sm font-semibold text-slate-700">SOP Item</span>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-lg p-3 mb-3">
+                          <div className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                            {it.sop_related}
+                          </div>
+                        </div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-2">💬 Review Comment (Editable)</label>
                         <textarea
-                          className="w-full p-2 border rounded text-sm mt-1"
-                          rows={2}
+                          className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                          rows={3}
                           value={it.comment || ""}
                           onChange={(e) => setModalItemComment(idx, e.target.value)}
+                          placeholder="Enter or edit the review comment..."
                         />
                       </div>
                     ))}
@@ -584,14 +783,19 @@ export default function SOPSidebar({
               )}
             </div>
 
-            <div className="flex justify-end gap-2 px-4 py-3 border-t">
-              <button className="px-3 py-1 rounded bg-gray-200 text-sm" onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}>Cancel</button>
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
               <button
-                className="px-3 py-1 rounded bg-green-600 text-white text-sm"
+                className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
+                onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={saveAndAppendFromModal}
                 disabled={modalLoading}
               >
-                Save & Append
+                ✅ Save & Append
               </button>
             </div>
           </div>

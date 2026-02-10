@@ -12,7 +12,8 @@ function toIntOrNull(v) {
 // GET: Fetch single audit finding by ID
 export async function GET(req, { params }) {
   try {
-    const id = parseInt(params.id);
+    const p = await Promise.resolve(params);
+    const id = parseInt(p?.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
@@ -38,7 +39,8 @@ export async function GET(req, { params }) {
 // PUT: Update audit finding
 export async function PUT(req, { params }) {
   try {
-    const id = parseInt(params.id);
+    const p = await Promise.resolve(params);
+    const id = parseInt(p?.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
@@ -80,7 +82,8 @@ export async function PUT(req, { params }) {
 // DELETE: Delete audit finding
 export async function DELETE(req, { params }) {
   try {
-    const id = parseInt(params.id);
+    const p = await Promise.resolve(params);
+    const id = parseInt(p?.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }

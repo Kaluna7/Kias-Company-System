@@ -17,9 +17,12 @@ const pool = global._pgPool;
 
 const SELECT_COLUMNS = [
   "id",
+  "module_key",
   "department_id",
   "department_name",
+  "user_id",
   "user_name",
+  "is_configured",
   "start_date",
   "end_date",
   "days",
@@ -27,29 +30,99 @@ const SELECT_COLUMNS = [
   "updated_at",
 ].join(", ");
 
+async function ensureModuleTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.schedule_module_feedback (
+      id SERIAL PRIMARY KEY,
+      module_key VARCHAR(32) NOT NULL,
+      department_id VARCHAR(20) NOT NULL,
+      department_name VARCHAR(255),
+      user_id VARCHAR(64),
+      user_name VARCHAR(255),
+      is_configured BOOLEAN NOT NULL DEFAULT FALSE,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      days INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(module_key, department_id)
+    );
+  `);
+  await client.query(`ALTER TABLE public.schedule_module_feedback ADD COLUMN IF NOT EXISTS is_configured BOOLEAN NOT NULL DEFAULT FALSE;`);
+}
+
+async function migrateLegacyIfNeeded(client) {
+  const regLegacy = await client.query("SELECT to_regclass($1) AS t", ["public.schedule_preparer_feedback"]);
+  if (!regLegacy?.rows?.[0]?.t) return;
+
+  await ensureModuleTable(client);
+  const hasSop = await client.query(`SELECT 1 FROM public.schedule_module_feedback WHERE module_key='sop-review' LIMIT 1`);
+  if ((hasSop?.rowCount ?? 0) > 0) return;
+
+  const legacy = await client.query(
+    `SELECT department_id, department_name, user_id, user_name, incharge_modules, start_date, end_date, days
+     FROM public.schedule_preparer_feedback`
+  );
+  for (const row of legacy.rows || []) {
+    let modules = row.incharge_modules;
+    if (typeof modules === "string") {
+      try { modules = JSON.parse(modules); } catch { modules = ["all"]; }
+    }
+    const list = Array.isArray(modules) ? modules.map((m) => String(m || "").trim()) : ["all"];
+    const allow = list.includes("all") || list.includes("sop-review");
+    if (!allow) continue;
+
+    await client.query(
+      `
+      INSERT INTO public.schedule_module_feedback
+        (module_key, department_id, department_name, user_id, user_name, is_configured, start_date, end_date, days, updated_at)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())
+      ON CONFLICT (module_key, department_id)
+      DO UPDATE SET
+        department_name = EXCLUDED.department_name,
+        user_id = EXCLUDED.user_id,
+        user_name = EXCLUDED.user_name,
+        is_configured = public.schedule_module_feedback.is_configured,
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
+        days = EXCLUDED.days,
+        updated_at = NOW()
+      `,
+      [
+        "sop-review",
+        row.department_id,
+        row.department_name || null,
+        row.user_id || null,
+        row.user_name || null,
+        false,
+        row.start_date,
+        row.end_date,
+        row.days,
+      ]
+    );
+  }
+}
+
 // GET: retrieve schedule data
 export async function GET() {
   try {
     const client = await pool.connect();
     try {
-      // Check if table exists, if not return empty array
-      const checkTable = await client.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' 
-          AND table_name = 'schedule_preparer_feedback'
-        );
-      `);
-      
-      if (!checkTable.rows[0].exists) {
+      await migrateLegacyIfNeeded(client);
+
+      // Check if new module table exists, else return empty
+      const checkTable = await client.query("SELECT to_regclass($1) AS t", ["public.schedule_module_feedback"]);
+      if (!checkTable?.rows?.[0]?.t) {
         return NextResponse.json({ success: true, rows: [] }, { status: 200 });
       }
 
-      const q = `SELECT ${SELECT_COLUMNS} FROM schedule_preparer_feedback ORDER BY department_id, id DESC`;
+      // Back-compat: /api/schedule = SOP Review schedule only
+      const q = `SELECT ${SELECT_COLUMNS} FROM public.schedule_module_feedback WHERE module_key='sop-review' ORDER BY department_id, id DESC`;
       const r = await client.query(q);
-      return NextResponse.json({ success: true, rows: r.rows }, { status: 200 });
+      return NextResponse.json({ success: true, rows: r.rows || [] }, { status: 200 });
     } catch (dbErr) {
-      console.error("DB error SELECT schedule_preparer_feedback:", dbErr);
+      console.error("DB error SELECT schedule_module_feedback:", dbErr);
       return NextResponse.json({ success: false, error: "DB select failed", details: String(dbErr) }, { status: 500 });
     } finally {
       client.release();
@@ -67,6 +140,7 @@ export async function POST(req) {
     const {
       department_id,
       department_name,
+      user_id,
       user_name,
       start_date,
       end_date,
@@ -93,32 +167,20 @@ export async function POST(req) {
 
     const client = await pool.connect();
     try {
-      // Create table if not exists
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS schedule_preparer_feedback (
-          id SERIAL PRIMARY KEY,
-          department_id VARCHAR(20) NOT NULL,
-          department_name VARCHAR(255),
-          user_name VARCHAR(255),
-          start_date DATE NOT NULL,
-          end_date DATE NOT NULL,
-          days INTEGER,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW(),
-          UNIQUE(department_id)
-        );
-      `);
+      await ensureModuleTable(client);
 
-      // Upsert (insert or update)
+      // Upsert SOP Review schedule only (back-compat)
       const q = `
-        INSERT INTO schedule_preparer_feedback 
-          (department_id, department_name, user_name, start_date, end_date, days, updated_at)
+        INSERT INTO public.schedule_module_feedback 
+          (module_key, department_id, department_name, user_id, user_name, is_configured, start_date, end_date, days, updated_at)
         VALUES 
-          ($1, $2, $3, $4, $5, $6, NOW())
-        ON CONFLICT (department_id) 
+          ('sop-review', $1, $2, $3, $4, TRUE, $5, $6, $7, NOW())
+        ON CONFLICT (module_key, department_id) 
         DO UPDATE SET
           department_name = EXCLUDED.department_name,
+          user_id = EXCLUDED.user_id,
           user_name = EXCLUDED.user_name,
+          is_configured = TRUE,
           start_date = EXCLUDED.start_date,
           end_date = EXCLUDED.end_date,
           days = EXCLUDED.days,
@@ -128,6 +190,7 @@ export async function POST(req) {
       const vals = [
         department_id,
         department_name || null,
+        user_id || null,
         user_name || null,
         start_date,
         end_date,
@@ -136,7 +199,7 @@ export async function POST(req) {
       const r = await client.query(q, vals);
       return NextResponse.json({ success: true, inserted: r.rows[0] }, { status: 200 });
     } catch (dbErr) {
-      console.error("DB insert/update schedule_preparer_feedback failed:", dbErr);
+      console.error("DB insert/update schedule_module_feedback failed:", dbErr);
       return NextResponse.json({ success: false, error: "DB insert/update failed", details: String(dbErr) }, { status: 500 });
     } finally {
       client.release();

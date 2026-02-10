@@ -17,7 +17,7 @@ if (!global._pgPool) {
 const pool = global._pgPool;
 
 // AI config (can override via env)
-const API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyCt45GfaaJzw_r33Nc_PGIDn_KcmO4wVIU";
+const API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyByg_otFYurK-Aw0KLtoknlw4x5usJDW10";
 const MODEL = process.env.GOOGLE_AI_MODEL || "gemini-2.5-flash";
 const BASE_URL = process.env.GOOGLE_AI_BASEURL || "https://generativelanguage.googleapis.com/v1beta";
 const // endpoint path can be :generateContent or :generateText depending on model & API

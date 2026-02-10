@@ -4,19 +4,18 @@ import Link from "next/link";
 import Image from "next/image";
 
 export default function AuditReviewHomePage() {
-  // You can re-point these links later when Audit Review sub-modules exist.
   const auditReviewDepts = [
-    { id: "C1.1", label: "FINANCE", href: "/Page/risk-assessment-dashboard/finance/" },
-    { id: "C1.2", label: "ACCOUNTING", href: "/Page/risk-assessment-dashboard/accounting/" },
-    { id: "C1.3", label: "HRD", href: "/Page/risk-assessment-dashboard/hrd/" },
-    { id: "C1.4", label: "G&A", href: "/Page/risk-assessment-dashboard/g&a/" },
-    { id: "C1.5", label: "STORE DESIGN PLANNER", href: "/Page/risk-assessment-dashboard/sdp/" },
-    { id: "C1.6", label: "TAX", href: "/Page/risk-assessment-dashboard/tax/" },
-    { id: "C1.7", label: "SECURITY L&P", href: "/Page/risk-assessment-dashboard/l&p/" },
-    { id: "C1.8", label: "MIS", href: "/Page/risk-assessment-dashboard/mis/" },
-    { id: "C1.9", label: "MERCHANDISE", href: "/Page/risk-assessment-dashboard/merch/" },
-    { id: "C1.10", label: "OPERATIONAL", href: "/Page/risk-assessment-dashboard/ops/" },
-    { id: "C1.11", label: "WAREHOUSE", href: "/Page/risk-assessment-dashboard/whs/" },
+    { id: "C1.1", label: "FINANCE", href: "/Page/audit-review/finance" },
+    { id: "C1.2", label: "ACCOUNTING", href: "/Page/audit-review/accounting" },
+    { id: "C1.3", label: "HRD", href: "/Page/audit-review/hrd" },
+    { id: "C1.4", label: "G&A", href: "/Page/audit-review/g&a" },
+    { id: "C1.5", label: "STORE DESIGN PLANNER", href: "/Page/audit-review/sdp" },
+    { id: "C1.6", label: "TAX", href: "/Page/audit-review/tax" },
+    { id: "C1.7", label: "SECURITY L&P", href: "/Page/audit-review/l&p" },
+    { id: "C1.8", label: "MIS", href: "/Page/audit-review/mis" },
+    { id: "C1.9", label: "MERCHANDISE", href: "/Page/audit-review/merch" },
+    { id: "C1.10", label: "OPERATIONAL", href: "/Page/audit-review/ops" },
+    { id: "C1.11", label: "WAREHOUSE", href: "/Page/audit-review/whs" },
   ];
 
   return (
@@ -27,7 +26,7 @@ export default function AuditReviewHomePage() {
           <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">
             <div className="flex flex-row justify-between items-center">
               <div className="flex items-center justify-center md:justify-start space-x-3">
-                <Image src="/images/kias-logo.png" width={100} height={100} alt="kias logo" />
+                <Image src="/images/kias-logo.webp" width={100} height={100} alt="kias logo" />
               </div>
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-white">C.1 AUDIT REVIEW</h3>

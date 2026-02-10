@@ -1,12 +1,80 @@
 // app/page.js
 import Link from 'next/link';
 import Image from 'next/image';
+import { headers } from 'next/headers';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-export default function Evidence() {
+// Map department name to deptKey for user assignment checking
+function getDeptKeyFromDepartmentName(deptName) {
+  const deptMap = {
+    "FINANCE": "finance",
+    "ACCOUNTING": "accounting",
+    "HRD": "hrd",
+    "G&A": "g&a",
+    "DESIGN STORE PLANNER": "sdp",
+    "TAX": "tax",
+    "SECURITY L&P": "l&p",
+    "MIS": "mis",
+    "MERCHANDISE": "merch",
+    "OPERATIONAL": "ops",
+    "WAREHOUSE": "whs",
+  };
+  return deptMap[deptName] || null;
+}
+
+export default async function Evidence() {
+  // Get user session and assignments
+  const session = await getServerSession(authOptions);
+  const userName = session?.user?.name || "";
+  const isAdmin = (session?.user?.role || "").toLowerCase() === "admin";
+  
+  // Get user assignments for Evidence module
+  let allowedDepartments = [];
+  if (!isAdmin && userName) {
+    try {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      const baseUrl = `${protocol}://${host}`;
+      
+      const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=evidence`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success) {
+          allowedDepartments = data.allowedDepartments || [];
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load user assignments:", err.message);
+    }
+  }
+  
+  // Create Set of allowed department names for quick lookup
+  // Match by department name (case-insensitive) and also by deptKey
+  const allowedDeptNames = new Set(
+    allowedDepartments.map(d => d.name.toUpperCase())
+  );
+  const allowedDeptKeys = new Set(
+    allowedDepartments.map(d => d.key)
+  );
+  
+  const isDepartmentEnabled = (deptName) => {
+    // Admin can access all departments
+    if (isAdmin) return true;
+    // If no assignments, disable all departments
+    if (allowedDepartments.length === 0) return false;
+    // Check if department is in allowed list (by name or by deptKey)
+    const deptKey = getDeptKeyFromDepartmentName(deptName);
+    return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
+  };
+
   const evidences = [
     { id: 'E1.1', department: 'FINANCE' },
     { id: 'E1.2', department: 'ACCOUNTING' },
-    { id: 'E1.3', department: 'HPD' },
+    { id: 'E1.3', department: 'HRD' },
     { id: 'E1.4', department: 'G&A' },
     { id: 'E1.5', department: 'DESIGN STORE PLANNER' },
     { id: 'E1.6', department: 'TAX' },
@@ -27,7 +95,7 @@ export default function Evidence() {
                 <div className="flex items-center justify-center md:justify-start space-x-3">
                   <div>
                     <Image
-                    src="/images/kias-logo.png"
+                    src="/images/kias-logo.webp"
                     width={100}
                     height={100}
                     alt='kias logo'
@@ -107,8 +175,25 @@ export default function Evidence() {
                 'E1.11': 'whs'
               };
               const deptPath = deptMap[evidence.id] || evidence.id.toLowerCase();
+              const isEnabled = isDepartmentEnabled(evidence.department);
+              const isDisabled = !isEnabled;
               
-              return (
+              return isDisabled ? (
+                <div
+                  key={evidence.id}
+                  className="bg-gray-100 rounded-xl shadow-sm p-5 border border-gray-200 opacity-60 cursor-not-allowed"
+                >
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold text-gray-600">{evidence.department}</h3>
+                    <div className="text-gray-400 flex items-center">
+                      <span className="text-sm font-medium">Locked</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <Link 
                 key={evidence.id}
                 href={`/Page/evidence/${deptPath}`}

@@ -1,6 +1,38 @@
 import prisma from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 
+function parseApSequence(apCode = "", base = "") {
+  const code = String(apCode ?? "").trim();
+  if (!code) return 0;
+
+  // pola utama: "<base>.<n>"
+  if (base && code.startsWith(`${base}.`)) {
+    const part = code.slice(base.length + 1);
+    const num = parseInt(part, 10);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  // fallback: ambil angka terakhir pada string
+  const match = code.match(/(\d+)(?!.*\d)/);
+  if (!match) return 0;
+  const num = parseInt(match[1], 10);
+  return Number.isFinite(num) ? num : 0;
+}
+
+async function buildNextApCode(finance_risk_id, baseCode) {
+  const siblings = await prisma.financeAp.findMany({
+    where: { finance_risk_id },
+    select: { ap_code: true },
+  });
+
+  const maxSeq =
+    siblings.reduce(
+      (max, s) => Math.max(max, parseApSequence(s.ap_code, baseCode)),
+      0
+    ) || 0;
+
+  return `${baseCode}.${maxSeq + 1}`;
+}
 
 function toIntSafe(v, fallback = 0) {
   const n = parseInt(String(v ?? ""), 10);
@@ -11,24 +43,28 @@ export async function GET(req) {
   try {
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") ?? "").trim();
+    const status = (url.searchParams.get("status") ?? "").trim();
     const page = Math.max(1, toIntSafe(url.searchParams.get("page"), 1));
     const pageSize = Math.max(1, toIntSafe(url.searchParams.get("pageSize"), 50));
     const skip = (page - 1) * pageSize;
 
-    // Build prisma where for search (including nested aps)
-    const where = q
-      ? {
-          OR: [
-            { risk_id_no: { contains: q, mode: "insensitive" } },
-            { risk_description: { contains: q, mode: "insensitive" } },
-            { risk_details: { contains: q, mode: "insensitive" } },
-            { owners: { contains: q, mode: "insensitive" } },
-            { aps: { some: { ap_code: { contains: q, mode: "insensitive" } } } },
-            { aps: { some: { substantive_test: { contains: q, mode: "insensitive" } } } },
-            { aps: { some: { objective: { contains: q, mode: "insensitive" } } } },
-          ],
-        }
-      : undefined;
+    // Build prisma where for search + status (including nested aps)
+    const where = {
+      ...(status ? { status } : {}),
+      ...(q
+        ? {
+            OR: [
+              { risk_id_no: { contains: q, mode: "insensitive" } },
+              { risk_description: { contains: q, mode: "insensitive" } },
+              { risk_details: { contains: q, mode: "insensitive" } },
+              { owners: { contains: q, mode: "insensitive" } },
+              { aps: { some: { ap_code: { contains: q, mode: "insensitive" } } } },
+              { aps: { some: { substantive_test: { contains: q, mode: "insensitive" } } } },
+              { aps: { some: { objective: { contains: q, mode: "insensitive" } } } },
+            ],
+          }
+        : {}),
+    };
 
     // fetch parents with nested aps (paged on parent)
     const parents = await prisma.finance.findMany({
@@ -110,10 +146,16 @@ export async function POST(req) {
       return NextResponse.json({ error: `Finance parent with risk_id=${finance_risk_id} not found` }, { status: 400 });
     }
 
+    // siapkan AP code otomatis mengikuti risk_id_no
+    const baseCode = (parent.risk_id_no || `FIN-${parent.risk_id}`).trim();
+    const autoApCode = await buildNextApCode(finance_risk_id, baseCode);
+    const requestedApCode = typeof body.ap_code === "string" ? body.ap_code.trim() : "";
+    const ap_code = requestedApCode || autoApCode;
+
     // create AP via Prisma (gunakan relasi)
     const created = await prisma.financeAp.create({
       data: {
-        ap_code: body.ap_code ?? null,
+        ap_code,
         substantive_test: body.substantive_test ?? null,
         objective: body.objective ?? null,
         procedures: body.procedures ?? null,

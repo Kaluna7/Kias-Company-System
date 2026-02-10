@@ -1,49 +1,191 @@
 // app/page.js
-import Link from 'next/link';
-import Image from 'next/image';
+import Link from "next/link";
+import Image from "next/image";
+import { PrismaClient } from "@/generated/prisma";
+import { Suspense } from "react";
+import { headers } from 'next/headers';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-export default function Worksheet() {
-  const worksheets = [
-    { id: 'B1.1', department: 'FINANCE', statusWP: 'Not Checked', status: 'In Progress', date: '00-Jan-00' },
-    { id: 'B1.2', department: 'ACCOUNTING', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.3', department: 'HPD', statusWP: 'Not Checked', status: 'In Progress', date: '00-Jan-00' },
-    { id: 'B1.4', department: 'G&A', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.5', department: 'DESIGN STORE PLANNER', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.6', department: 'TAX', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.7', department: 'SECURITY L&P', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.8', department: 'MIS', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.9', department: 'MERCHANDISE', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' },
-    { id: 'B1.10', department: 'OPERATIONAL', statusWP: 'Not Checked', status: 'In Progress', date: '00-Jan-00' },
-    { id: 'B1.11', department: 'WAREHOUSE', statusWP: 'Not Checked', status: 'Draft', date: '00-Jan-00' }
-  ];
+export const revalidate = 60;
 
+// Reuse a single Prisma instance in dev for better performance
+const prisma = globalThis.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
+
+function WorksheetContentSkeleton() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header dengan Logo */}
-        <header className="mb-8">
-          <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">
-            <div className="flex flex-row md:flex-row justify-between items-center">
-                <div className="flex items-center justify-center md:justify-start space-x-3">
-                  <div>
-                    <Image
-                    src="/images/kias-logo.png"
-                    width={100}
-                    height={100}
-                    alt='kias logo'
-                    />
-                  </div>
-                </div>
-                <div className="text-center">
-                    <h3 className="text-2xl font-bold text-white">B.1 WORKSHEET</h3>
-                    <p className="text-blue-100 mt-1">Management Dashboard</p>
-                </div>
+    <>
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="bg-white rounded-xl shadow p-5">
+            <div className="flex items-center">
+              <div className="bg-slate-100 p-3 rounded-lg mr-4 w-12 h-12 animate-pulse" />
+              <div className="flex-1">
+                <div className="h-4 w-32 bg-slate-100 rounded animate-pulse mb-2" />
+                <div className="h-7 w-12 bg-slate-100 rounded animate-pulse" />
+              </div>
             </div>
           </div>
-        </header>
+        ))}
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      {/* Worksheets Grid */}
+      <div className="mb-8">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Worksheets by Department</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 9 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="bg-white rounded-xl shadow-md p-5 border border-gray-200"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div className="h-5 w-40 bg-slate-100 rounded animate-pulse" />
+                <div className="h-5 w-24 bg-slate-100 rounded-full animate-pulse" />
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="h-5 w-28 bg-slate-100 rounded-full animate-pulse" />
+                <div className="h-4 w-14 bg-slate-100 rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Map department name to deptKey for user assignment checking
+function getDeptKeyFromDepartmentName(deptName) {
+  const deptMap = {
+    "FINANCE": "finance",
+    "ACCOUNTING": "accounting",
+    "HRD": "hrd",
+    "G&A": "g&a",
+    "DESIGN STORE PLANNER": "sdp",
+    "TAX": "tax",
+    "SECURITY L&P": "l&p",
+    "MIS": "mis",
+    "MERCHANDISE": "merch",
+    "OPERATIONAL": "ops",
+    "WAREHOUSE": "whs",
+  };
+  return deptMap[deptName] || null;
+}
+
+async function WorksheetContent() {
+  // Get user session and assignments
+  const session = await getServerSession(authOptions);
+  const userName = session?.user?.name || "";
+  const isAdmin = (session?.user?.role || "").toLowerCase() === "admin";
+  
+  // Get user assignments for Worksheet module
+  let allowedDepartments = [];
+  if (!isAdmin && userName) {
+    try {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      const baseUrl = `${protocol}://${host}`;
+      
+      const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=worksheet`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success) {
+          allowedDepartments = data.allowedDepartments || [];
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load user assignments:", err.message);
+    }
+  }
+  
+  // Create Set of allowed department names for quick lookup
+  // Match by department name (case-insensitive) and also by deptKey
+  const allowedDeptNames = new Set(
+    allowedDepartments.map(d => d.name.toUpperCase())
+  );
+  const allowedDeptKeys = new Set(
+    allowedDepartments.map(d => d.key)
+  );
+
+  const baseWorksheets = [
+    { id: "B1.1", department: "FINANCE" },
+    { id: "B1.2", department: "ACCOUNTING" },
+    { id: "B1.3", department: "HRD" },
+    { id: "B1.4", department: "G&A" },
+    { id: "B1.5", department: "DESIGN STORE PLANNER" },
+    { id: "B1.6", department: "TAX" },
+    { id: "B1.7", department: "SECURITY L&P" },
+    { id: "B1.8", department: "MIS" },
+    { id: "B1.9", department: "MERCHANDISE" },
+    { id: "B1.10", department: "OPERATIONAL" },
+    { id: "B1.11", department: "WAREHOUSE" },
+  ];
+  
+  const isDepartmentEnabled = (deptName) => {
+    // Admin can access all departments
+    if (isAdmin) return true;
+    // If no assignments, disable all departments
+    if (allowedDepartments.length === 0) return false;
+    // Check if department is in allowed list (by name or by deptKey)
+    const deptKey = getDeptKeyFromDepartmentName(deptName);
+    return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
+  };
+
+  // Ambil data terakhir per department dari database (satu query, performa bagus)
+  const departments = baseWorksheets.map((w) => w.department);
+
+  let latestByDept = {};
+  try {
+    const rows = await prisma.worksheet_finance.findMany({
+      where: { department: { in: departments } },
+      orderBy: { created_at: "desc" },
+      distinct: ["department"],
+      select: {
+        department: true,
+        status_wp: true,
+        status_worksheet: true,
+        created_at: true,
+      },
+    });
+
+    for (const row of rows) {
+      if (!row.department) continue;
+      // Simpan hanya baris terbaru per department
+      if (!latestByDept[row.department]) {
+        latestByDept[row.department] = row;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load worksheet summaries:", e);
+  }
+
+  const worksheets = baseWorksheets.map((base) => {
+    const row = latestByDept[base.department];
+
+    const statusWP = row?.status_wp || "Not Checked";
+    const status =
+      row?.status_worksheet ||
+      // Default sama dengan UI awal
+      (base.department === "FINANCE" || base.department === "OPERATIONAL"
+        ? "In Progress"
+        : "Draft");
+
+    return {
+      ...base,
+      statusWP,
+      status,
+    };
+  });
+
+  return (
+    <>
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl shadow p-5">
             <div className="flex items-center">
               <div className="bg-blue-100 p-3 rounded-lg mr-4">
@@ -94,21 +236,51 @@ export default function Worksheet() {
             {worksheets.map((worksheet, index) => {
               // Map worksheet ID to department folder
               const deptMap = {
-                'B1.1': 'finance',
-                'B1.2': 'accounting',
-                'B1.3': 'hrd',
-                'B1.4': 'g&a',
-                'B1.5': 'sdp',
-                'B1.6': 'tax',
-                'B1.7': 'l&p',
-                'B1.8': 'mis',
-                'B1.9': 'merch',
-                'B1.10': 'ops',
-                'B1.11': 'whs'
+                "B1.1": "finance",
+                "B1.2": "accounting",
+                "B1.3": "hrd",
+                "B1.4": "g&a",
+                "B1.5": "sdp",
+                "B1.6": "tax",
+                "B1.7": "l&p",
+                "B1.8": "mis",
+                "B1.9": "merch",
+                "B1.10": "ops",
+                "B1.11": "whs",
               };
               const deptPath = deptMap[worksheet.id] || worksheet.id.toLowerCase();
+              const isEnabled = isDepartmentEnabled(worksheet.department);
+              const isDisabled = !isEnabled;
               
-              return (
+              return isDisabled ? (
+                <div
+                  key={worksheet.id}
+                  className="bg-gray-100 rounded-xl shadow-sm p-5 border border-gray-200 opacity-60 cursor-not-allowed"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="text-lg font-semibold text-gray-600">{worksheet.department}</h3>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      worksheet.status === 'In Progress' 
+                        ? 'bg-gray-200 text-gray-600' 
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {worksheet.status}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                      {worksheet.statusWP}
+                    </span>
+                    <div className="text-gray-400 flex items-center">
+                      <span className="text-sm font-medium">Locked</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <Link 
                 key={worksheet.id}
                 href={`/Page/worksheet/${deptPath}`}
@@ -123,11 +295,6 @@ export default function Worksheet() {
                   }`}>
                     {worksheet.status}
                   </span>
-                </div>
-                
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-sm text-gray-500">Last updated</span>
-                  <span className="text-sm font-medium text-gray-700">{worksheet.date}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
@@ -175,7 +342,41 @@ export default function Worksheet() {
             </Link>
           </div>
         </div>
+    </>
+  );
+}
 
+export default function Worksheet() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header dengan Logo */}
+        <header className="mb-8">
+          <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex flex-row md:flex-row justify-between items-center">
+              <div className="flex items-center justify-center md:justify-start space-x-3">
+                <div>
+                  <Image
+                    src="/images/kias-logo.webp"
+                    width={100}
+                    height={100}
+                    alt="kias logo"
+                    priority
+                    sizes="(max-width: 768px) 64px, 100px"
+                  />
+                </div>
+              </div>
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-white">B.1 WORKSHEET</h3>
+                <p className="text-blue-100 mt-1">Management Dashboard</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <Suspense fallback={<WorksheetContentSkeleton />}>
+          <WorksheetContent />
+        </Suspense>
       </div>
     </div>
   );

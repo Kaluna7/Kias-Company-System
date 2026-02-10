@@ -45,5 +45,6 @@ next-env.d.ts
 # custom ignores
 /src/app/api/Ai
 /src/app/Page/auth
-/src/app/lib
-/prisma
+# Do NOT ignore /src/app/lib or /prisma:
+# - API routes import from `src/app/lib/*`
+# - Prisma schema/migrations must be versioned

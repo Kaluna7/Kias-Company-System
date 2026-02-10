@@ -7,52 +7,52 @@ export const buttonSopReview = [
     {
       logo: "/images/Accounting.png",
       name: "Accounting",
-      href: "/Page/risk-assessment-dashboard/accounting/",
+      href: "/Page/sop-review/accounting/",
     },
     {
       logo: "/images/Hrd.png",
       name: "HRD",
-      href: "/Page/risk-assessment-dashboard/hrd/",
+      href: "/Page/sop-review/hrd/",
     },
     {
       logo: "/images/General.png",
       name: "General Affair",
-      href: "/Page/risk-assessment-dashboard/g&a/",
+      href: "/Page/sop-review/g&a/",
     },
     {
       logo: "/images/Design.png",
       name: "Store D & P",
-      href: "/Page/risk-assessment-dashboard/sdp/",
+      href: "/Page/sop-review/sdp/",
     },
     {
       logo: "/images/Tax.png",
       name: "Tax",
-      href: "/Page/risk-assessment-dashboard/tax/",
+      href: "/Page/sop-review/tax/",
     },
     {
       logo: "/images/L&p.png",
       name: "L & P",
-      href: "/Page/risk-assessment-dashboard/l&p/",
+      href: "/Page/sop-review/l&p/",
     },
     {
       logo: "/images/Mis.png",
       name: "MIS",
-      href: "/Page/risk-assessment-dashboard/mis/",
+      href: "/Page/sop-review/mis/",
     },
     {
       logo: "/images/Merchandise.png",
       name: "Merchandise",
-      href: "/Page/risk-assessment-dashboard/merch/",
+      href: "/Page/sop-review/merch/",
     },
     {
       logo: "/images/Operational.png",
       name: "Operational",
-      href: "/Page/risk-assessment-dashboard/ops/",
+      href: "/Page/sop-review/ops/",
     },
     {
       logo: "/images/Warehouse.png",
       name: "Warehouse",
-      href: "/Page/risk-assessment-dashboard/whs/",
+      href: "/Page/sop-review/whs/",
     },
     {
       logo: "/",
