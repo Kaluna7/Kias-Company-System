@@ -9,13 +9,15 @@ export const useWarehouseStore = create((set, get) => ({
 
   setWarehouse: (data) => set({ warehouse: data }),
 
-  loadWarehouse: async (status = "published") => {
+  loadWarehouse: async (status = "published", page = 1, pageSize = 50) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/whs?status=${status}`);
+      const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      const res = await fetch(`/api/RiskAssessment/whs?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch warehouse");
-      const data = await res.json();
-      set({ warehouse: data, currentFilter: status });
-      return data;
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : json;
+      set({ warehouse: list, meta: json?.meta ?? null, currentFilter: status });
+      return list;
     } catch (err) {
       console.error("loadWarehouse error:", err);
       return [];

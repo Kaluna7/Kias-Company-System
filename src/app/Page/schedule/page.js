@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/app/contexts/ToastContext";
 
 const BASE_DEPT_ROWS = [
   { id: "A1.1", department_id: "A1.1", department: "Sec. Finance", startDate: "06-Jan-25", endDate: "08-Jan-25", days: 3, user: "" },
@@ -35,9 +36,9 @@ const DEFAULT_MAIN_SCHEDULE_DATA = [
 ];
 
 export default function SchedulePage() {
-  // ---- Hooks
   const { data: session, status } = useSession();
   const router = useRouter();
+  const toast = useToast();
 
   const headerRef = useRef(null);
   const tableRef = useRef(null);
@@ -68,9 +69,8 @@ export default function SchedulePage() {
   const [tempMinDate, setTempMinDate] = useState("");
   const [tempMaxDate, setTempMaxDate] = useState("");
   const [rangeMonth, setRangeMonth] = useState(() => new Date());
-  const [openUserPickerKey, setOpenUserPickerKey] = useState(""); // `${moduleKey}:${department_id}`
+  const [userPickerContext, setUserPickerContext] = useState(null); // { moduleKey, department_id } when popup open
   const [inlineSavingKey, setInlineSavingKey] = useState(""); // `${moduleKey}:${department_id}`
-  const userPickerRef = useRef(null);
   const [archive, setArchive] = useState({ archivedModules: new Set(), archivedByModule: new Map() });
   const todayIso = new Date().toISOString().split("T")[0];
   const [mainScheduleRows, setMainScheduleRows] = useState([]);
@@ -176,10 +176,15 @@ export default function SchedulePage() {
 
   const loadUsers = useCallback(async () => {
     try {
-      const res = await fetch("/api/users", { cache: "no-store" });
+      const res = await fetch("/api/users?page=1&pageSize=100", { cache: "no-store" });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success && Array.isArray(json.users)) {
-        setUsers(json.users);
+        // Filter: only include users with role "user", exclude "admin" and "reviewer"
+        const filteredUsers = json.users.filter(user => {
+          const role = (user.role || "").toLowerCase();
+          return role === "user";
+        });
+        setUsers(filteredUsers);
       } else {
         setUsers([]);
       }
@@ -369,17 +374,6 @@ export default function SchedulePage() {
       );
     }
   }, []);
-
-  useEffect(() => {
-    if (!openUserPickerKey) return;
-    const onDown = (e) => {
-      const el = userPickerRef.current;
-      if (!el) return;
-      if (!el.contains(e.target)) setOpenUserPickerKey("");
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [openUserPickerKey]);
 
   // Reset invalid module dates when main schedule dates change
   // Only validate minimum date (start date) - allow future dates without maximum limit
@@ -704,6 +698,16 @@ export default function SchedulePage() {
   };
 
   const buildPickerKey = (moduleKey, row) => `${moduleKey}:${row?.department_id ?? ""}`;
+
+  const getModuleRows = (moduleKey) => {
+    switch (moduleKey) {
+      case "sop-review": return sopReviewData;
+      case "worksheet": return worksheetData;
+      case "audit-finding": return auditFindingData;
+      case "evidence": return evidenceData;
+      default: return [];
+    }
+  };
 
   // Delete/reset module schedule data
   const deleteModuleSchedule = async (moduleKey, departmentId) => {
@@ -1100,7 +1104,7 @@ export default function SchedulePage() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
-        alert("Gagal menghapus main schedule: " + (json?.error || `HTTP ${res.status}`));
+        toast.show("Gagal menghapus main schedule: " + (json?.error || `HTTP ${res.status}`), "error");
         return;
       }
 
@@ -1128,10 +1132,10 @@ export default function SchedulePage() {
       await loadMainSchedule();
       
       setMainEditorOpen(false);
-      alert("Schedule berhasil dihapus!");
+      toast.show("Schedule berhasil dihapus!", "success");
     } catch (e) {
       console.error("Error deleting main schedule:", e);
-      alert("Error menghapus schedule: " + (e?.message || String(e)));
+      toast.show("Error menghapus schedule: " + (e?.message || String(e)), "error");
     }
   };
 
@@ -1146,21 +1150,21 @@ export default function SchedulePage() {
       // Allow saving with empty incharge_modules (not set state)
       // Still validate main dates as they are required
       if (!mainTempStartDate || !mainTempEndDate) {
-        alert("Harap pilih Start dan End date!");
+        toast.show("Harap pilih Start dan End date!", "error");
         return;
       }
       if (new Date(mainTempStartDate) > new Date(mainTempEndDate)) {
-        alert("Start date tidak boleh lebih besar dari End date!");
+        toast.show("Start date tidak boleh lebih besar dari End date!", "error");
         return;
       }
     } else if (isAll) {
       // Validate main dates (used when "All" is selected)
       if (!mainTempStartDate || !mainTempEndDate) {
-        alert("Harap pilih Start dan End date!");
+        toast.show("Harap pilih Start dan End date!", "error");
         return;
       }
       if (new Date(mainTempStartDate) > new Date(mainTempEndDate)) {
-        alert("Start date tidak boleh lebih besar dari End date!");
+        toast.show("Start date tidak boleh lebih besar dari End date!", "error");
         return;
       }
     } else if (hasModules) {
@@ -1175,7 +1179,7 @@ export default function SchedulePage() {
             modDates.startDate !== "" && modDates.endDate !== "") {
           if (new Date(modDates.startDate) > new Date(modDates.endDate)) {
             const moduleLabel = MAIN_MODULES.find((m) => m.key === moduleKey)?.label || moduleKey;
-            alert(`${moduleLabel}: Start date tidak boleh lebih besar dari End date!`);
+            toast.show(`${moduleLabel}: Start date tidak boleh lebih besar dari End date!`, "error");
             return;
           }
         }
@@ -1246,7 +1250,7 @@ export default function SchedulePage() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
-        alert("Gagal menyimpan main schedule: " + (json?.error || `HTTP ${res.status}`));
+        toast.show("Gagal menyimpan main schedule: " + (json?.error || `HTTP ${res.status}`), "error");
         return;
       }
 
@@ -1466,10 +1470,10 @@ export default function SchedulePage() {
       await loadAllModuleSchedules();
       console.log("Module schedules reloaded");
       
-      alert("Main schedule berhasil disimpan!");
+      toast.show("Main schedule berhasil disimpan!", "success");
     } catch (e) {
       console.error("Error saving main schedule:", e);
-      alert("Error menyimpan main schedule: " + (e?.message || String(e)));
+      toast.show("Error menyimpan main schedule: " + (e?.message || String(e)), "error");
     }
   };
 
@@ -1528,20 +1532,20 @@ export default function SchedulePage() {
 
   const handleDatePickerSave = async () => {
     if (!tempStartDate || !tempEndDate) {
-      alert("Harap pilih Start dan End date!");
+      toast.show("Harap pilih Start dan End date!", "error");
       return;
     }
     if (new Date(tempStartDate) > new Date(tempEndDate)) {
-      alert("Start date tidak boleh lebih besar dari End date!");
+      toast.show("Start date tidak boleh lebih besar dari End date!", "error");
       return;
     }
     // Enforce Main Schedule bounds: sub-schedule cannot exceed main schedule dates
     if (tempMinDate && tempStartDate < tempMinDate) {
-      alert(`Start Date must be on/after ${tempMinDate}`);
+      toast.show(`Start Date must be on/after ${tempMinDate}`, "error");
       return;
     }
     if (tempMaxDate && tempEndDate > tempMaxDate) {
-      alert(`End Date must be on/before ${tempMaxDate}`);
+      toast.show(`End Date must be on/before ${tempMaxDate}`, "error");
       return;
     }
 
@@ -1568,65 +1572,66 @@ export default function SchedulePage() {
         });
 
         setDatePickerOpen(false);
-        alert("Data berhasil disimpan!");
+        toast.show("Data berhasil disimpan!", "success");
       } else {
-        alert("Gagal menyimpan data: " + (data.error || "Unknown error"));
+        toast.show("Gagal menyimpan data: " + (data.error || "Unknown error"), "error");
       }
     } catch (err) {
       console.error("Error saving schedule:", err);
-      alert("Error menyimpan data: " + err.message);
+      toast.show("Error menyimpan data: " + err.message, "error");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#E6F0FA] via-white to-blue-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <header className="mb-8" ref={headerRef}>
-          <div className="bg-gradient-to-r from-[#141D38] to-[#2D3A5A] rounded-3xl shadow-2xl p-8 border border-gray-700/50">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                <span className="text-2xl">📅</span>
-              </div>
-              <div>
-                <h1 className="text-4xl font-bold text-white mb-1">Schedule</h1>
-                <p className="text-blue-100 text-lg">Project Timeline & Preparer Feedback</p>
+        <header className="mb-6 sm:mb-8" ref={headerRef}>
+          <div className="bg-gradient-to-r from-[#141D38] via-[#1e2d4a] to-[#2D3A5A] rounded-2xl sm:rounded-3xl shadow-xl border border-slate-700/40 overflow-hidden">
+            <div className="p-5 sm:p-6 md:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 flex-shrink-0">
+                  <span className="text-xl sm:text-2xl" aria-hidden>📅</span>
+                </div>
+                <div>
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">Schedule</h1>
+                  <p className="text-blue-100/90 text-sm sm:text-base mt-0.5">Project timeline & preparer feedback</p>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
         {/* Main Schedule Table */}
-        <div className="mb-8" ref={tableRef}>
-          <div className="bg-gradient-to-r from-[#141D38] to-[#2D3A5A] rounded-3xl shadow-2xl border border-gray-700/50 overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white flex items-center">
-                  <span className="mr-3">📊</span>
+        <div className="mb-6 sm:mb-8" ref={tableRef}>
+          <div className="bg-gradient-to-r from-[#141D38] via-[#1e2d4a] to-[#2D3A5A] rounded-2xl sm:rounded-3xl shadow-xl border border-slate-700/40 overflow-hidden">
+            <div className="p-4 sm:p-6">
+              <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-sm">📊</span>
                   Main Schedule
                 </h2>
                 <button
                   type="button"
                   onClick={() => setMainScheduleCollapsed((prev) => !prev)}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 text-white text-sm font-semibold transition-colors flex items-center gap-2"
-                  title={mainScheduleCollapsed ? "Expand Main Schedule" : "Collapse Main Schedule"}
+                  className="self-start xs:self-center px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 text-white text-sm font-medium transition-colors inline-flex items-center gap-2"
+                  title={mainScheduleCollapsed ? "Expand" : "Collapse"}
                 >
-                  <span className={`transform transition-transform duration-200 ${mainScheduleCollapsed ? "rotate-180" : ""}`}>
-                    ▼
-                  </span>
+                  <span className={`transition-transform duration-200 ${mainScheduleCollapsed ? "rotate-180" : ""}`}>▼</span>
+                  <span className="hidden sm:inline">{mainScheduleCollapsed ? "Expand" : "Collapse"}</span>
                 </button>
               </div>
             </div>
             {!mainScheduleCollapsed && (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-2 sm:mx-0 px-2 sm:px-0">
+                <table className="w-full min-w-[480px]">
                 <thead>
                   <tr className="bg-white/10 border-b border-white/20">
-                    <th className="px-6 py-4 text-left text-sm font-bold text-white/90 uppercase tracking-wider">Department</th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-white/90 uppercase tracking-wider">Incharge</th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-white/90 uppercase tracking-wider">Start Date</th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-white/90 uppercase tracking-wider">End Date</th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-white/90 uppercase tracking-wider">Days</th>
+                    <th className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs sm:text-sm font-bold text-white/90 uppercase tracking-wider">Department</th>
+                    <th className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs sm:text-sm font-bold text-white/90 uppercase tracking-wider">Incharge</th>
+                    <th className="px-3 py-3 sm:px-6 sm:py-4 text-center text-xs sm:text-sm font-bold text-white/90 uppercase tracking-wider">Start Date</th>
+                    <th className="px-3 py-3 sm:px-6 sm:py-4 text-center text-xs sm:text-sm font-bold text-white/90 uppercase tracking-wider">End Date</th>
+                    <th className="px-3 py-3 sm:px-6 sm:py-4 text-center text-xs sm:text-sm font-bold text-white/90 uppercase tracking-wider">Days</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1649,13 +1654,13 @@ export default function SchedulePage() {
                           isQuarterly(row.department) ? "bg-white/5" : ""
                         }`}
                       >
-                        <td className="px-6 py-4 text-white font-medium">{row.department}</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium text-sm sm:text-base">{row.department}</td>
                         <td
-                          className="px-6 py-4 text-white/80 cursor-pointer hover:bg-white/10 rounded transition-colors"
+                          className="px-3 py-3 sm:px-6 sm:py-4 text-white/80 cursor-pointer hover:bg-white/10 rounded transition-colors text-sm sm:text-base"
                           title="Klik untuk mengatur Incharge & tanggal"
                           onClick={(e) => handleMainEditorOpen(row, e)}
                         >
-                          <span className="truncate">
+                          <span className="truncate block max-w-[120px] sm:max-w-none">
                             {isQuarterly(row.department) 
                               ? (row.incharge || "All") 
                               : (isAll 
@@ -1666,21 +1671,21 @@ export default function SchedulePage() {
                           </span>
                         </td>
                         <td
-                          className="px-6 py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors"
+                          className="px-3 py-3 sm:px-6 sm:py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors text-sm"
                           title="Klik untuk mengatur Start & End date"
                           onClick={(e) => handleMainEditorOpen(row, e)}
                         >
                           {mods.length === 0 ? "—" : row.startDate}
                         </td>
                         <td
-                          className="px-6 py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors"
+                          className="px-3 py-3 sm:px-6 sm:py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors text-sm"
                           title="Klik untuk mengatur Start & End date"
                           onClick={(e) => handleMainEditorOpen(row, e)}
                         >
                           {mods.length === 0 ? "—" : row.endDate}
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-500/30 rounded-lg text-white font-semibold text-sm">
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-center">
+                          <span className="inline-flex items-center justify-center min-w-[2rem] px-2 sm:px-3 py-1 bg-blue-500/30 rounded-lg text-white font-semibold text-xs sm:text-sm">
                             {mods.length === 0 ? "—" : row.days}
                           </span>
                         </td>
@@ -1727,35 +1732,27 @@ export default function SchedulePage() {
                           key={`mod:${row.department}:${moduleKey}`}
                           className="border-b border-white/10 bg-white/5"
                         >
-                          <td className="px-6 py-3 text-white/80">
-                            <span className="inline-block mr-2 text-white/40">↳</span>
+                          <td className="px-3 py-2 sm:px-6 sm:py-3 text-white/80 text-xs sm:text-sm">
+                            <span className="inline-block mr-1.5 text-white/40">↳</span>
                             {row.department}
                           </td>
-                          <td className="px-6 py-3 text-white/80 font-semibold">
-                            {label}
-                          </td>
+                          <td className="px-3 py-2 sm:px-6 sm:py-3 text-white/80 font-semibold text-xs sm:text-sm">{label}</td>
                           <td
-                            className={`px-6 py-3 text-center text-white/90 font-medium rounded transition-colors ${clickable ? "cursor-pointer hover:bg-white/10" : "opacity-60"}`}
+                            className={`px-3 py-2 sm:px-6 sm:py-3 text-center text-white/90 font-medium rounded transition-colors text-xs sm:text-sm ${clickable ? "cursor-pointer hover:bg-white/10" : "opacity-60"}`}
                             title="Klik untuk mengatur tanggal module ini di Main Schedule"
-                            onClick={(e) => {
-                              // Buka Main Schedule editor untuk departemen ini,
-                              // supaya user bisa mengubah tanggal module langsung dari row breakdown.
-                              handleMainEditorOpen(row, e);
-                            }}
+                            onClick={(e) => handleMainEditorOpen(row, e)}
                           >
                             {start}
                           </td>
                           <td
-                            className={`px-6 py-3 text-center text-white/90 font-medium rounded transition-colors ${clickable ? "cursor-pointer hover:bg-white/10" : "opacity-60"}`}
+                            className={`px-3 py-2 sm:px-6 sm:py-3 text-center text-white/90 font-medium rounded transition-colors text-xs sm:text-sm ${clickable ? "cursor-pointer hover:bg-white/10" : "opacity-60"}`}
                             title="Klik untuk mengatur tanggal module ini di Main Schedule"
-                            onClick={(e) => {
-                              handleMainEditorOpen(row, e);
-                            }}
+                            onClick={(e) => handleMainEditorOpen(row, e)}
                           >
                             {end}
                           </td>
-                          <td className="px-6 py-3 text-center">
-                            <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-500/20 rounded-lg text-white/90 font-semibold text-sm">
+                          <td className="px-3 py-2 sm:px-6 sm:py-3 text-center">
+                            <span className="inline-flex items-center justify-center min-w-[2rem] px-2 sm:px-3 py-1 bg-blue-500/20 rounded-lg text-white/90 font-semibold text-xs sm:text-sm">
                               {days}
                             </span>
                           </td>
@@ -1773,7 +1770,7 @@ export default function SchedulePage() {
         </div>
 
         {/* Code Procedures */}
-        <div ref={feedbackRef} className="space-y-8">
+        <div ref={feedbackRef} className="space-y-6 sm:space-y-8">
           {[
             { key: "sop-review", title: "A1 SOP Review", rows: sopReviewData },
             { key: "worksheet", title: "B1 Worksheet", rows: worksheetData },
@@ -1794,26 +1791,26 @@ export default function SchedulePage() {
             })
             .filter(Boolean)
             .map((section) => (
-            <div key={section.key} className="bg-gradient-to-r from-[#141D38] to-[#2D3A5A] rounded-3xl shadow-2xl border border-gray-700/50 overflow-hidden">
-              <div className="p-6 border-b border-white/10">
-                <div className="flex items-center justify-between">
+            <div key={section.key} className="bg-gradient-to-r from-[#141D38] via-[#1e2d4a] to-[#2D3A5A] rounded-2xl sm:rounded-3xl shadow-xl border border-slate-700/40 overflow-hidden">
+              <div className="p-4 sm:p-6 border-b border-white/10">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
-                    <h2 className="text-xl font-bold text-white/80 mb-1">Code Procedures</h2>
-                    <h3 className="text-2xl font-bold text-white mb-2">{section.title}</h3>
-                    <h4 className="text-lg font-semibold text-blue-200 text-center">Preparer Feedback Report</h4>
+                    <p className="text-xs sm:text-sm font-medium text-white/60 uppercase tracking-wider">Code Procedures</p>
+                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mt-0.5">{section.title}</h3>
+                    <p className="text-blue-200/90 text-sm mt-1">Preparer feedback report</p>
                   </div>
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-2 sm:mx-0 px-2 sm:px-0">
+                <table className="w-full min-w-[520px]">
                   <thead>
                     <tr className="bg-white/10 border-b border-white/20">
-                      <th className="px-4 py-3 text-left text-sm font-bold text-white/90 uppercase tracking-wider w-24">ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-white/90 uppercase tracking-wider">Sec. Department</th>
-                      <th className="px-6 py-3 text-center text-sm font-bold text-white/90 uppercase tracking-wider">User</th>
-                      <th className="px-6 py-3 text-center text-sm font-bold text-white/90 uppercase tracking-wider">Start Date</th>
-                      <th className="px-6 py-3 text-center text-sm font-bold text-white/90 uppercase tracking-wider">End Date</th>
-                      <th className="px-6 py-3 text-center text-sm font-bold text-white/90 uppercase tracking-wider">Days</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left text-xs font-bold text-white/90 uppercase tracking-wider w-16 sm:w-24">ID</th>
+                      <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-xs font-bold text-white/90 uppercase tracking-wider">Sec. Department</th>
+                      <th className="px-3 py-2 sm:px-6 sm:py-3 text-center text-xs font-bold text-white/90 uppercase tracking-wider">User</th>
+                      <th className="px-3 py-2 sm:px-6 sm:py-3 text-center text-xs font-bold text-white/90 uppercase tracking-wider">Start</th>
+                      <th className="px-3 py-2 sm:px-6 sm:py-3 text-center text-xs font-bold text-white/90 uppercase tracking-wider">End</th>
+                      <th className="px-2 py-2 sm:px-6 sm:py-3 text-center text-xs font-bold text-white/90 uppercase tracking-wider w-14 sm:w-auto">Days</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1822,102 +1819,37 @@ export default function SchedulePage() {
                         key={index}
                         className="border-b border-white/10 transition-colors hover:bg-white/5"
                       >
-                        <td className="px-4 py-4 text-white font-bold">{row.id}</td>
-                        <td className="px-6 py-4 text-white font-medium">{row.department}</td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="relative inline-block">
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-between gap-2 w-56 h-10 bg-white/10 rounded-lg border border-white/20 px-3 hover:bg-white/15 transition-colors"
-                              onClick={() => {
-                                const k = buildPickerKey(section.key, row);
-                                setOpenUserPickerKey((prev) => (prev === k ? "" : k));
-                              }}
-                              title="Pilih user"
-                            >
-                              <span className={`text-xs truncate ${row.user ? "text-white/90" : "text-white/40"}`}>
-                                {row.user || "Select user"}
-                              </span>
-                              <span className="text-white/60 text-xs font-bold">
-                                {inlineSavingKey === buildPickerKey(section.key, row) ? "Saving..." : "▾"}
-                              </span>
-                            </button>
-
-                            {openUserPickerKey === buildPickerKey(section.key, row) && (
-                              <div
-                                ref={userPickerRef}
-                                className="absolute z-20 mt-2 w-[min(360px,90vw)] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
-                              >
-                                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-                                  <div className="text-sm font-bold text-gray-800">Select User</div>
-                                  <div className="text-[11px] text-gray-500">Checkbox (single select)</div>
-                                </div>
-                                <div className="max-h-64 overflow-auto p-2">
-                                  <label className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={!row.user_id}
-                                      onChange={async () => {
-                                        const k = buildPickerKey(section.key, row);
-                                        setInlineSavingKey(k);
-                                        updateModuleRowState(section.key, row.department_id, { user: "", user_id: "" });
-                                        const r = await saveModuleRow(section.key, row, { user_id: null, user_name: null });
-                                        setInlineSavingKey("");
-                                        if (!r.ok) {
-                                          alert("Gagal update user: " + (r.error || "Unknown error"));
-                                        } else {
-                                          setOpenUserPickerKey("");
-                                        }
-                                      }}
-                                    />
-                                    <div className="text-sm font-semibold text-gray-800">Unassign</div>
-                                  </label>
-                                  <div className="my-2 border-t border-gray-100" />
-                                  {users.map((u) => (
-                                    <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={String(row.user_id || "") === String(u.id)}
-                                        onChange={async () => {
-                                          const k = buildPickerKey(section.key, row);
-                                          setInlineSavingKey(k);
-                                          updateModuleRowState(section.key, row.department_id, { user: u.name, user_id: u.id });
-                                          const r = await saveModuleRow(section.key, row, { user_id: u.id, user_name: u.name });
-                                          setInlineSavingKey("");
-                                          if (!r.ok) {
-                                            alert("Gagal update user: " + (r.error || "Unknown error"));
-                                          } else {
-                                            setOpenUserPickerKey("");
-                                          }
-                                        }}
-                                      />
-                                      <div className="min-w-0">
-                                        <div className="text-sm font-semibold text-gray-800 truncate">{u.name}</div>
-                                        <div className="text-[11px] text-gray-500 truncate">{u.email}</div>
-                                      </div>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                        <td className="px-2 py-3 sm:px-4 sm:py-4 text-white font-bold text-xs sm:text-sm">{row.id}</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium text-xs sm:text-sm truncate max-w-[140px] sm:max-w-none">{row.department}</td>
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 text-center">
+                          <button
+                            type="button"
+                            className="inline-flex items-center justify-center gap-1.5 w-full min-w-0 sm:w-44 sm:min-w-[11rem] h-9 sm:h-10 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 px-3 transition-colors text-left"
+                            onClick={() => setUserPickerContext({ moduleKey: section.key, department_id: row.department_id })}
+                            title="Pilih user"
+                          >
+                            <span className={`text-xs truncate flex-1 min-w-0 ${row.user ? "text-white/95" : "text-white/50"}`}>
+                              {row.user || "Select user"}
+                            </span>
+                            <span className="text-white/50 flex-shrink-0 text-[10px] sm:hidden">›</span>
+                          </button>
                         </td>
                         <td
-                          className="px-6 py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors"
+                          className="px-2 py-3 sm:px-6 sm:py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors text-xs sm:text-sm"
                           onClick={(e) => handleDatePickerOpen(section.key, row, e)}
-                          title="Klik untuk mengatur Start dan End date"
+                          title="Set start & end date"
                         >
                           {row.startDate || "—"}
                         </td>
                         <td
-                          className="px-6 py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors"
+                          className="px-2 py-3 sm:px-6 sm:py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors text-xs sm:text-sm"
                           onClick={(e) => handleDatePickerOpen(section.key, row, e)}
-                          title="Klik untuk mengatur Start dan End date"
+                          title="Set start & end date"
                         >
                           {row.endDate || "—"}
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center px-3 py-1 bg-cyan-500/30 rounded-lg text-white font-semibold text-sm">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 text-center">
+                          <span className="inline-flex items-center justify-center min-w-[2rem] px-2 sm:px-3 py-1 bg-cyan-500/30 rounded-lg text-white font-semibold text-xs sm:text-sm">
                             {row.days ?? "—"}
                           </span>
                         </td>
@@ -1931,43 +1863,145 @@ export default function SchedulePage() {
         </div>
       </div>
 
+      {/* User Picker Popup Modal */}
+      {userPickerContext && (() => {
+        const { moduleKey, department_id } = userPickerContext;
+        const rows = getModuleRows(moduleKey);
+        const row = rows.find((r) => r.department_id === department_id);
+        if (!row) return null;
+        const pickerKey = buildPickerKey(moduleKey, row);
+        const saving = inlineSavingKey === pickerKey;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => !saving && setUserPickerContext(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-[min(380px,95vw)] max-h-[85vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50/30 flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-slate-800">Select user</div>
+                  <div className="text-xs text-slate-500 truncate mt-0.5">
+                    {moduleLabel(moduleKey)} — {row.department}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors flex-shrink-0 ml-2"
+                  onClick={() => !saving && setUserPickerContext(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="max-h-72 overflow-auto p-3">
+                <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-100">
+                  <input
+                    type="radio"
+                    name="user-picker"
+                    checked={!row.user_id}
+                    disabled={saving}
+                    className="text-blue-600"
+                    onChange={async () => {
+                      setInlineSavingKey(pickerKey);
+                      updateModuleRowState(moduleKey, row.department_id, { user: "", user_id: "" });
+                      const r = await saveModuleRow(moduleKey, row, { user_id: null, user_name: null });
+                      setInlineSavingKey("");
+                      if (!r.ok) {
+                        toast.show("Gagal update user: " + (r.error || "Unknown error"), "error");
+                      } else {
+                        setUserPickerContext(null);
+                      }
+                    }}
+                  />
+                  <div className="text-sm font-semibold text-slate-800">Unassign</div>
+                </label>
+                <div className="my-2 border-t border-slate-100" />
+                {users.map((u) => (
+                  <label key={u.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-100">
+                    <input
+                      type="radio"
+                      name="user-picker"
+                      checked={String(row.user_id || "") === String(u.id)}
+                      disabled={saving}
+                      className="text-blue-600"
+                      onChange={async () => {
+                        setInlineSavingKey(pickerKey);
+                        updateModuleRowState(moduleKey, row.department_id, { user: u.name, user_id: u.id });
+                        const r = await saveModuleRow(moduleKey, row, { user_id: u.id, user_name: u.name });
+                        setInlineSavingKey("");
+                        if (!r.ok) {
+                          toast.show("Gagal update user: " + (r.error || "Unknown error"), "error");
+                        } else {
+                          setUserPickerContext(null);
+                        }
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-slate-800 truncate">{u.name}</div>
+                      <div className="text-xs text-slate-500 truncate">{u.email}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {saving && (
+                <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/80 text-center text-xs text-slate-500 font-medium">
+                  Saving…
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Date Picker Modal */}
       {datePickerOpen && selectedRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-lg w-[min(820px,95vw)] p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">
-                Set {moduleLabel(selectedModuleKey)} Schedule - {selectedRow.department}
-              </h3>
-              <button className="text-gray-600 hover:text-gray-800" onClick={() => setDatePickerOpen(false)}>✕</button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
-                <RangePicker
-                  startIso={tempStartDate}
-                  endIso={tempEndDate}
-                  minIso={tempMinDate}
-                  maxIso={tempMaxDate}
-                  onChange={({ start, end }) => {
-                    setTempStartDate(start);
-                    setTempEndDate(end);
-                  }}
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-[min(820px,95vw)] max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-slate-800">
+                  Set {moduleLabel(selectedModuleKey)} schedule — {selectedRow.department}
+                </h3>
                 <button
-                  className="px-4 py-2 rounded bg-gray-200 text-sm hover:bg-gray-300"
+                  type="button"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors flex-shrink-0"
                   onClick={() => setDatePickerOpen(false)}
                 >
-                  Cancel
+                  ✕
                 </button>
-                <button
-                  className="px-4 py-2 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
-                  onClick={handleDatePickerSave}
-                >
-                  Save
-                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Date range</label>
+                  <RangePicker
+                    startIso={tempStartDate}
+                    endIso={tempEndDate}
+                    minIso={tempMinDate}
+                    maxIso={tempMaxDate}
+                    onChange={({ start, end }) => {
+                      setTempStartDate(start);
+                      setTempEndDate(end);
+                    }}
+                  />
+                </div>
+                <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-slate-200">
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition-colors"
+                    onClick={() => setDatePickerOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                    onClick={handleDatePickerSave}
+                  >
+                    Save
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1976,16 +2010,22 @@ export default function SchedulePage() {
 
       {/* Main Schedule Editor Modal */}
       {mainEditorOpen && selectedMainRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg w-[min(900px,95vw)] max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Set Main Schedule - {selectedMainRow.department}</h3>
-              <button className="text-gray-600 hover:text-gray-800" onClick={() => setMainEditorOpen(false)}>✕</button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">In Charge</label>
-                <div className="grid grid-cols-2 gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-[min(900px,95vw)] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-slate-800">Set main schedule — {selectedMainRow.department}</h3>
+                <button
+                  type="button"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors flex-shrink-0"
+                  onClick={() => setMainEditorOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">In charge</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
                     { key: "not-set", label: "Not Set" },
                     { key: "all", label: "All" },
@@ -1993,29 +2033,25 @@ export default function SchedulePage() {
                     { key: "worksheet", label: "Worksheet" },
                     { key: "audit-finding", label: "Audit Finding" },
                     { key: "evidence", label: "Evidence" },
-                  ].map((opt) => (
-                    (() => {
+                  ].map((opt) => {
                       const isAllSelected = mainTempInchargeModules.includes("all");
                       const isNotSet = opt.key === "not-set";
                       const isModule = opt.key !== "all" && opt.key !== "not-set";
                       const isNotSetSelected = mainTempInchargeModules.length === 0;
-                      
                       const checked =
                         isNotSet
                           ? isNotSetSelected
                           : opt.key === "all"
                             ? isAllSelected
                             : (isAllSelected || mainTempInchargeModules.includes(opt.key));
-                      
                       const disabled =
                         isNotSet
                           ? false
                           : opt.key === "all"
                             ? false
                             : isAllSelected;
-
                       return (
-                    <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
+                    <label key={opt.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -2023,11 +2059,10 @@ export default function SchedulePage() {
                         onChange={(e) => {
                           // In "All" mode, modules are implicitly selected; toggle All off first to customize.
                           if (isModule && isAllSelected) return;
-                          const checked = e.target.checked;
+                          const checkedVal = e.target.checked;
                           setMainTempInchargeModules((prev) => {
                             if (isNotSet) {
-                              // When "Not Set" is selected, clear everything
-                              if (checked) {
+                              if (checkedVal) {
                                 setMainTempModuleDates({});
                                 return [];
                               } else {
@@ -2036,19 +2071,15 @@ export default function SchedulePage() {
                               }
                             }
                             if (opt.key === "all") {
-                              if (checked) {
-                                // When "All" is selected, clear module dates
+                              if (checkedVal) {
                                 setMainTempModuleDates({});
                                 return ["all"];
-                              } else {
-                                return [];
                               }
+                              return [];
                             }
-                            // If selecting any option other than "Not Set", ensure we're not in "Not Set" mode
                             let next = prev.filter((x) => x !== "all");
-                            if (checked) {
+                            if (checkedVal) {
                               next = Array.from(new Set([...next, opt.key]));
-                              // Initialize date for newly selected module - start with empty dates
                               if (!mainTempModuleDates[opt.key]) {
                                 setMainTempModuleDates((prevDates) => ({
                                   ...prevDates,
@@ -2060,18 +2091,11 @@ export default function SchedulePage() {
                               }
                             } else {
                               next = next.filter((x) => x !== opt.key);
-                              // Remove dates for deselected module
                               setMainTempModuleDates((prevDates) => {
                                 const nextDates = { ...prevDates };
                                 delete nextDates[opt.key];
                                 return nextDates;
                               });
-                            }
-                            // Don't auto-set to "all" - let user explicitly choose
-                            const allKeys = MAIN_MODULES.map((m) => m.key);
-                            if (allKeys.every((k) => next.includes(k))) {
-                              // If all modules selected, user can choose to set "all" manually
-                              // Don't auto-convert to "all"
                             }
                             return next;
                           });
@@ -2080,17 +2104,16 @@ export default function SchedulePage() {
                       <span>{opt.label}</span>
                     </label>
                       );
-                    })()
-                  ))}
+                  })}
                 </div>
                 {mainTempInchargeModules.includes("all") && (
-                  <div className="mt-1 text-[11px] text-gray-500">
-                    Mode <span className="font-bold">All</span> aktif: semua module dianggap dipilih. Untuk memilih module tertentu saja, matikan <span className="font-bold">All</span> dulu.
+                  <div className="mt-1 text-xs text-slate-500">
+                    Mode <span className="font-semibold">All</span> aktif. Matikan All untuk memilih module tertentu.
                   </div>
                 )}
                 {mainTempInchargeModules.length === 0 && (
-                  <div className="mt-1 text-[11px] text-gray-500">
-                    <span className="font-bold">Not Set</span>: Belum ada incharge yang dipilih. Pilih &quot;All&quot; atau module spesifik untuk mengatur schedule.
+                  <div className="mt-1 text-xs text-slate-500">
+                    <span className="font-semibold">Not Set</span>: Pilih All atau module spesifik untuk mengatur schedule.
                   </div>
                 )}
               </div>
@@ -2098,7 +2121,7 @@ export default function SchedulePage() {
               {/* Show main dates only when "All" is selected */}
               {mainTempInchargeModules.includes("all") && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Date range</label>
                   <RangePicker
                     startIso={mainTempStartDate}
                     endIso={mainTempEndDate}
@@ -2119,7 +2142,7 @@ export default function SchedulePage() {
               {/* Show date pickers for each selected module when not "All" */}
               {!mainTempInchargeModules.includes("all") && mainTempInchargeModules.length > 0 && (
                 <div className="space-y-4">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Set Date Range untuk Setiap Module:</div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Date range per module</div>
                   {mainTempInchargeModules
                     .filter((m) => m !== "all")
                     .map((moduleKey) => {
@@ -2180,8 +2203,8 @@ export default function SchedulePage() {
                       // });
 
                       return (
-                        <div key={moduleKey} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                          <div className="text-sm font-bold text-gray-800 mb-3">{moduleLabel}</div>
+                        <div key={moduleKey} className="border border-slate-200 rounded-xl p-4 bg-slate-50/80">
+                          <div className="text-sm font-bold text-slate-800 mb-3">{moduleLabel}</div>
                           <RangePicker
                             startIso={modDates.startDate || ""}
                             endIso={modDates.endDate || ""}
@@ -2209,35 +2232,39 @@ export default function SchedulePage() {
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-4 border-t">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200">
                 <button
-                  className="px-4 py-2 rounded bg-red-600 text-white text-sm hover:bg-red-700 transition-colors"
+                  type="button"
+                  className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
                   onClick={handleMainScheduleDelete}
                   title="Hapus schedule untuk department ini"
                 >
-                  Delete Schedule
+                  Delete schedule
                 </button>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 justify-end">
                   <button
-                    className="px-4 py-2 rounded bg-gray-200 text-sm hover:bg-gray-300 transition-colors"
+                    type="button"
+                    className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition-colors"
                     onClick={() => setMainEditorOpen(false)}
                   >
                     Cancel
                   </button>
                   <button
-                    className="px-4 py-2 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors"
+                    type="button"
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                     onClick={handleMainEditorSave}
                   >
                     Save
                   </button>
                 </div>
               </div>
-            </div>
           </div>
+        </div>
         </div>
       )}
 
     </div>
   );
 }
+
 

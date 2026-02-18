@@ -49,6 +49,9 @@ export function makeStepsHandlers({ stepsTable }) {
 
   const POST = async (req) => {
     try {
+      // Read header first (before consuming body)
+      const replaceMode = req.headers.get("X-Replace-Mode") === "true";
+      
       const text = await req.text();
       let body;
       try {
@@ -57,6 +60,9 @@ export function makeStepsHandlers({ stepsTable }) {
         console.error(`POST ${stepsTable}: JSON parse error. Raw body:`, text);
         return NextResponse.json({ success: false, error: "Invalid JSON", raw: text }, { status: 400 });
       }
+
+      // Also check body parameter for replace mode
+      const finalReplaceMode = replaceMode || body?.replace === true;
 
       let sopsArray = null;
       if (Array.isArray(body)) sopsArray = body;
@@ -86,6 +92,12 @@ export function makeStepsHandlers({ stepsTable }) {
           );
         `);
         await client.query("BEGIN");
+        
+        // If replace mode, delete all existing data first
+        if (finalReplaceMode) {
+          await client.query(`DELETE FROM ${stepsTable}`);
+        }
+        
         const inserted = [];
         for (const item of sopsArray) {
           const q = `INSERT INTO ${stepsTable} (no, sop_related, status, comment, reviewer)

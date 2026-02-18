@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function HRDAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("hrd");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("hrd");
   return (
     <AuditFindingDeptClient
       apiPath="hrd"
@@ -10,6 +10,7 @@ export default async function HRDAuditFindingPage() {
       departmentLabel="HRD"
       description="Document and track HRD audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

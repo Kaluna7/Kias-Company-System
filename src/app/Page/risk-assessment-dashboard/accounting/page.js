@@ -22,8 +22,9 @@ async function loadAccountingData(status = "published") {
       return [];
     }
 
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    const json = await res.json();
+    const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+    return list;
   } catch (err) {
     console.error("Error loading accounting data:", err);
     return [];

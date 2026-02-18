@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function WHSAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("whs");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("whs");
   return (
     <AuditFindingDeptClient
       apiPath="whs"
@@ -10,6 +10,7 @@ export default async function WHSAuditFindingPage() {
       departmentLabel="WAREHOUSE"
       description="Document and track warehouse audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

@@ -162,12 +162,21 @@ export async function PUT(req) {
   }
 }
 
+function toIntSafe(v, fallback) {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
 // GET - Fetch evidence data
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const department = searchParams.get("department");
     const ap_id = searchParams.get("ap_id");
+    const page = Math.max(1, toIntSafe(searchParams.get("page"), 1));
+    const pageSize = Math.max(1, Math.min(100, toIntSafe(searchParams.get("pageSize"), 50)));
+    const skip = (page - 1) * pageSize;
 
     if (!department) {
       return NextResponse.json({ error: "Department is required" }, { status: 400 });
@@ -181,14 +190,20 @@ export async function GET(req) {
       where.ap_id = parseInt(ap_id);
     }
 
-    const evidenceData = await prisma.evidence.findMany({
-      where,
-      orderBy: { created_at: "desc" },
-    });
+    const [evidenceData, total] = await Promise.all([
+      prisma.evidence.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      prisma.evidence.count({ where }),
+    ]);
 
     return NextResponse.json({
       success: true,
       data: evidenceData,
+      meta: { total, page, pageSize },
     });
   } catch (error) {
     console.error("Error fetching evidence data:", error);

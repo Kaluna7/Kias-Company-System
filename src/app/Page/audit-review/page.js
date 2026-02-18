@@ -63,53 +63,68 @@ export default function AuditReviewHomePage() {
                   <br />
                   GUIDELINES
                 </Link>
-
-                <Link
-                  href="/Page/audit-review/template/"
-                  className="rounded-2xl bg-white/90 border border-white shadow-sm hover:shadow-md transition px-4 py-3 text-center font-extrabold text-[#141D38] text-sm"
-                >
-                  REVIEW
-                  <br />
-                  TEMPLATE
-                </Link>
               </div>
             </div>
           </div>
 
           {/* Main content */}
           <div className="flex flex-col gap-6">
-            <div className="rounded-xl bg-white shadow-md border border-gray-200 p-8">
-              <h2 className="text-xl font-bold text-gray-800">Welcome to the Audit Review!</h2>
-              <p className="mt-4 text-sm text-gray-700">
+            <div className="rounded-xl bg-gradient-to-br from-white to-blue-50/50 shadow-lg border border-blue-100 p-8">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Welcome to the Audit Review!</h2>
+                  <p className="text-sm text-gray-600 mt-1">Internal Audit Review Management System</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed">
                 Hi Team,
                 <br />
                 We&apos;re excited to kick off our audit review and wanted to take a moment to share what&apos;s coming
-                up!
+                up! This system helps you manage and review audit findings across all departments.
               </p>
             </div>
 
-            <div className="rounded-xl bg-white shadow-md border border-gray-200 p-6">
-              <div className="text-sm font-bold text-gray-800 mb-4">AUDIT REVIEW MAP</div>
+            <div className="rounded-xl bg-white shadow-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-gray-800">AUDIT REVIEW MAP</div>
+                    <div className="text-xs text-gray-500">Select a department to start review</div>
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {auditReviewDepts.map((dept) => (
                   <Link
                     key={dept.id}
                     href={dept.href}
-                    className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
+                    className="group bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-gray-200 hover:border-indigo-300 hover:translate-y-[-4px]"
                   >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded mb-2 inline-block">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg mb-2 inline-block">
                           {dept.id}
                         </span>
-                        <h3 className="text-lg font-semibold text-gray-800">{dept.label}</h3>
+                        <h3 className="text-lg font-bold text-gray-800 group-hover:text-indigo-600 transition-colors">
+                          {dept.label}
+                        </h3>
                       </div>
-                      <div className="text-blue-600 flex items-center">
-                        <span className="text-sm font-medium">Open</span>
+                      <div className="text-indigo-600 flex items-center group-hover:translate-x-1 transition-transform">
+                        <span className="text-sm font-semibold mr-1">Open</span>
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 ml-1"
+                          className="h-5 w-5"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"

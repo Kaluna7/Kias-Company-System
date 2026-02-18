@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
@@ -8,6 +8,7 @@ import { NewFinanceInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
 import { usePopUp } from "@/app/stores/ComponentsStore/popupStore";
 import { useFinanceStore } from "@/app/stores/RiskAssessement/financeStore";
 import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
+import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
@@ -22,6 +23,8 @@ export default function FinanceClient({ initialData = [] }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState(null);
+  const [paginationLoading, setPaginationLoading] = useState(false);
+  const isLoadingRef = useRef(false);
 
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
@@ -73,7 +76,7 @@ export default function FinanceClient({ initialData = [] }) {
         action: () => {
           const finances = useFinanceStore.getState().finance;
           if (!finances || finances.length === 0) {
-            alert("Tidak ada data untuk diexport");
+            if (typeof window !== "undefined" && window.__showToast) window.__showToast("Tidak ada data untuk diexport", "error"); else alert("Tidak ada data untuk diexport");
             return;
           }
 
@@ -94,19 +97,31 @@ export default function FinanceClient({ initialData = [] }) {
       {
         name: "View Draft",
         action: async () => {
-          setViewDraft(true);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadFinance("draft");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(true);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadFinance("draft");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
       {
         name: "View Published",
         action: async () => {
-          setViewDraft(false);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadFinance("published");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(false);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadFinance("published");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
     ];
@@ -154,16 +169,26 @@ export default function FinanceClient({ initialData = [] }) {
   );
 
   function FinanceTableWrapper() {
+    const meta = useFinanceStore((s) => s.meta);
     const load = useCallback(
-      () => loadFinance(viewDraft ? "draft" : "published"),
-      [loadFinance, viewDraft]
+      async (page) => {
+        if (isLoadingRef.current) return;
+        isLoadingRef.current = true;
+        setPaginationLoading(true);
+        try {
+          await loadFinance(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+        } finally {
+          isLoadingRef.current = false;
+          setPaginationLoading(false);
+        }
+      },
+      [loadFinance, viewDraft, meta?.page, meta?.pageSize]
     );
 
     useEffect(() => {
-      if (!initialData || initialData.length === 0 || viewDraft) {
-        load();
-      }
-    }, [load, viewDraft, initialData]);
+      if (!isLoadingRef.current) load(1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewDraft]);
 
     const finances = useFinanceStore((s) => s.finance);
 
@@ -186,19 +211,23 @@ export default function FinanceClient({ initialData = [] }) {
     }, [finances, sortOption]);
 
     return (
-      <DataTable
-        items={sortedFinances}
-        load={load}
-        convertMode={convertMode}
-        onCloseConvert={() => setConvertMode(false)}
-        viewDraft={viewDraft}
-        editMode={editMode}
-        onEditRow={(item) => {
-          setSelectedItem(item);
-          openPopUp();
-        }}
-        searchQuery={searchQuery}
-      />
+      <>
+        <DataTable
+          apiPath="finance"
+          items={sortedFinances}
+          load={() => load(meta?.page ?? 1)}
+          convertMode={convertMode}
+          onCloseConvert={() => setConvertMode(false)}
+          viewDraft={viewDraft}
+          editMode={editMode}
+          onEditRow={(item) => {
+            setSelectedItem(item);
+            openPopUp();
+          }}
+          searchQuery={searchQuery}
+        />
+        <Pagination meta={meta} onPageChange={(p) => load(p)} loading={paginationLoading} />
+      </>
     );
   }
 

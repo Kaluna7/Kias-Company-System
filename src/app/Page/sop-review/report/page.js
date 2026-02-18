@@ -1,6 +1,6 @@
-import { headers } from 'next/headers';
+import { headers } from "next/headers";
+import ReportClient from "./ReportClient";
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
-import ReportClient from "./_components/ReportClient";
 
 const DEPT_TO_API = {
   Finnance: { api: "finance", dept: "FINANCE" },
@@ -17,13 +17,68 @@ const DEPT_TO_API = {
   Warehouse: { api: "whs", dept: "WAREHOUSE" },
 };
 
-// Server-side function to load report data
+const DEPT_TO_SCHEDULE_ID = {
+  FINANCE: "A1.1",
+  ACCOUNTING: "A1.2",
+  HRD: "A1.3",
+  "G&A": "A1.4",
+  SDP: "A1.5",
+  TAX: "A1.6",
+  "L&P": "A1.7",
+  MIS: "A1.8",
+  MERCHANDISE: "A1.9",
+  OPERATIONAL: "A1.10",
+  WAREHOUSE: "A1.11",
+};
+
+async function loadScheduleModuleData() {
+  try {
+    const headersList = await headers();
+    const host = headersList.get("host") || "localhost:3000";
+    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+    const baseUrl = `${protocol}://${host}`;
+    const res = await fetch(`${baseUrl}/api/schedule/module?module=sop-review`, { cache: "no-store" });
+    const data = await res.json();
+    if (data.success && Array.isArray(data.rows)) {
+      const scheduleMap = {};
+      data.rows.forEach((row) => {
+        if (row.department_id && row.is_configured) {
+          let formattedStartDate = row.start_date;
+          let formattedEndDate = row.end_date;
+          if (row.start_date) {
+            const dateStr = String(row.start_date);
+            formattedStartDate = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
+            if (!formattedStartDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              const dateObj = new Date(row.start_date);
+              if (!isNaN(dateObj.getTime())) formattedStartDate = `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`;
+            }
+          }
+          if (row.end_date) {
+            const dateStr = String(row.end_date);
+            formattedEndDate = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
+            if (!formattedEndDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              const dateObj = new Date(row.end_date);
+              if (!isNaN(dateObj.getTime())) formattedEndDate = `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`;
+            }
+          }
+          scheduleMap[row.department_id] = { start_date: formattedStartDate, end_date: formattedEndDate, user_name: row.user_name || "" };
+        }
+      });
+      return scheduleMap;
+    }
+    return {};
+  } catch (err) {
+    console.error("Error loading schedule module data:", err);
+    return {};
+  }
+}
+
 async function loadReportData() {
   const headersList = await headers();
-  const host = headersList.get('host') || 'localhost:3000';
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  const host = headersList.get("host") || "localhost:3000";
+  const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
   const baseUrl = `${protocol}://${host}`;
-
+  const scheduleMap = await loadScheduleModuleData();
   const depts = buttonSopReview.filter((b) => b.name !== "Report");
   const results = await Promise.allSettled(
     depts.map(async (b) => {
@@ -31,20 +86,33 @@ async function loadReportData() {
       if (!map) return null;
       const apiPath = map.api;
       try {
-        const [publishedRes, periodRes] = await Promise.all([
-          fetch(`${baseUrl}/api/SopReview/${apiPath}/published`, { cache: "no-store" }),
-          fetch(`${baseUrl}/api/SopReview/${apiPath}/audit-period`, { cache: "default", next: { revalidate: 60 } }),
-        ]);
-        const [publishedJson, periodJson] = await Promise.all([
-          publishedRes.json().catch(() => ({})),
-          periodRes.json().catch(() => ({})),
-        ]);
-
-        const meta = publishedRes.ok ? (publishedJson.meta || null) : null;
+        const publishedRes = await fetch(`${baseUrl}/api/SopReview/${apiPath}/published`, { cache: "no-store" });
+        const publishedJson = await publishedRes.json().catch(() => ({}));
+        const meta = publishedRes.ok ? publishedJson.meta || null : null;
         const steps = publishedRes.ok && Array.isArray(publishedJson.rows) ? publishedJson.rows : [];
-        const period =
-          periodRes.ok && Array.isArray(periodJson.rows) && periodJson.rows.length > 0 ? periodJson.rows[0] : null;
-
+        const scheduleDeptId = DEPT_TO_SCHEDULE_ID[map.dept];
+        const scheduleData = scheduleDeptId ? scheduleMap[scheduleDeptId] : null;
+        let audit_period_start = "#####";
+        let audit_period_end = "#####";
+        if (scheduleData?.start_date) {
+          const dateStr = String(scheduleData.start_date);
+          audit_period_start = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
+          if (!audit_period_start.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const dateObj = new Date(scheduleData.start_date);
+            if (!isNaN(dateObj.getTime())) audit_period_start = `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`;
+            else audit_period_start = "#####";
+          }
+        }
+        if (scheduleData?.end_date) {
+          const dateStr = String(scheduleData.end_date);
+          audit_period_end = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
+          if (!audit_period_end.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const dateObj = new Date(scheduleData.end_date);
+            if (!isNaN(dateObj.getTime())) audit_period_end = `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`;
+            else audit_period_end = "#####";
+          }
+        }
+        const preparer = scheduleData?.user_name || "";
         return {
           apiPath,
           department: map.dept,
@@ -56,29 +124,31 @@ async function loadReportData() {
             comment: r.comment || "",
             reviewer: r.reviewer || "",
           })),
-          audit_period_start: period?.audit_period_start || "#####",
-          audit_period_end: period?.audit_period_end || "#####",
+          audit_period_start,
+          audit_period_end,
+          preparer,
+          published_at: meta?.published_at || null,
+          audit_fieldwork_start_date: meta?.audit_fieldwork_start_date || null,
+          audit_fieldwork_end_date: meta?.audit_fieldwork_end_date || null,
         };
       } catch (e) {
         console.warn(`Failed to load data for ${b.name}:`, e.message);
-        return { apiPath, department: map.dept, meta: null, steps: [], audit_period_start: "#####", audit_period_end: "#####" };
+        return { apiPath, department: map.dept, meta: null, steps: [], audit_period_start: "#####", audit_period_end: "#####", preparer: "" };
       }
     })
   );
-
   return results
-    .filter((r) => r.status === 'fulfilled' && r.value !== null)
-    .map((r) => r.value);
+    .filter((r) => r.status === "fulfilled" && r.value !== null)
+    .map((r) => r.value)
+    .filter((row) => (row.meta?.published_at || row.published_at) != null);
 }
 
-// Server-side function to load schedule data
 async function loadScheduleData() {
   try {
     const headersList = await headers();
-    const host = headersList.get('host') || 'localhost:3000';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const host = headersList.get("host") || "localhost:3000";
+    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
     const baseUrl = `${protocol}://${host}`;
-
     const res = await fetch(`${baseUrl}/api/schedule`, { cache: "default", next: { revalidate: 60 } });
     const data = await res.json();
     if (data.success && data.rows) return data.rows;
@@ -90,26 +160,6 @@ async function loadScheduleData() {
 }
 
 export default async function ReportSOP() {
-  // Load data on server side
-  const [rows, scheduleData] = await Promise.all([
-    loadReportData(),
-    loadScheduleData(),
-  ]);
-
-  return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      <div className="p-6">
-        {/* Header Section */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-800 mb-1">SOP Review Report</h1>
-          <p className="text-sm text-slate-600">Comprehensive overview of all department SOP reviews and audit periods</p>
-        </div>
-
-        {/* Client Component for Interactive Parts */}
-        <ReportClient initialRows={rows} initialScheduleData={scheduleData} />
-      </div>
-    </div>
-  );
+  const [rows, scheduleData] = await Promise.all([loadReportData(), loadScheduleData()]);
+  return <ReportClient initialRows={rows} initialScheduleData={scheduleData} />;
 }
-
-

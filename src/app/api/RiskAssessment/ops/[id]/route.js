@@ -20,3 +20,27 @@ export async function PUT(req, { params }) {
     return new Response(JSON.stringify({ error: err.message ?? "Server error" }), { status: 500 });
   }
 }
+
+export async function DELETE(req, { params }) {
+  try {
+    const id = parseInt(params.id, 10);
+    if (!id || Number.isNaN(id)) {
+      return new Response(JSON.stringify({ error: "Invalid id" }), { status: 400 });
+    }
+
+    // Delete related APs first (cascade)
+    await prisma.operationalAp.deleteMany({
+      where: { operational_risk_id: id },
+    });
+
+    // Delete the parent record
+    await prisma.operational.delete({
+      where: { risk_id: id },
+    });
+
+    return new Response(JSON.stringify({ message: "Operational record deleted successfully" }), { status: 200 });
+  } catch (err) {
+    console.error("DELETE /api/RiskAssessment/ops/[id] error:", err);
+    return new Response(JSON.stringify({ error: err.message ?? "Server error" }), { status: 500 });
+  }
+}

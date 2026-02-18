@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function SDPAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("sdp");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("sdp");
   return (
     <AuditFindingDeptClient
       apiPath="sdp"
@@ -10,6 +10,7 @@ export default async function SDPAuditFindingPage() {
       departmentLabel="STORE DESIGN PLANNER"
       description="Document and track store design planner audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

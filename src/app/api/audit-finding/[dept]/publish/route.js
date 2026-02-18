@@ -135,7 +135,8 @@ export async function PUT(req, { params }) {
       }, { status: 200 });
     }
 
-    // Update only completed findings to mark them as published
+    // Update completed findings to mark them as published (update updated_at)
+    // Don't delete them - they need to remain in the table for the report page
     const updated = await delegate.updateMany({
       where: {
         completion_status: {

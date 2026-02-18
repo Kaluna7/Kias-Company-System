@@ -114,30 +114,33 @@ const SCHEDULE_ID_BY_DEPT_KEY = Object.fromEntries(
   Object.entries(DEPT_KEY_BY_SCHEDULE_ID).map(([scheduleId, deptKey]) => [deptKey, scheduleId])
 );
 
-async function tableHasAnyRows(tableName) {
-  // returns true if table exists and has at least 1 row
+async function getSopReviewDoneSet() {
+  // "Finish" = already published into report tables; use one connection and parallel checks
   const client = await pool.connect();
   try {
-    const reg = await client.query("SELECT to_regclass($1) AS t", [`public.${tableName}`]);
-    if (!reg?.rows?.[0]?.t) return false;
-    const r = await client.query(`SELECT 1 FROM ${tableName} LIMIT 1`);
-    return (r?.rowCount ?? 0) > 0;
+    const promises = [];
+    const deptByIndex = [];
+    for (const d of DEPARTMENTS) {
+      const stepsTable = `sops_report_${d.sopSlug}`;
+      const metaTable = `sop_report_${d.sopSlug}`;
+      deptByIndex.push(d.key);
+      promises.push(
+        client.query(`SELECT 1 FROM public.${metaTable} LIMIT 1`).then((r) => (r?.rowCount ?? 0) > 0).catch(() => false)
+      );
+      promises.push(
+        client.query(`SELECT 1 FROM public.${stepsTable} LIMIT 1`).then((r) => (r?.rowCount ?? 0) > 0).catch(() => false)
+      );
+    }
+    const results = await Promise.all(promises);
+    const done = new Set();
+    for (let i = 0; i < DEPARTMENTS.length; i++) {
+      const has = results[i * 2] || results[i * 2 + 1];
+      if (has) done.add(deptByIndex[i]);
+    }
+    return done;
   } finally {
     client.release();
   }
-}
-
-async function getSopReviewDoneSet() {
-  // "Finish" = already published into report tables (dept draft tables are cleared after publish)
-  const done = new Set();
-  for (const d of DEPARTMENTS) {
-    const stepsTable = `sops_report_${d.sopSlug}`;
-    const metaTable = `sop_report_${d.sopSlug}`;
-    // eslint-disable-next-line no-await-in-loop
-    const has = (await tableHasAnyRows(metaTable)) || (await tableHasAnyRows(stepsTable));
-    if (has) done.add(d.key);
-  }
-  return done;
 }
 
 async function getWorksheetDoneSet() {
@@ -173,14 +176,17 @@ const auditFindingModelByDept = {
 };
 
 async function getAuditFindingDoneSet() {
+  const counts = await Promise.all(
+    DEPARTMENTS.map((d) => {
+      const model = auditFindingModelByDept[d.auditFindingDept];
+      const delegate = model ? prisma[model] : null;
+      if (!delegate) return Promise.resolve({ key: d.key, count: 0 });
+      return delegate.count().then((count) => ({ key: d.key, count }));
+    })
+  );
   const done = new Set();
-  for (const d of DEPARTMENTS) {
-    const model = auditFindingModelByDept[d.auditFindingDept];
-    const delegate = model ? prisma[model] : null;
-    if (!delegate) continue;
-    // eslint-disable-next-line no-await-in-loop
-    const count = await delegate.count();
-    if (count > 0) done.add(d.key);
+  for (const { key, count } of counts) {
+    if (count > 0) done.add(key);
   }
   return done;
 }
@@ -212,46 +218,26 @@ async function loadConfiguredModules() {
        WHERE table_schema='public' AND table_name='schedule_module_feedback'
      ) AS exists`
   );
-  if (!check?.rows?.[0]?.exists) {
-    console.log("loadConfiguredModules: schedule_module_feedback table does not exist");
-    return configuredByModule;
-  }
+  if (!check?.rows?.[0]?.exists) return configuredByModule;
 
   // Get all modules that are configured (is_configured = true)
   const r = await schedulePool.query(
-    `SELECT module_key, department_id, is_configured, start_date, end_date, user_name
+    `SELECT module_key, department_id
      FROM public.schedule_module_feedback
      WHERE is_configured = true
      ORDER BY module_key, department_id`
   );
 
-  console.log(`loadConfiguredModules: Found ${r.rows?.length || 0} configured modules:`, 
-    r.rows?.map(row => ({ 
-      module_key: row.module_key, 
-      department_id: row.department_id, 
-      is_configured: row.is_configured,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      user_name: row.user_name,
-    })));
-
   for (const row of r.rows || []) {
     const deptId = String(row.department_id || "").trim();
     const deptKey = DEPT_KEY_BY_SCHEDULE_ID[deptId];
-    if (!deptKey) {
-      console.log(`loadConfiguredModules: No deptKey found for department_id: ${deptId} (available keys: ${Object.keys(DEPT_KEY_BY_SCHEDULE_ID).join(", ")})`);
-      continue;
-    }
+    if (!deptKey) continue;
 
     const moduleKey = String(row.module_key || "").trim();
     if (!moduleKey) continue;
     if (!configuredByModule.has(moduleKey)) configuredByModule.set(moduleKey, new Set());
     configuredByModule.get(moduleKey).add(deptKey);
-    console.log(`loadConfiguredModules: Added ${moduleKey} -> ${deptKey} (department_id: ${deptId})`);
   }
-
-  console.log("loadConfiguredModules: Result:", 
-    Array.from(configuredByModule.entries()).map(([key, depts]) => ({ module: key, departments: Array.from(depts) })));
 
   return configuredByModule;
 }
@@ -366,32 +352,17 @@ function formatModuleFiltered({ key, label, doneSet, allowedDeptKeys, archive })
 }
 
 function buildAllowedForModule({ moduleKey, allowedDeptKeys, allowedByModule, configuredByModule }) {
-  // If configuredByModule is provided, only show departments that are configured for this module
   const configuredDepts = configuredByModule?.get(moduleKey) || new Set();
-  
-  console.log(`buildAllowedForModule(${moduleKey}): configuredDepts:`, Array.from(configuredDepts));
-  
-  // If no configured departments for this module, return empty set (no progress)
-  if (configuredDepts.size === 0) {
-    console.log(`buildAllowedForModule(${moduleKey}): No configured departments, returning empty set`);
-    return new Set();
-  }
-  
-  // If user has specific assignments, filter by those AND configured departments
+  if (configuredDepts.size === 0) return new Set();
+
   if (allowedDeptKeys && allowedByModule) {
     const out = new Set();
     const sMod = allowedByModule.get(moduleKey) || new Set();
     for (const k of allowedDeptKeys) {
-      if (sMod.has(k) && configuredDepts.has(k)) {
-        out.add(k);
-      }
+      if (sMod.has(k) && configuredDepts.has(k)) out.add(k);
     }
-    console.log(`buildAllowedForModule(${moduleKey}): User filtered, returning:`, Array.from(out));
     return out;
   }
-  
-  // If no user filter, return all configured departments for this module
-  console.log(`buildAllowedForModule(${moduleKey}): No user filter, returning all configured:`, Array.from(configuredDepts));
   return configuredDepts;
 }
 
@@ -399,18 +370,11 @@ export async function GET(req) {
   try {
     const url = new URL(req.url);
     const userName = (url.searchParams.get("userName") || "").trim();
-    console.log(`GET /api/dashboard/progress: userName=${userName || "(none)"}`);
-    
-    const assignments = await loadAssignmentsByUser(userName || null);
-    const archive = await loadArchive();
-    const configuredByModule = await loadConfiguredModules();
 
-    console.log("GET /api/dashboard/progress: assignments:", {
-      allowedDeptKeys: assignments.allowedDeptKeys ? Array.from(assignments.allowedDeptKeys) : null,
-      allowedByModule: assignments.allowedByModule ? Array.from(assignments.allowedByModule.entries()).map(([k, v]) => [k, Array.from(v)]) : null,
-    });
-
-    const [sopDone, worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
+    const [assignments, archive, configuredByModule, sopDone, worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
+      loadAssignmentsByUser(userName || null),
+      loadArchive(),
+      loadConfiguredModules(),
       getSopReviewDoneSet(),
       getWorksheetDoneSet(),
       getAuditFindingDoneSet(),
@@ -422,21 +386,12 @@ export async function GET(req) {
     const afAllowed = buildAllowedForModule({ moduleKey: "audit-finding", ...assignments, configuredByModule });
     const evAllowed = buildAllowedForModule({ moduleKey: "evidence", ...assignments, configuredByModule });
 
-    console.log("GET /api/dashboard/progress: Allowed departments:", {
-      "sop-review": Array.from(sopAllowed),
-      "worksheet": Array.from(wsAllowed),
-      "audit-finding": Array.from(afAllowed),
-      "evidence": Array.from(evAllowed),
-    });
-
     const modules = [
       formatModuleFiltered({ key: "sop-review", label: "SOP Review", doneSet: sopDone, allowedDeptKeys: sopAllowed, archive }),
       formatModuleFiltered({ key: "worksheet", label: "Worksheet", doneSet: worksheetDone, allowedDeptKeys: wsAllowed, archive }),
       formatModuleFiltered({ key: "audit-finding", label: "Audit Finding", doneSet: auditFindingDone, allowedDeptKeys: afAllowed, archive }),
       formatModuleFiltered({ key: "evidence", label: "Evidence", doneSet: evidenceDone, allowedDeptKeys: evAllowed, archive }),
     ].filter((m) => (m.total ?? 0) > 0);
-
-    console.log("GET /api/dashboard/progress: Final modules:", modules.map(m => ({ key: m.key, total: m.total, departments: m.departments.length })));
 
     return NextResponse.json({ success: true, modules }, { status: 200 });
   } catch (err) {

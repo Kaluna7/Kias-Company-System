@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function MerchAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("merch");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("merch");
   return (
     <AuditFindingDeptClient
       apiPath="merch"
@@ -10,6 +10,7 @@ export default async function MerchAuditFindingPage() {
       departmentLabel="MERCHANDISE"
       description="Document and track merchandise audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

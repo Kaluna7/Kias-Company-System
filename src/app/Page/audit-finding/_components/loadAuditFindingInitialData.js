@@ -7,21 +7,23 @@ export async function loadAuditFindingInitialData(apiPath) {
     const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
     const baseUrl = `${protocol}://${host}`;
 
-    const res = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(apiPath)}`, {
+    const res = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(apiPath)}?page=1&pageSize=50`, {
       next: { revalidate: 30 },
       cache: "force-cache",
     });
 
     if (!res.ok) {
       console.error(`Failed to fetch ${apiPath} audit-finding data:`, res.status);
-      return [];
+      return { data: [], meta: null };
     }
 
-    const data = await res.json().catch(() => ({}));
-    return Array.isArray(data.data) ? data.data : [];
+    const json = await res.json().catch(() => ({}));
+    const data = Array.isArray(json.data) ? json.data : [];
+    const meta = json.meta || null;
+    return { data, meta };
   } catch (err) {
     console.error(`Error loading ${apiPath} audit-finding data:`, err);
-    return [];
+    return { data: [], meta: null };
   }
 }
 

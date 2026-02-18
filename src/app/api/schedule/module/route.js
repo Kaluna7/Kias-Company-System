@@ -133,8 +133,8 @@ const SELECT_COLUMNS = [
   "user_id",
   "user_name",
   "is_configured",
-  "start_date",
-  "end_date",
+  "TO_CHAR(start_date, 'YYYY-MM-DD') as start_date",
+  "TO_CHAR(end_date, 'YYYY-MM-DD') as end_date",
   "days",
   "created_at",
   "updated_at",
@@ -246,9 +246,26 @@ export async function GET(req) {
         [moduleKey]
       );
       
-      console.log(`GET /api/schedule/module?module=${moduleKey}: Returning ${r.rows?.length || 0} rows`);
-      if (r.rows?.length > 0) {
-        console.log(`GET /api/schedule/module: Rows:`, r.rows.map(row => ({
+      // Dates are already formatted as YYYY-MM-DD strings from PostgreSQL TO_CHAR
+      // No need for additional formatting - use them directly
+      const formattedRows = (r.rows || []).map(row => {
+        const formatted = { ...row };
+        // start_date and end_date are already strings in YYYY-MM-DD format from TO_CHAR
+        // Just ensure they're trimmed and valid
+        if (row.start_date) {
+          const dateStr = String(row.start_date).trim();
+          formatted.start_date = dateStr.match(/^\d{4}-\d{2}-\d{2}$/) ? dateStr : "";
+        }
+        if (row.end_date) {
+          const dateStr = String(row.end_date).trim();
+          formatted.end_date = dateStr.match(/^\d{4}-\d{2}-\d{2}$/) ? dateStr : "";
+        }
+        return formatted;
+      });
+      
+      console.log(`GET /api/schedule/module?module=${moduleKey}: Returning ${formattedRows.length} rows`);
+      if (formattedRows.length > 0) {
+        console.log(`GET /api/schedule/module: Rows:`, formattedRows.map(row => ({
           department_id: row.department_id,
           is_configured: row.is_configured,
           start_date: row.start_date,
@@ -256,7 +273,7 @@ export async function GET(req) {
         })));
       }
       
-      return NextResponse.json({ success: true, rows: r.rows || [] }, { status: 200 });
+      return NextResponse.json({ success: true, rows: formattedRows }, { status: 200 });
     } finally {
       client.release();
     }

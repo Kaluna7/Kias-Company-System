@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function GAAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("g&a");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("g&a");
   return (
     <AuditFindingDeptClient
       apiPath="g&a"
@@ -10,6 +10,7 @@ export default async function GAAuditFindingPage() {
       departmentLabel="G&A"
       description="Document and track G&A audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 export default function FinanceWorksheet() {
+  const { data: session } = useSession();
+  const role = (session?.user?.role || "").toLowerCase();
+  const isReviewer = role === "reviewer";
+  const isAdmin = role === "admin";
   const [preparer, setPreparer] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [preparerDate, setPreparerDate] = useState("");
@@ -107,7 +112,7 @@ export default function FinanceWorksheet() {
                     FILES
                   </label>
                   <div className="space-y-3">
-                    <label className="flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg cursor-pointer">
+                    <label className={`flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg ${isReviewer ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                       </svg>
@@ -117,6 +122,7 @@ export default function FinanceWorksheet() {
                         className="hidden"
                         onChange={handleFileUpload}
                         accept=".xlsx,.xls,.pdf"
+                        disabled={isReviewer}
                       />
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 min-h-[120px] flex items-center justify-center">
@@ -166,8 +172,9 @@ export default function FinanceWorksheet() {
                     type="text"
                     value={statusDocuments}
                     onChange={(e) => setStatusDocuments(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter status"
+                    disabled={isReviewer}
                   />
                 </div>
 
@@ -182,7 +189,8 @@ export default function FinanceWorksheet() {
                   <select
                     value={statusWorksheet}
                     onChange={(e) => setStatusWorksheet(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    disabled={isReviewer}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="Draft">Draft</option>
                     <option value="Available">Available</option>
@@ -218,8 +226,9 @@ export default function FinanceWorksheet() {
                     type="text"
                     value={preparer}
                     onChange={(e) => setPreparer(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter preparer name"
+                    disabled={isReviewer}
                   />
                 </div>
 
@@ -235,8 +244,9 @@ export default function FinanceWorksheet() {
                     type="text"
                     value={reviewer}
                     onChange={(e) => setReviewer(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter reviewer name"
+                    disabled={isAdmin}
                   />
                 </div>
 
@@ -254,7 +264,8 @@ export default function FinanceWorksheet() {
                       type="date"
                       value={preparerDate}
                       onChange={(e) => setPreparerDate(e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      disabled={isReviewer}
                     />
                   </div>
 
@@ -270,7 +281,8 @@ export default function FinanceWorksheet() {
                       type="date"
                       value={reviewerDate}
                       onChange={(e) => setReviewerDate(e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      disabled={isAdmin}
                     />
                   </div>
                 </div>
@@ -287,7 +299,8 @@ export default function FinanceWorksheet() {
                   <select
                     value={auditArea}
                     onChange={(e) => setAuditArea(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                    disabled={isReviewer}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="">Select Audit Area</option>
                     <option value="Bali">Bali</option>
@@ -304,7 +317,7 @@ export default function FinanceWorksheet() {
             <div className="mt-8 flex justify-end gap-4 pt-6 border-t border-gray-200">
               <button
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={isSaving || isReviewer}
                 className="px-6 py-2.5 bg-[#141D38] hover:bg-[#141D38]/90 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (

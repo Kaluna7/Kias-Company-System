@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import Pagination from "@/app/components/ui/Pagination";
+import { useToast } from "@/app/contexts/ToastContext";
 
 function normalizeRows(rows) {
   const list = Array.isArray(rows) ? rows : [];
@@ -36,7 +39,14 @@ export default function AuditFindingDeptClient({
   departmentLabel,
   description,
   initialData = [],
+  initialMeta = null,
 }) {
+  const { data: session } = useSession();
+  const toast = useToast();
+  const role = (session?.user?.role || "").toLowerCase();
+  const isReviewer = role === "reviewer";
+  const isAdmin = role === "admin";
+  const isUser = role === "user";
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -52,10 +62,23 @@ export default function AuditFindingDeptClient({
   const [prepareDate, setPrepareDate] = useState("");
   const [review, setReview] = useState("");
   const [reviewDate, setReviewDate] = useState("");
+  const [schedulePreparerName, setSchedulePreparerName] = useState(""); // From schedule
+  const [schedulePreparerDate, setSchedulePreparerDate] = useState(""); // From schedule
 
   const [tableData, setTableData] = useState(() => normalizeRows(initialData));
+  const [findingMeta, setFindingMeta] = useState(initialMeta);
   const [isEditMode, setIsEditMode] = useState(false); // Global edit mode for all rows
   const [isScheduleConfigured, setIsScheduleConfigured] = useState(false); // Schedule configuration status
+
+  // Auto-save refs
+  const saveMetaTimeoutRef = useRef(null);
+  const isSavingMetaRef = useRef(false);
+  const lastSavedMetaRef = useRef(null);
+  
+  // Auto-save table data refs
+  const saveTableDataTimeoutRef = useRef(null);
+  const isSavingTableDataRef = useRef(false);
+  const lastSavedTableDataRef = useRef(null);
 
   const statusOptions = useMemo(
     () => [
@@ -78,28 +101,284 @@ export default function AuditFindingDeptClient({
     []
   );
 
-  // Restore header inputs per-department
+  // Ensure prepareDate is set from schedule if available
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      setPreparerStatus(parsed.preparerStatus ?? "");
-      setFinalStatus(parsed.finalStatus ?? "");
-      setFindingResult(parsed.findingResult ?? "");
-      setFindingResultFileName(parsed.findingResultFileName ?? "");
-      setReportAs(parsed.reportAs ?? "");
-      setPrepare(parsed.prepare ?? "");
-      setPrepareDate(parsed.prepareDate ?? "");
-      setReview(parsed.review ?? "");
-      setReviewDate(parsed.reviewDate ?? "");
-    } catch {
-      // ignore
+    if (schedulePreparerDate) {
+      setPrepareDate(schedulePreparerDate);
     }
+  }, [schedulePreparerDate]);
+
+  // Prevent manual changes to prepareDate if schedule date is set
+  useEffect(() => {
+    if (schedulePreparerDate && isUser && prepareDate !== schedulePreparerDate) {
+      setPrepareDate(schedulePreparerDate);
+    }
+  }, [schedulePreparerDate, isUser, prepareDate]);
+
+  // Fetch meta data from API on mount
+  useEffect(() => {
+    let mounted = true;
+    async function fetchMetaData() {
+      try {
+        const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/meta`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          console.warn(`Failed to fetch meta data for ${apiPath}`);
+          return;
+        }
+        const json = await res.json().catch(() => null);
+        if (!mounted) return;
+        if (json?.success && json?.data) {
+          const meta = json.data;
+          // Always set all fields, regardless of role
+          setPreparerStatus(meta.preparer_status || "");
+          setFinalStatus(meta.final_status || "");
+          setFindingResult(meta.finding_result || "");
+          setFindingResultFileName(meta.finding_result_file_name || "");
+          setReportAs(meta.report_as || "");
+          // Use schedule data if available, otherwise use meta data
+          setPrepare(meta.prepare || "");
+          // Set prepareDate from meta (schedule date will override via separate useEffect)
+          setPrepareDate(meta.prepare_date ? String(meta.prepare_date).slice(0, 10) : "");
+          setReview(meta.review || "");
+          setReviewDate(meta.review_date ? String(meta.review_date).slice(0, 10) : "");
+          
+          // Update lastSavedMetaRef to prevent immediate auto-save
+          lastSavedMetaRef.current = {
+            preparerStatus: meta.preparer_status || "",
+            finalStatus: meta.final_status || "",
+            findingResult: meta.finding_result || "",
+            findingResultFileName: meta.finding_result_file_name || "",
+            reportAs: meta.report_as || "",
+            prepare: meta.prepare || "",
+            prepareDate: meta.prepare_date ? String(meta.prepare_date).slice(0, 10) : "",
+            review: meta.review || "",
+            reviewDate: meta.review_date ? String(meta.review_date).slice(0, 10) : "",
+          };
+        } else {
+          // Initialize lastSavedMetaRef even if no data, so auto-save will work for new entries
+          lastSavedMetaRef.current = {
+            preparerStatus: "",
+            finalStatus: "",
+            findingResult: "",
+            findingResultFileName: "",
+            reportAs: "",
+            prepare: "",
+            prepareDate: "",
+            review: "",
+            reviewDate: "",
+          };
+          // Fallback to localStorage if no API data
+          try {
+            const raw = localStorage.getItem(storageKey);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              setPreparerStatus(parsed.preparerStatus ?? "");
+              setFinalStatus(parsed.finalStatus ?? "");
+              setFindingResult(parsed.findingResult ?? "");
+              setFindingResultFileName(parsed.findingResultFileName ?? "");
+              setReportAs(parsed.reportAs ?? "");
+              setPrepare(parsed.prepare ?? "");
+              // Set prepareDate from localStorage (schedule date will override via separate useEffect)
+              setPrepareDate(parsed.prepareDate ?? "");
+              setReview(parsed.review ?? "");
+              setReviewDate(parsed.reviewDate ?? "");
+              // Update lastSavedMetaRef with localStorage data
+              lastSavedMetaRef.current = {
+                preparerStatus: parsed.preparerStatus ?? "",
+                finalStatus: parsed.finalStatus ?? "",
+                findingResult: parsed.findingResult ?? "",
+                findingResultFileName: parsed.findingResultFileName ?? "",
+                reportAs: parsed.reportAs ?? "",
+                prepare: parsed.prepare ?? "",
+                prepareDate: parsed.prepareDate ?? "",
+                review: parsed.review ?? "",
+                reviewDate: parsed.reviewDate ?? "",
+              };
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch (err) {
+        console.warn(`Error fetching meta data for ${apiPath}:`, err);
+        // Initialize lastSavedMetaRef even on error, so auto-save will work
+        lastSavedMetaRef.current = {
+          preparerStatus: "",
+          finalStatus: "",
+          findingResult: "",
+          findingResultFileName: "",
+          reportAs: "",
+          prepare: "",
+          prepareDate: "",
+          review: "",
+          reviewDate: "",
+        };
+        // Fallback to localStorage
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            setPreparerStatus(parsed.preparerStatus ?? "");
+            setFinalStatus(parsed.finalStatus ?? "");
+            setFindingResult(parsed.findingResult ?? "");
+            setFindingResultFileName(parsed.findingResultFileName ?? "");
+            setReportAs(parsed.reportAs ?? "");
+            setPrepare(parsed.prepare ?? "");
+            // Set prepareDate from localStorage (schedule date will override via separate useEffect)
+            setPrepareDate(parsed.prepareDate ?? "");
+            setReview(parsed.review ?? "");
+            setReviewDate(parsed.reviewDate ?? "");
+            // Update lastSavedMetaRef with localStorage data
+            lastSavedMetaRef.current = {
+              preparerStatus: parsed.preparerStatus ?? "",
+              finalStatus: parsed.finalStatus ?? "",
+              findingResult: parsed.findingResult ?? "",
+              findingResultFileName: parsed.findingResultFileName ?? "",
+              reportAs: parsed.reportAs ?? "",
+              prepare: parsed.prepare ?? "",
+              prepareDate: parsed.prepareDate ?? "",
+              review: parsed.review ?? "",
+              reviewDate: parsed.reviewDate ?? "",
+            };
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    fetchMetaData();
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiPath]);
 
-  // Persist header inputs per-department
+  // Auto-save meta data to API
+  const saveMetaData = useCallback(async () => {
+    if (isSavingMetaRef.current) return;
+
+    const currentMeta = {
+      preparerStatus,
+      finalStatus,
+      findingResult,
+      findingResultFileName,
+      reportAs,
+      prepare,
+      prepareDate,
+      review,
+      reviewDate,
+    };
+
+    // Skip if no changes
+    if (lastSavedMetaRef.current) {
+      const hasChanges = Object.keys(currentMeta).some(
+        (key) => currentMeta[key] !== lastSavedMetaRef.current[key]
+      );
+      if (!hasChanges) return;
+    }
+
+    isSavingMetaRef.current = true;
+    try {
+      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/meta`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Replace-Mode": "true",
+        },
+        body: JSON.stringify({
+          preparer_status: preparerStatus,
+          final_status: finalStatus,
+          finding_result: findingResult,
+          finding_result_file_name: findingResultFileName,
+          report_as: reportAs,
+          prepare: prepare,
+          prepare_date: prepareDate,
+          review: review,
+          review_date: reviewDate,
+        }),
+      });
+
+      if (res.ok) {
+        const responseData = await res.json().catch(() => null);
+        if (responseData?.success && responseData?.data) {
+          // Update lastSavedMetaRef with the saved data from server
+          const saved = responseData.data;
+          lastSavedMetaRef.current = {
+            preparerStatus: saved.preparer_status || "",
+            finalStatus: saved.final_status || "",
+            findingResult: saved.finding_result || "",
+            findingResultFileName: saved.finding_result_file_name || "",
+            reportAs: saved.report_as || "",
+            prepare: saved.prepare || "",
+            prepareDate: saved.prepare_date ? String(saved.prepare_date).slice(0, 10) : "",
+            review: saved.review || "",
+            reviewDate: saved.review_date ? String(saved.review_date).slice(0, 10) : "",
+          };
+        } else {
+          // Fallback to current meta if response doesn't have data
+          lastSavedMetaRef.current = { ...currentMeta };
+        }
+      } else {
+        const errorText = await res.text().catch(() => "");
+        console.warn("Failed to save meta data:", res.status, errorText);
+      }
+    } catch (err) {
+      console.warn("Error saving meta data:", err);
+    } finally {
+      isSavingMetaRef.current = false;
+    }
+  }, [
+    apiPath,
+    preparerStatus,
+    finalStatus,
+    findingResult,
+    findingResultFileName,
+    reportAs,
+    prepare,
+    prepareDate,
+    review,
+    reviewDate,
+  ]);
+
+  // Auto-save with debounce
+  useEffect(() => {
+    // Clear existing timeout
+    if (saveMetaTimeoutRef.current) {
+      clearTimeout(saveMetaTimeoutRef.current);
+    }
+
+    // Skip initial load (when lastSavedMetaRef is null or not yet initialized)
+    // But allow save if lastSavedMetaRef has been initialized (even if empty)
+    if (lastSavedMetaRef.current === null) {
+      return;
+    }
+
+    // Debounce save by 1 second
+    saveMetaTimeoutRef.current = setTimeout(() => {
+      saveMetaData();
+    }, 1000);
+
+    return () => {
+      if (saveMetaTimeoutRef.current) {
+        clearTimeout(saveMetaTimeoutRef.current);
+      }
+    };
+  }, [
+    saveMetaData,
+    preparerStatus,
+    finalStatus,
+    findingResult,
+    findingResultFileName,
+    reportAs,
+    prepare,
+    prepareDate,
+    review,
+    reviewDate,
+  ]);
+
+  // Also persist to localStorage as backup
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -132,14 +411,18 @@ export default function AuditFindingDeptClient({
     reviewDate,
   ]);
 
-  async function fetchData() {
+  async function fetchData(page) {
+    const pageNum = page ?? findingMeta?.page ?? 1;
+    const pageSize = findingMeta?.pageSize ?? 50;
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, { method: "GET" });
+      const params = new URLSearchParams({ page: String(pageNum), pageSize: String(pageSize) });
+      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}?${params.toString()}`, { method: "GET" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to fetch data");
-      setTableData(normalizeRows(json.data));
+      setTableData(normalizeRows(json.data ?? []));
+      if (json.meta) setFindingMeta(json.meta);
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -147,65 +430,283 @@ export default function AuditFindingDeptClient({
     }
   }
 
-  // Check if schedule is configured for this department
-  useEffect(() => {
-    const checkSchedule = async () => {
-      try {
-        // Map apiPath to department_id for schedule
-        const apiPathToDeptId = {
-          'finance': 'A1.1',
-          'accounting': 'A1.2',
-          'hrd': 'A1.3',
-          'g&a': 'A1.4',
-          'ga': 'A1.4',
-          'sdp': 'A1.5',
-          'tax': 'A1.6',
-          'l&p': 'A1.7',
-          'lp': 'A1.7',
-          'mis': 'A1.8',
-          'merch': 'A1.9',
-          'ops': 'A1.10',
-          'whs': 'A1.11',
-        };
+  // Map apiPath to schedule department_id
+  const API_PATH_TO_SCHEDULE_ID = {
+    finance: "A1.1",
+    accounting: "A1.2",
+    hrd: "A1.3",
+    "g&a": "A1.4",
+    ga: "A1.4",
+    sdp: "A1.5",
+    tax: "A1.6",
+    "l&p": "A1.7",
+    lp: "A1.7",
+    mis: "A1.8",
+    merch: "A1.9",
+    ops: "A1.10",
+    whs: "A1.11",
+  };
 
-        const deptId = apiPathToDeptId[apiPath];
-        if (!deptId) {
-          console.warn(`No department_id mapping for apiPath: ${apiPath}`);
-          setIsScheduleConfigured(false);
+  // Fetch schedule data for preparer (runs first)
+  useEffect(() => {
+    let mounted = true;
+    async function fetchScheduleData() {
+      try {
+        const scheduleDeptId = API_PATH_TO_SCHEDULE_ID[apiPath];
+        if (!scheduleDeptId) {
+          console.warn(`No schedule department_id mapping for apiPath: ${apiPath}`);
           return;
         }
 
-        const res = await fetch(`/api/schedule/module?module=audit-finding`, {
-          next: { revalidate: 30 },
-        });
+        const res = await fetch(`/api/schedule/module?module=audit-finding`, { cache: "no-store" });
+        const data = await res.json();
         
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.rows)) {
-            const scheduleRow = json.rows.find(row => 
-              row.department_id === deptId && row.is_configured === true
-            );
-            setIsScheduleConfigured(!!scheduleRow);
-          } else {
+        if (data.success && Array.isArray(data.rows)) {
+          const scheduleRow = data.rows.find(
+            (row) => row.department_id === scheduleDeptId && row.is_configured
+          );
+          
+          if (scheduleRow && mounted) {
+            const userName = scheduleRow.user_name || "";
+            // IMPORTANT: start_date from API is already in YYYY-MM-DD format (from PostgreSQL TO_CHAR)
+            // Use it directly without any parsing or timezone conversion
+            let startDate = "";
+            if (scheduleRow.start_date) {
+              const dateValue = scheduleRow.start_date;
+              console.log(`[Audit Finding] Schedule start_date for ${apiPath}:`, dateValue, "Type:", typeof dateValue);
+              
+              // API returns date as string in YYYY-MM-DD format (from TO_CHAR)
+              if (typeof dateValue === 'string') {
+                const dateStr = String(dateValue).trim();
+                // Use directly if it's already in YYYY-MM-DD format
+                if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  startDate = dateStr;
+                  console.log(`[Audit Finding] Using schedule start_date as-is (YYYY-MM-DD): ${startDate}`);
+                } else {
+                  // If it's ISO string with time, extract just the date part
+                  if (dateStr.includes('T')) {
+                    startDate = dateStr.split('T')[0];
+                    console.log(`[Audit Finding] Extracted date from ISO string: ${startDate}`);
+                  } else {
+                    console.warn(`[Audit Finding] Unexpected date format: ${dateStr}`);
+                    startDate = "";
+                  }
+                }
+              }
+              // If it's somehow a Date object (shouldn't happen with TO_CHAR, but handle it)
+              else if (dateValue instanceof Date) {
+                // Use UTC date components to preserve the date as stored
+                const year = dateValue.getUTCFullYear();
+                const month = String(dateValue.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(dateValue.getUTCDate()).padStart(2, '0');
+                startDate = `${year}-${month}-${day}`;
+                console.log(`[Audit Finding] Formatted schedule start_date using UTC date: ${startDate}`);
+              }
+              // If it's a number (timestamp) - shouldn't happen, but handle it
+              else if (typeof dateValue === 'number') {
+                const dateObj = new Date(dateValue);
+                // Use UTC date components to preserve the date
+                const year = dateObj.getUTCFullYear();
+                const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                startDate = `${year}-${month}-${day}`;
+                console.log(`[Audit Finding] Formatted schedule start_date from timestamp using UTC date: ${startDate}`);
+              } else {
+                console.warn(`[Audit Finding] Unexpected date value type: ${typeof dateValue}`);
+                startDate = "";
+              }
+              
+              // Final validation
+              if (startDate && !startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                console.warn(`[Audit Finding] Invalid date format after processing: ${startDate}`);
+                startDate = "";
+              }
+            } else {
+              console.warn(`[Audit Finding] No start_date found in schedule for ${apiPath}`);
+            }
+            
+            setSchedulePreparerName(userName);
+            setSchedulePreparerDate(startDate);
+            setIsScheduleConfigured(true);
+            
+            // Always set preparer from schedule (schedule takes priority)
+            if (userName) {
+              setPrepare(userName);
+            }
+            if (startDate) {
+              setPrepareDate(startDate);
+              console.log(`[Audit Finding] Set prepareDate to: ${startDate} from schedule per module`);
+            }
+          } else if (mounted) {
             setIsScheduleConfigured(false);
+            setSchedulePreparerName("");
+            setSchedulePreparerDate("");
           }
-        } else {
-          setIsScheduleConfigured(false);
         }
       } catch (err) {
-        console.warn("Error checking schedule:", err);
-        setIsScheduleConfigured(false);
+        console.warn(`[Audit Finding] Error fetching schedule data for ${apiPath}:`, err);
+        if (mounted) {
+          setIsScheduleConfigured(false);
+          setSchedulePreparerName("");
+          setSchedulePreparerDate("");
+        }
       }
+    }
+    fetchScheduleData();
+    return () => {
+      mounted = false;
     };
-
-    checkSchedule();
   }, [apiPath]);
 
   useEffect(() => {
     // keep client in sync if server data changes / refresh
-    setTableData(normalizeRows(initialData));
+    const normalized = normalizeRows(initialData);
+    setTableData(normalized);
+    if (initialMeta) setFindingMeta(initialMeta);
+    // Initialize lastSavedTableDataRef to prevent immediate auto-save on initial load
+    lastSavedTableDataRef.current = normalized;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiPath]);
+  }, [apiPath, initialData, initialMeta]);
+
+  // Auto-save table data to API
+  const saveTableData = useCallback(async () => {
+    if (isSavingTableDataRef.current) return;
+
+    // Skip if no changes
+    if (lastSavedTableDataRef.current) {
+      const currentDataStr = JSON.stringify(tableData);
+      const lastSavedDataStr = JSON.stringify(lastSavedTableDataRef.current);
+      if (currentDataStr === lastSavedDataStr) return;
+    }
+
+    isSavingTableDataRef.current = true;
+    try {
+      const updatedTableData = [...tableData];
+      const savePromises = [];
+      
+      for (let i = 0; i < updatedTableData.length; i++) {
+        const row = updatedTableData[i];
+        if (row.id != null) {
+          // Update existing row
+          const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              riskId: row.riskId,
+              riskDescription: row.riskDescription,
+              riskDetails: row.riskDetails,
+              apCode: row.apCode,
+              substantiveTest: row.substantiveTest,
+              risk: row.risk ? parseInt(row.risk, 10) : null,
+              checkYN: row.checkYN,
+              method: row.method,
+              preparer: row.preparer,
+              findingResult: row.findingResult,
+              findingDescription: row.findingDescription,
+              recommendation: row.recommendation,
+              auditee: row.auditee,
+              completionStatus: row.completionStatus,
+              completionDate: row.completionDate || null,
+            }),
+          })
+            .then(async (res) => {
+              if (!res.ok) {
+                const errorText = await res.text().catch(() => "");
+                console.warn(`Failed to save row ${row.id}:`, res.status, errorText);
+                return null;
+              }
+              return await res.json().catch(() => null);
+            })
+            .catch((err) => {
+              console.warn(`Error saving row ${row.id}:`, err);
+              return null;
+            });
+          savePromises.push(promise);
+        } else {
+          // Create new row (only if row has some meaningful data)
+          if (row.riskId || row.apCode || row.findingResult || row.preparer) {
+            const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                riskId: row.riskId || "",
+                riskDescription: row.riskDescription || "",
+                riskDetails: row.riskDetails || "",
+                apCode: row.apCode || "",
+                substantiveTest: row.substantiveTest || "",
+                risk: row.risk ? parseInt(row.risk, 10) : null,
+                checkYN: row.checkYN || "",
+                method: row.method || "",
+                preparer: row.preparer || "",
+                findingResult: row.findingResult || "",
+                findingDescription: row.findingDescription || "",
+                recommendation: row.recommendation || "",
+                auditee: row.auditee || "",
+                completionStatus: row.completionStatus || "",
+                completionDate: row.completionDate || null,
+              }),
+            })
+              .then(async (res) => {
+                if (!res.ok) {
+                  const errorText = await res.text().catch(() => "");
+                  console.warn(`Failed to create row:`, res.status, errorText);
+                  return null;
+                }
+                return await res.json().catch(() => null);
+              })
+              .then((created) => {
+                if (created?.data) {
+                  // Update row id after creation
+                  updatedTableData[i].id = created.data.id;
+                }
+                return created;
+              })
+              .catch((err) => {
+                console.warn(`Error creating row:`, err);
+                return null;
+              });
+            savePromises.push(promise);
+          }
+        }
+      }
+
+      await Promise.all(savePromises);
+      
+      // Update state with updated data (especially for new rows that got IDs)
+      setTableData(updatedTableData);
+      
+      // Update lastSavedTableDataRef after successful save
+      lastSavedTableDataRef.current = JSON.parse(JSON.stringify(updatedTableData));
+    } catch (err) {
+      console.warn("Error saving table data:", err);
+    } finally {
+      isSavingTableDataRef.current = false;
+    }
+  }, [apiPath, tableData]);
+
+  // Auto-save table data with debounce
+  useEffect(() => {
+    // Clear existing timeout
+    if (saveTableDataTimeoutRef.current) {
+      clearTimeout(saveTableDataTimeoutRef.current);
+    }
+
+    // Skip initial load (when lastSavedTableDataRef is null)
+    if (lastSavedTableDataRef.current === null) {
+      return;
+    }
+
+    // Debounce save by 1 second
+    saveTableDataTimeoutRef.current = setTimeout(() => {
+      saveTableData();
+    }, 1000);
+
+    return () => {
+      if (saveTableDataTimeoutRef.current) {
+        clearTimeout(saveTableDataTimeoutRef.current);
+      }
+    };
+  }, [saveTableData, tableData]);
 
   // Handle cell edit
   const handleCellEdit = (rowIndex, field, value) => {
@@ -216,6 +717,7 @@ export default function AuditFindingDeptClient({
 
   // Handle toggle edit mode
   const handleToggleEditMode = () => {
+    if (isReviewer) return; // Reviewer cannot toggle edit mode
     setIsEditMode(!isEditMode);
   };
 
@@ -230,7 +732,7 @@ export default function AuditFindingDeptClient({
   const handlePublish = async () => {
     // Check if schedule is configured
     if (!isScheduleConfigured) {
-      alert("Sorry, no schedule");
+      toast.show("Sorry, no schedule", "error");
       return;
     }
 
@@ -269,17 +771,17 @@ export default function AuditFindingDeptClient({
             );
             
             if (!scheduleRow) {
-              alert("Sorry, no schedule");
+              toast.show("Sorry, no schedule", "error");
               setLoading(false);
               return;
             }
           } else {
-            alert("Sorry, no schedule");
+            toast.show("Sorry, no schedule", "error");
             setLoading(false);
             return;
           }
         } else {
-          alert("Sorry, no schedule");
+          toast.show("Sorry, no schedule", "error");
           setLoading(false);
           return;
         }
@@ -295,13 +797,13 @@ export default function AuditFindingDeptClient({
       if (!res.ok) throw new Error(json?.error || "Failed to publish findings");
       
       // Show success message and redirect to report
-      alert(`Successfully published! Data is now available in Report.`);
+      toast.show("Successfully published! Data is now available in Report.", "success");
       
       // Redirect to report page
       window.location.href = "/Page/audit-finding/report";
     } catch (e) {
       setError(e?.message || String(e));
-      alert(`Error: ${e?.message || String(e)}`);
+      toast.show("Error: " + (e?.message || String(e)), "error");
     } finally {
       setLoading(false);
     }
@@ -387,7 +889,7 @@ export default function AuditFindingDeptClient({
     const row = tableData[index];
     // If no ID, this is data from audit-program (not yet saved as finding), so can't delete
     if (!row?.id) {
-      alert("This data is from Audit Program. To remove it, you need to save it as a finding first, then delete it.");
+      toast.show("This data is from Audit Program. To remove it, you need to save it as a finding first, then delete it.", "info");
       return;
     }
     try {
@@ -550,7 +1052,8 @@ export default function AuditFindingDeptClient({
                     <select
                       value={preparerStatus}
                       onChange={(e) => setPreparerStatus(e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      disabled={isReviewer}
+                      className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       {statusOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -577,7 +1080,8 @@ export default function AuditFindingDeptClient({
                     <select
                       value={finalStatus}
                       onChange={(e) => setFinalStatus(e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      disabled={isReviewer}
+                      className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       {statusOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -608,7 +1112,7 @@ export default function AuditFindingDeptClient({
                     <label className="block text-xs font-semibold text-slate-700 mb-2">FINDING RESULT</label>
                     {reportAs === "attachment file" ? (
                       <div className="space-y-2">
-                        <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-lg transition-all duration-300 shadow-md hover:shadow-lg cursor-pointer">
+                        <label className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${isReviewer ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
                               strokeLinecap="round"
@@ -623,6 +1127,7 @@ export default function AuditFindingDeptClient({
                             className="hidden"
                             onChange={handleFindingResultFileSelect}
                             accept=".xlsx,.xls,.pdf,.doc,.docx"
+                            disabled={isReviewer}
                           />
                         </label>
                         {findingResultFileName && (
@@ -646,7 +1151,8 @@ export default function AuditFindingDeptClient({
                         type="text"
                         value={findingResult}
                         onChange={(e) => setFindingResult(e.target.value)}
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                        disabled={isReviewer}
+                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter finding result"
                       />
                     )}
@@ -657,7 +1163,8 @@ export default function AuditFindingDeptClient({
                     <select
                       value={reportAs}
                       onChange={(e) => setReportAs(e.target.value)}
-                      className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      disabled={isReviewer}
+                      className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">- Select -</option>
                       <option value="on this sheet">On This Sheet</option>
@@ -672,7 +1179,10 @@ export default function AuditFindingDeptClient({
                         type="text"
                         value={prepare}
                         onChange={(e) => setPrepare(e.target.value)}
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                        disabled={isReviewer || (isUser && schedulePreparerName)}
+                        readOnly={isUser && schedulePreparerName}
+                        suppressHydrationWarning
+                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Name"
                       />
                     </div>
@@ -681,8 +1191,19 @@ export default function AuditFindingDeptClient({
                       <input
                         type="date"
                         value={prepareDate}
-                        onChange={(e) => setPrepareDate(e.target.value)}
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                        onChange={(e) => {
+                          // Prevent changes if schedule date is set and user is regular user
+                          if (schedulePreparerDate && isUser) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return false;
+                          }
+                          setPrepareDate(e.target.value);
+                        }}
+                        disabled={isReviewer || (isUser && schedulePreparerDate)}
+                        readOnly={isUser && schedulePreparerDate}
+                        suppressHydrationWarning
+                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -694,7 +1215,9 @@ export default function AuditFindingDeptClient({
                         type="text"
                         value={review}
                         onChange={(e) => setReview(e.target.value)}
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                        disabled={isAdmin || isUser}
+                        readOnly={isAdmin || isUser}
+                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Name"
                       />
                     </div>
@@ -704,7 +1227,9 @@ export default function AuditFindingDeptClient({
                         type="date"
                         value={reviewDate}
                         onChange={(e) => setReviewDate(e.target.value)}
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        disabled={isAdmin || isUser}
+                        readOnly={isAdmin || isUser}
+                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -763,20 +1288,21 @@ export default function AuditFindingDeptClient({
               <>
                 <button
                   onClick={handleToggleEditMode}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                  disabled={isReviewer}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Edit Mode"
                 >
                   Edit
                 </button>
             <button
               onClick={handlePublish}
-              disabled={loading || !isScheduleConfigured}
+              disabled={loading || !isScheduleConfigured || isReviewer}
               className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                loading || !isScheduleConfigured
+                loading || !isScheduleConfigured || isReviewer
                   ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                   : "bg-purple-600 hover:bg-purple-700 text-white"
               }`}
-              title={!isScheduleConfigured ? "Schedule not configured" : "Publish"}
+              title={!isScheduleConfigured ? "Schedule not configured" : isReviewer ? "Reviewer cannot publish" : "Publish"}
             >
               {loading ? "Publishing..." : "Publish"}
             </button>
@@ -791,10 +1317,10 @@ export default function AuditFindingDeptClient({
           </div>
         )}
 
-        {/* Table */}
+        {/* Table - responsive: horizontal scroll when narrow */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 mb-4">
-          <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="w-full border-collapse text-xs" style={{ tableLayout: "fixed", width: "100%" }}>
+          <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
+            <table className="w-full border-collapse text-xs min-w-[1600px]" style={{ tableLayout: "fixed" }}>
               <thead>
                 <tr className="bg-gray-100">
                   <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "40px" }}>NO</th>
@@ -908,7 +1434,8 @@ export default function AuditFindingDeptClient({
                             type="text"
                             value={row.preparer || ""}
                             onChange={(e) => handleCellEdit(index, "preparer", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            disabled={isReviewer}
+                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                             placeholder="-"
                           />
                         </td>
@@ -1013,6 +1540,7 @@ export default function AuditFindingDeptClient({
               </tbody>
             </table>
           </div>
+          <Pagination meta={findingMeta} onPageChange={(p) => fetchData(p)} loading={loading} />
         </div>
       </div>
     </main>

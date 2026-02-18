@@ -6,13 +6,15 @@ export const useMisStore = create((set, get) => ({
   mis: [],
   currentFilter: "published",
 
-  loadMis: async (status = "published") => {
+  loadMis: async (status = "published", page = 1, pageSize = 50) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/mis?status=${status}`);
+      const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      const res = await fetch(`/api/RiskAssessment/mis?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch mis");
-      const data = await res.json();
-      set({ mis: data, currentFilter: status });
-      return data;
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : json;
+      set({ mis: list, meta: json?.meta ?? null, currentFilter: status });
+      return list;
     } catch (err) {
       console.error("loadMis error:", err);
       return [];

@@ -27,9 +27,12 @@ export default async function B2AuditFinding() {
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
-  const isAdmin = (session?.user?.role || "").toLowerCase() === "admin";
+  const role = (session?.user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+  const isReviewer = role === "reviewer";
   
   // Get user assignments for Audit Finding module
+  // Reviewer needs assignment like regular user, but can only edit reviewer fields
   let allowedDepartments = [];
   if (!isAdmin && userName) {
     try {
@@ -63,7 +66,8 @@ export default async function B2AuditFinding() {
   
   const isDepartmentEnabled = (deptName) => {
     // Admin can access all departments
-    if (isAdmin) return true;
+    // Reviewer can access all departments (for viewing), but can only edit reviewer fields
+    if (isAdmin || isReviewer) return true;
     // If no assignments, disable all departments
     if (allowedDepartments.length === 0) return false;
     // Check if department is in allowed list (by name or by deptKey)

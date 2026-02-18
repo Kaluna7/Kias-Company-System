@@ -89,7 +89,13 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const body = await req.json();
       const { department, preparer, overallStatus, evidenceData } = body;
 
-      if (!department) return NextResponse.json({ error: "Department is required" }, { status: 400 });
+      if (!department) {
+        return NextResponse.json({ success: false, error: "Department is required" }, { status: 400 });
+      }
+
+      if (!evidenceData || !Array.isArray(evidenceData)) {
+        return NextResponse.json({ success: false, error: "Evidence data must be an array" }, { status: 400 });
+      }
 
       for (const evidence of evidenceData) {
         const apIdNum = evidence.ap_id
@@ -145,12 +151,21 @@ export function makeEvidenceHandlers(defaultDepartment) {
     }
   };
 
+  function toIntSafe(v, fallback) {
+    if (v === undefined || v === null || v === "") return fallback;
+    const n = parseInt(v, 10);
+    return Number.isNaN(n) ? fallback : n;
+  }
+
   const GET = async (req) => {
     try {
       const { searchParams } = new URL(req.url);
       const department = searchParams.get("department") || defaultDepartment;
       const ap_code = searchParams.get("ap_code");
       const ap_id = searchParams.get("ap_id");
+      const page = Math.max(1, toIntSafe(searchParams.get("page"), 1));
+      const pageSize = Math.max(1, Math.min(100, toIntSafe(searchParams.get("pageSize"), 50)));
+      const skip = (page - 1) * pageSize;
 
       const upperDept = department.toUpperCase();
 
@@ -160,14 +175,21 @@ export function makeEvidenceHandlers(defaultDepartment) {
         return NextResponse.json({ error: "Invalid department" }, { status: 400 });
       }
 
-      const apList = await apDelegate.findMany({
-        where: {
-          ...(ap_code ? { ap_code } : {}),
-          ...(ap_id ? { ap_id: parseInt(ap_id) } : {}),
-        },
-        select: { ap_id: true, ap_code: true, substantive_test: true },
-        orderBy: { ap_id: "asc" },
-      });
+      const where = {
+        ...(ap_code ? { ap_code } : {}),
+        ...(ap_id ? { ap_id: parseInt(ap_id) } : {}),
+      };
+
+      const [apList, total] = await Promise.all([
+        apDelegate.findMany({
+          where,
+          select: { ap_id: true, ap_code: true, substantive_test: true },
+          orderBy: { ap_id: "asc" },
+          skip,
+          take: pageSize,
+        }),
+        apDelegate.count({ where }),
+      ]);
 
       // Evidence attachments/status (left join)
       const evidenceRows = await prisma.evidence.findMany({
@@ -198,9 +220,11 @@ export function makeEvidenceHandlers(defaultDepartment) {
           };
         });
 
-      const meta = evidenceRows[0]
+      const rowMeta = evidenceRows[0]
         ? { preparer: evidenceRows[0].preparer || "", overall_status: evidenceRows[0].overall_status || "" }
         : { preparer: "", overall_status: "" };
+
+      const meta = { ...rowMeta, total, page, pageSize };
 
       return NextResponse.json({ success: true, data: merged, meta });
     } catch (error) {

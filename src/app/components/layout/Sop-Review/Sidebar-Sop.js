@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+import { useToast } from "@/app/contexts/ToastContext";
 
 /* ========== Helpers ========== */
 
@@ -84,6 +85,15 @@ function sanitizeStepText(s) {
   return withoutComment.replace(/[\{\}]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
+
+function isMobileDevice() {
+  if (typeof window === "undefined") return false;
+  const w = window.innerWidth;
+  if (w > 0 && w <= 768) return true;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
+}
+
 /* ========== Component ========== */
 
 export default function SOPSidebar({
@@ -107,6 +117,7 @@ export default function SOPSidebar({
   onSaveSidebar,
   onSopParsed,
 }) {
+  const toast = useToast();
   const [selectedFile, setSelectedFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState("");
@@ -126,8 +137,7 @@ export default function SOPSidebar({
   /* ---------- PDF extraction preview (client-side) ---------- */
   async function extractFullTextFromPdfArrayBuffer(arrayBuffer) {
     await ensureWorkerAvailable();
-    const copyBuf = arrayBuffer.slice ? arrayBuffer.slice(0) : arrayBuffer;
-    const data = new Uint8Array(copyBuf);
+    const data = new Uint8Array(arrayBuffer);
     const loadingTask = pdfjsLib.getDocument({ data });
     const pdf = await loadingTask.promise;
     const pageTexts = [];
@@ -284,7 +294,14 @@ export default function SOPSidebar({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") {
-      alert("Only PDF files are allowed.");
+      toast.show("Only PDF files are allowed.", "error");
+      return;
+    }
+
+    const mobile = isMobileDevice();
+    if (mobile && file.size > MAX_PDF_SIZE_MOBILE_BYTES) {
+      toast.show("File too large for mobile (max 4MB). Use a smaller PDF or upload from desktop.", "error");
+      e.target.value = "";
       return;
     }
 
@@ -294,14 +311,14 @@ export default function SOPSidebar({
     try {
       const arrayBuffer = await file.arrayBuffer();
 
-      // client-side preview: extract text
       const fullText = await extractFullTextFromPdfArrayBuffer(arrayBuffer);
-      setFullTextPreview(fullText || "");
+      const previewText = fullText || "";
+      setFullTextPreview(mobile && previewText.length > 30000 ? previewText.slice(0, 30000) + "\n\n[... truncated for mobile ...]" : previewText);
 
-      // convert to base64 (safe)
+      await new Promise((r) => setTimeout(r, 0));
+
       const base64 = await arrayBufferToBase64UsingFileReader(arrayBuffer);
 
-      // call server AI to extract steps
       const aiRes = await callAiExtract({ data: base64, text: fullText });
 
       if (aiRes && aiRes.success && Array.isArray(aiRes.steps) && aiRes.steps.length > 0) {
@@ -345,7 +362,7 @@ export default function SOPSidebar({
   // Open modal and fetch preview comments for current parsedPreview
   const openAppendModal = async () => {
     if (!parsedPreview || parsedPreview.length === 0) {
-      alert("No parsed results to append.");
+      toast.show("No parsed results to append.", "error");
       return;
     }
     setModalError("");
@@ -701,14 +718,14 @@ export default function SOPSidebar({
               });
               const json = await res.json().catch(() => ({}));
               if (res.ok) {
-                alert("✅ Data saved successfully.");
+                toast.show("Data saved successfully.", "success");
                 onSaveSidebar?.(payload);
               } else {
-                alert("❌ Failed to save: " + (json?.error || "Unknown error"));
+                toast.show("Failed to save: " + (json?.error || "Unknown error"), "error");
               }
             } catch (err) {
               console.error("Save sidebar error:", err);
-              alert("❌ Failed to save sidebar data.");
+              toast.show("Failed to save sidebar data.", "error");
             }
           }}
           className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -717,60 +734,61 @@ export default function SOPSidebar({
         </button>
       </div>
 
-      {/* Modal: preview comments */}
+      {/* Modal: preview comments - padding on mobile so popup not full-bleed / hidden on Android */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-[min(1000px,95vw)] max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg">📝</span>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 px-3 pt-1 pb-4 sm:p-0 sm:px-4">
+          <div className="bg-white rounded-2xl shadow-lg sm:shadow-2xl w-full sm:w-[min(1000px,95vw)] max-h-[82vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-base sm:text-lg">📝</span>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Review Comments Preview</h3>
-                  <p className="text-xs text-slate-600">Review and edit generated comments before appending</p>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Review Comments Preview</h3>
+                  <p className="text-xs text-slate-600 hidden sm:block">Review and edit generated comments before appending</p>
                 </div>
               </div>
               <button
-                className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
+                className="min-h-[44px] min-w-[44px] sm:w-8 sm:h-8 sm:min-h-0 sm:min-w-0 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors flex-shrink-0"
                 onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 max-h-[calc(82vh-160px)] sm:max-h-[calc(90vh-140px)] overscroll-contain">
               {modalLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="flex items-center gap-3 text-slate-600">
-                    <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                    <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" />
                     <span className="text-sm font-medium">Generating AI comments... Please wait</span>
                   </div>
                 </div>
               ) : (
                 <>
                   {modalError && (
-                    <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    <div className="mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                       ⚠️ {modalError}
                     </div>
                   )}
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {modalItems.map((it, idx) => (
-                      <div key={idx} className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">
+                      <div key={idx} className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                          <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
                             {it.no}
                           </span>
                           <span className="text-sm font-semibold text-slate-700">SOP Item</span>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-lg p-3 mb-3">
-                          <div className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                        <div className="bg-white border border-slate-200 rounded-lg p-2.5 sm:p-3 mb-2 sm:mb-3">
+                          <div className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
                             {it.sop_related}
                           </div>
                         </div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-2">💬 Review Comment (Editable)</label>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">💬 Review Comment (Editable)</label>
                         <textarea
-                          className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                          className="w-full p-2.5 sm:p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[72px]"
                           rows={3}
                           value={it.comment || ""}
                           onChange={(e) => setModalItemComment(idx, e.target.value)}
@@ -783,15 +801,15 @@ export default function SOPSidebar({
               )}
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
               <button
-                className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
                 onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}
               >
                 Cancel
               </button>
               <button
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={saveAndAppendFromModal}
                 disabled={modalLoading}
               >

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+import { useToast } from "@/app/contexts/ToastContext";
 
 /* ========== Helpers ========== */
 
@@ -88,6 +89,15 @@ function sanitizeStepText(s) {
   return withoutComment.replace(/[\{\}]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
+
+function isMobileDevice() {
+  if (typeof window === "undefined") return false;
+  const w = window.innerWidth;
+  if (w > 0 && w <= 768) return true;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
+}
+
 /* ========== SOP Header Component ========== */
 
 export default function SOPHeader({
@@ -116,8 +126,14 @@ export default function SOPHeader({
   saveMessage,
   sopDataCount = 0,
   isCollapsed = false,
-  onToggleCollapse
+  onToggleCollapse,
+  isReviewer = false,
+  isAdmin = false,
+  isUser = false,
+  schedulePreparerName = "",
+  schedulePreparerDate = ""
 }) {
+  const toast = useToast();
   const [selectedFile, setSelectedFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState("");
@@ -147,8 +163,7 @@ export default function SOPHeader({
   /* ---------- PDF extraction preview (client-side) ---------- */
   async function extractFullTextFromPdfArrayBuffer(arrayBuffer) {
     await ensureWorkerAvailable();
-    const copyBuf = arrayBuffer.slice ? arrayBuffer.slice(0) : arrayBuffer;
-    const data = new Uint8Array(copyBuf);
+    const data = new Uint8Array(arrayBuffer);
     const loadingTask = pdfjsLib.getDocument({ data });
     const pdf = await loadingTask.promise;
     const pageTexts = [];
@@ -316,7 +331,14 @@ export default function SOPHeader({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") {
-      alert("Only PDF files are allowed.");
+      toast.show("Only PDF files are allowed.", "error");
+      return;
+    }
+
+    const mobile = isMobileDevice();
+    if (mobile && file.size > MAX_PDF_SIZE_MOBILE_BYTES) {
+      toast.show("File too large for mobile (max 4MB). Use a smaller PDF or upload from desktop.", "error");
+      e.target.value = "";
       return;
     }
 
@@ -326,14 +348,14 @@ export default function SOPHeader({
     try {
       const arrayBuffer = await file.arrayBuffer();
 
-      // client-side preview: extract text
       const fullText = await extractFullTextFromPdfArrayBuffer(arrayBuffer);
-      setFullTextPreview(fullText || "");
+      const previewText = fullText || "";
+      setFullTextPreview(mobile && previewText.length > 30000 ? previewText.slice(0, 30000) + "\n\n[... truncated for mobile ...]" : previewText);
 
-      // convert to base64 (safe)
+      await new Promise((r) => setTimeout(r, 0));
+
       const base64 = await arrayBufferToBase64UsingFileReader(arrayBuffer);
 
-      // call server AI to extract steps
       const aiRes = await callAiExtract({ data: base64, text: fullText });
 
       if (aiRes && aiRes.success && Array.isArray(aiRes.steps) && aiRes.steps.length > 0) {
@@ -377,7 +399,7 @@ export default function SOPHeader({
   // Open modal WITHOUT generating comments - user will click "Generate Comment" button
   const openAppendModal = () => {
     if (!parsedPreview || parsedPreview.length === 0) {
-      alert("No parsed results to append.");
+      toast.show("No parsed results to append.", "error");
       return;
     }
     
@@ -541,27 +563,28 @@ export default function SOPHeader({
       <div className="fixed z-40 top-3 right-4">
         <button
           onClick={onToggleCollapse}
-          className="w-11 h-9 flex items-center justify-center rounded-full shadow-md hover:shadow-lg border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700 transition-all duration-300 transform hover:scale-110 active:scale-95"
+          className="w-11 h-9 flex items-center justify-center rounded-full shadow-md border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700"
           title={isCollapsed ? "Tampilkan header" : "Sembunyikan header"}
+          suppressHydrationWarning
         >
           {isCollapsed ? "▼" : "▲"}
         </button>
       </div>
 
-      {/* Main Header with SOP Source & Status - Enhanced */}
-      <header className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl transition-all duration-700 ease-out ${
-        isCollapsed ? 'transform -translate-y-full opacity-0 scale-95' : 'transform translate-y-0 opacity-100 scale-100'
-      }`}>
+      {/* Main Header: scrollable when too tall on responsive */}
+      <header className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl max-h-[90vh] overflow-y-auto overscroll-contain ${
+        isCollapsed ? '-translate-y-full opacity-0 invisible' : 'translate-y-0 opacity-100 visible'
+      }`}
+        style={{ transition: 'none' }}
+      >
         <div className="max-w-7xl mx-auto">
           {/* Compact Header Section - Enhanced */}
-          <div className={`px-6 py-4 transition-all duration-500 delay-200 ${
-            isCollapsed ? 'opacity-0 transform translate-y-2' : 'opacity-100 transform translate-y-0'
-          }`}>
+          <div className={`px-6 py-4 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}>
             <div className="flex items-center justify-between">
               {/* Left Side - Title with Icon */}
               <div className="flex items-center gap-4">
                 {/* Icon Badge */}
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl shadow-lg flex items-center justify-center transform hover:scale-105 transition-transform duration-200">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl shadow-lg flex items-center justify-center">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
@@ -582,9 +605,7 @@ export default function SOPHeader({
               </div>
 
               {/* Right Side - Status message */}
-              <div className={`flex items-center justify-end gap-2 transition-all duration-500 delay-400 ${
-                isCollapsed ? 'opacity-0 transform -translate-x-4' : 'opacity-100 transform translate-x-0'
-              }`}>
+              <div className={`flex items-center justify-end gap-2 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}>
                 {saveMessage && (
                   <div className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-md ${
                     saveMessage.type === "error"
@@ -598,13 +619,15 @@ export default function SOPHeader({
             </div>
           </div>
 
-          {/* Bottom Section - Preparer & Reviewer - Enhanced */}
-          <div className={`px-6 py-4 bg-gradient-to-b from-white/40 via-white/30 to-transparent border-t border-slate-200/40 transition-all duration-500 delay-500 ease-out overflow-hidden ${
-            isCollapsed ? 'max-h-0 py-0 opacity-0 transform translate-y-2' : 'max-h-[400px] opacity-100 transform translate-y-0'
-          }`}>
+          {/* Bottom Section - Preparer & Reviewer (height natural; header is scrollable when long) */}
+          <div className={`px-6 py-4 bg-gradient-to-b from-white/40 via-white/30 to-transparent border-t border-slate-200/40 overflow-visible ${
+            isCollapsed ? 'max-h-0 py-0 opacity-0 overflow-hidden' : 'opacity-100'
+          }`}
+            style={{ transition: 'none' }}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Preparer Section - Enhanced Card */}
-              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-md hover:shadow-lg transition-all duration-300">
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-md">
                 <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200/50">
                   <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -614,9 +637,11 @@ export default function SOPHeader({
                   <div className="flex-1">
                     <h3 className="text-sm font-bold text-slate-800">Preparer</h3>
                     <select
-                      className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={preparerStatus}
                       onChange={(e) => onPreparerStatusChange?.(e.target.value)}
+                      disabled={isReviewer}
+                      suppressHydrationWarning
                     >
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
@@ -625,31 +650,50 @@ export default function SOPHeader({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <input
-                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       placeholder="Name"
                       value={preparerName}
                       onChange={(e) => onPreparerNameChange?.(e.target.value)}
+                      disabled={isReviewer || (isUser && schedulePreparerName)}
+                      readOnly={isUser && schedulePreparerName}
+                      suppressHydrationWarning
                     />
                     <input
                       type="date"
-                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      value={preparerDate}
-                      onChange={(e) => onPreparerDateChange?.(e.target.value)}
+                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      value={preparerDate || ""}
+                      onChange={(e) => {
+                        // Prevent change if schedule per module has start_date and user is regular user
+                        if (schedulePreparerDate && isUser) {
+                          console.warn(`[SOP Header] Cannot change preparer date - it's set from schedule per module: ${schedulePreparerDate}`);
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false; // Ignore the change
+                        }
+                        onPreparerDateChange?.(e.target.value);
+                      }}
+                      disabled={isReviewer || schedulePreparerDate}
+                      readOnly={schedulePreparerDate}
+                      title={schedulePreparerDate ? `Date is set from schedule per module: ${schedulePreparerDate}. Cannot be changed.` : ""}
+                      suppressHydrationWarning
                     />
                   </div>
 
                   {/* PDF Upload - Enhanced */}
                   <div className="space-y-2">
-                    <label className="relative cursor-pointer block">
+                    <label className={`relative block ${isReviewer ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                       <input
                         type="file"
                         accept="application/pdf"
                         onChange={handleFileChange}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        disabled={isReviewer}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                       />
-                      <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
+                      <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-md ${
                         parsing 
                           ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white border border-blue-400" 
+                          : isReviewer
+                          ? "bg-gradient-to-r from-gray-200 to-gray-100 text-gray-500 border border-gray-300"
                           : "bg-gradient-to-r from-slate-100 to-slate-50 text-slate-700 border border-slate-300 hover:from-slate-200 hover:to-slate-100"
                       }`}>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -662,7 +706,7 @@ export default function SOPHeader({
                       <button
                         onClick={openAppendModal}
                         disabled={aiInProgress}
-                        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
+                        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-md ${
                           aiInProgress
                             ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                             : "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white"
@@ -695,7 +739,7 @@ export default function SOPHeader({
               </div>
 
               {/* Reviewer Section - Enhanced Card */}
-              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-md hover:shadow-lg transition-all duration-300">
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-md">
                 <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200/50">
                   <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -705,9 +749,11 @@ export default function SOPHeader({
                   <div className="flex-1">
                     <h3 className="text-sm font-bold text-slate-800">Reviewer</h3>
                     <select
-                      className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={reviewerStatus}
                       onChange={(e) => onReviewerStatusChange?.(e.target.value)}
+                      disabled={isAdmin || isUser}
+                      suppressHydrationWarning
                     >
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
@@ -716,24 +762,33 @@ export default function SOPHeader({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <input
-                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       placeholder="Name"
                       value={reviewerName}
                       onChange={(e) => onReviewerNameChange?.(e.target.value)}
+                      disabled={isAdmin || isUser}
+                      readOnly={isUser}
+                      suppressHydrationWarning
                     />
                     <input
                       type="date"
-                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={reviewerDate}
                       onChange={(e) => onReviewerDateChange?.(e.target.value)}
+                      disabled={isAdmin || isUser}
+                      suppressHydrationWarning
+                      readOnly={isUser}
                     />
                   </div>
                   <textarea
-                    className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all resize-none"
+                    className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                     rows={3}
                     placeholder="Review comments..."
                     value={reviewerComment}
                     onChange={(e) => onReviewerCommentChange?.(e.target.value)}
+                    disabled={isAdmin || isUser}
+                    readOnly={isUser}
+                    suppressHydrationWarning
                   />
                 </div>
               </div>
@@ -742,24 +797,24 @@ export default function SOPHeader({
         </div>
       </header>
 
-      {/* Modal: preview comments */}
+      {/* Modal: preview comments - padding on mobile so popup not full-bleed / hidden on Android */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-[min(1000px,95vw)] max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg">📝</span>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 px-3 pt-1 pb-4 sm:p-0 sm:px-4">
+          <div className="bg-white rounded-2xl shadow-lg sm:shadow-2xl w-full sm:w-[min(1000px,95vw)] max-h-[88vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-base sm:text-lg">📝</span>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Review Comments Preview</h3>
-                  <p className="text-xs text-slate-600">Review and edit generated comments before appending</p>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Review Comments Preview</h3>
+                  <p className="text-xs text-slate-600 hidden sm:block">Review and edit generated comments before appending</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={handleAddItem}
-                  className="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:border-slate-400 shadow-sm hover:shadow-md flex items-center gap-2"
+                  className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 flex items-center justify-center gap-2"
                   title="Add new SOP item"
                 >
                   <span>➕</span>
@@ -769,15 +824,15 @@ export default function SOPHeader({
                   <button
                     onClick={handleGenerateComments}
                     disabled={modalLoading}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                    className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
                       modalLoading
                         ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                        : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-sm hover:shadow-md"
+                        : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-sm"
                     }`}
                   >
                     {modalLoading ? (
                       <span className="flex items-center gap-2">
-                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
                         Generating...
                       </span>
                     ) : (
@@ -786,15 +841,16 @@ export default function SOPHeader({
                   </button>
                 )}
                 <button
-                  className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
+                  className="min-h-[44px] min-w-[44px] sm:w-8 sm:h-8 sm:min-h-0 sm:min-w-0 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
                   onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}
+                  aria-label="Close"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 max-h-[calc(82vh-160px)] sm:max-h-[calc(90vh-140px)] overscroll-contain">
               {modalLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
@@ -817,43 +873,42 @@ export default function SOPHeader({
                       <div className="text-slate-500 text-sm">No items yet. Please upload a PDF first, or add items manually.</div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3 sm:space-y-4">
                       {modalItems.map((it, idx) => (
-                        <div key={idx} className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-xl p-4 shadow-sm relative">
-                          {/* Delete button */}
+                        <div key={idx} className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-sm relative">
                           <button
                             onClick={() => handleRemoveItem(idx)}
-                            className="absolute top-3 right-3 w-7 h-7 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg flex items-center justify-center text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                            className="absolute top-2 right-2 sm:top-3 sm:right-3 min-h-[36px] min-w-[36px] sm:w-7 sm:h-7 sm:min-h-0 sm:min-w-0 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg flex items-center justify-center text-xs font-semibold transition-colors"
                             title="Remove this item"
+                            aria-label="Remove item"
                           >
                             🗑️
                           </button>
-                          
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">
+                          <div className="flex items-center gap-2 mb-2 sm:mb-3 pr-10">
+                            <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
                               {it.no}
                             </span>
                             <span className="text-sm font-semibold text-slate-700">SOP Item</span>
                           </div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-2">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                             📝 SOP Description
                           </label>
                           <textarea
-                            className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none mb-3"
+                            className="w-full p-2.5 sm:p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none mb-2 sm:mb-3 min-h-[72px]"
                             rows={3}
                             value={it.sop_related || ""}
                             onChange={(e) => setModalItemSopRelated(idx, e.target.value)}
                             placeholder="Enter SOP description..."
                           />
-                          <label className="block text-xs font-semibold text-slate-600 mb-2">
-                            💬 Review Comment {it.comment ? "(Generated)" : "(Click 'Generate Comment' to generate)"}
+                          <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                            💬 Review Comment {it.comment ? "(Generated)" : ""}
                           </label>
                           <textarea
-                            className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                            className="w-full p-2.5 sm:p-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[72px]"
                             rows={3}
                             value={it.comment || ""}
                             onChange={(e) => setModalItemComment(idx, e.target.value)}
-                            placeholder={it.comment ? "Edit comment..." : "Click 'Generate Comment' to generate automatically, or type manually..."}
+                            placeholder={it.comment ? "Edit comment..." : "Generate or type comment..."}
                           />
                         </div>
                       ))}
@@ -863,15 +918,15 @@ export default function SOPHeader({
               )}
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
               <button
-                className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
                 onClick={() => { setModalOpen(false); setModalItems([]); setModalError(""); }}
               >
                 Cancel
               </button>
               <button
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={saveAndAppendFromModal}
                 disabled={modalLoading}
               >
@@ -884,20 +939,20 @@ export default function SOPHeader({
 
       {/* Add Item Popup */}
       {addItemModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-[min(600px,95vw)] max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg">➕</span>
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 px-3 pt-1 pb-4 sm:p-0 sm:px-4">
+          <div className="bg-white rounded-2xl shadow-lg sm:shadow-2xl w-full sm:w-[min(600px,95vw)] max-h-[82vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-base sm:text-lg">➕</span>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Add New SOP Item</h3>
-                  <p className="text-xs text-slate-600">Enter SOP description and optional comment</p>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-800">Add New SOP Item</h3>
+                  <p className="text-xs text-slate-600 hidden sm:block">Enter SOP description and optional comment</p>
                 </div>
               </div>
               <button
-                className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
+                className="min-h-[44px] min-w-[44px] sm:w-8 sm:h-8 sm:min-h-0 sm:min-w-0 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
                 onClick={() => {
                   setAddItemModalOpen(false);
                   setNewItemSopRelated("");
@@ -908,19 +963,19 @@ export default function SOPHeader({
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               {addItemError && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <div className="mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                   ⚠️ {addItemError}
                 </div>
               )}
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     📝 SOP Description <span className="text-red-500">*</span>
                   </label>
                   <textarea
-                    className="w-full p-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    className="w-full p-2.5 sm:p-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[100px]"
                     rows={4}
                     value={newItemSopRelated}
                     onChange={(e) => setNewItemSopRelated(e.target.value)}
@@ -932,7 +987,7 @@ export default function SOPHeader({
                     💬 Review Comment (Optional)
                   </label>
                   <textarea
-                    className="w-full p-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    className="w-full p-2.5 sm:p-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[80px]"
                     rows={3}
                     value={newItemComment}
                     onChange={(e) => setNewItemComment(e.target.value)}
@@ -942,9 +997,9 @@ export default function SOPHeader({
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
               <button
-                className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
                 onClick={() => {
                   setAddItemModalOpen(false);
                   setNewItemSopRelated("");
@@ -954,7 +1009,7 @@ export default function SOPHeader({
                 Cancel
               </button>
               <button
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all transform hover:scale-105"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-colors"
                 onClick={handleSaveNewItem}
               >
                 ✅ Save
@@ -966,20 +1021,20 @@ export default function SOPHeader({
 
       {/* Delete Confirmation Popup */}
       {deleteConfirmOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-[min(520px,95vw)] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-red-50 to-orange-50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg">🗑️</span>
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 px-3 pt-1 pb-4 sm:p-0 sm:px-4">
+          <div className="bg-white rounded-2xl shadow-lg sm:shadow-2xl w-full sm:w-[min(520px,95vw)] overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-red-50 to-orange-50">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-base sm:text-lg">🗑️</span>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Remove SOP Item</h3>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-800">Remove SOP Item</h3>
                   <p className="text-xs text-slate-600">Are you sure you want to remove this item?</p>
                 </div>
               </div>
               <button
-                className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors"
+                className="min-h-[44px] min-w-[44px] sm:w-8 sm:h-8 sm:min-h-0 sm:min-w-0 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-colors flex-shrink-0"
                 onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmIndex(null); }}
                 aria-label="Close"
               >
@@ -987,21 +1042,21 @@ export default function SOPHeader({
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <div className="text-sm text-slate-700">
                 This action will remove the item from the preview list. You can add it again if needed.
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50">
               <button
-                className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium transition-colors"
                 onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmIndex(null); }}
               >
                 No
               </button>
               <button
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium transition-all transform hover:scale-105"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium transition-colors"
                 onClick={confirmRemoveItem}
               >
                 Yes, remove

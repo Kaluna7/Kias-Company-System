@@ -6,13 +6,15 @@ export const useGeneralAffairStore = create((set, get) => ({
   generalAffair: [],
   currentFilter: "published",
 
-  loadGeneralAffair: async (status = "published") => {
+  loadGeneralAffair: async (status = "published", page = 1, pageSize = 50) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/g&a?status=${status}`);
+      const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      const res = await fetch(`/api/RiskAssessment/g&a?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch general affair");
-      const data = await res.json();
-      set({ generalAffair: data, currentFilter: status });
-      return data;
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : json;
+      set({ generalAffair: list, meta: json?.meta ?? null, currentFilter: status });
+      return list;
     } catch (err) {
       console.error("loadGeneralAffair error:", err);
       return [];

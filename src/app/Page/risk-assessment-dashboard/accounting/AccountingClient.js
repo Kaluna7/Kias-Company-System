@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
@@ -8,6 +8,7 @@ import { NewAccountingInput } from "@/app/components/ui/PopUpRiskAssessmentInput
 import { usePopUp } from "@/app/stores/ComponentsStore/popupStore";
 import { useAccountingStore } from "@/app/stores/RiskAssessement/accountingStore";
 import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
+import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
@@ -22,6 +23,8 @@ export default function AccountingClient({ initialData = [] }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState(null);
+  const [paginationLoading, setPaginationLoading] = useState(false);
+  const isLoadingRef = useRef(false);
 
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
@@ -73,7 +76,7 @@ export default function AccountingClient({ initialData = [] }) {
         action: () => {
           const accountings = useAccountingStore.getState().accounting;
           if (!accountings || accountings.length === 0) {
-            alert("Tidak ada data untuk diexport");
+            if (typeof window !== "undefined" && window.__showToast) window.__showToast("Tidak ada data untuk diexport", "error"); else alert("Tidak ada data untuk diexport");
             return;
           }
 
@@ -94,19 +97,31 @@ export default function AccountingClient({ initialData = [] }) {
       {
         name: "View Draft",
         action: async () => {
-          setViewDraft(true);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadAccounting("draft");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(true);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadAccounting("draft");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
       {
         name: "View Published",
         action: async () => {
-          setViewDraft(false);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadAccounting("published");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(false);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadAccounting("published");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
     ];
@@ -154,20 +169,26 @@ export default function AccountingClient({ initialData = [] }) {
   );
 
   function AccountingTableWrapper() {
+    const meta = useAccountingStore((s) => s.meta);
     const load = useCallback(
-      () => loadAccounting(viewDraft ? "draft" : "published"),
-      [loadAccounting, viewDraft]
+      async (page) => {
+        if (isLoadingRef.current) return;
+        isLoadingRef.current = true;
+        setPaginationLoading(true);
+        try {
+          await loadAccounting(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+        } finally {
+          isLoadingRef.current = false;
+          setPaginationLoading(false);
+        }
+      },
+      [loadAccounting, viewDraft, meta?.page, meta?.pageSize]
     );
 
     useEffect(() => {
-      // Only load if we don't have initial data or if switching views
-      // Skip loading if we already have initial data and viewing published
-      if (viewDraft) {
-        load();
-      } else if (!initialData || initialData.length === 0) {
-        load();
-      }
-    }, [load, viewDraft, initialData]);
+      if (!isLoadingRef.current) load(1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewDraft]);
 
     const accountings = useAccountingStore((s) => s.accounting);
 
@@ -190,19 +211,27 @@ export default function AccountingClient({ initialData = [] }) {
     }, [accountings, sortOption]);
 
     return (
-      <DataTable
-        items={sortedAccountings}
-        load={load}
-        convertMode={convertMode}
-        onCloseConvert={() => setConvertMode(false)}
-        viewDraft={viewDraft}
-        editMode={editMode}
-        onEditRow={(item) => {
-          setSelectedItem(item);
-          openPopUp();
-        }}
-        searchQuery={searchQuery}
-      />
+      <>
+        <DataTable
+          apiPath="accounting"
+          items={sortedAccountings}
+          load={() => load(meta?.page ?? 1)}
+          convertMode={convertMode}
+          onCloseConvert={() => setConvertMode(false)}
+          viewDraft={viewDraft}
+          editMode={editMode}
+          onEditRow={(item) => {
+            setSelectedItem(item);
+            openPopUp();
+          }}
+          searchQuery={searchQuery}
+        />
+        <Pagination
+          meta={meta}
+          onPageChange={(p) => load(p)}
+          loading={paginationLoading}
+        />
+      </>
     );
   }
 

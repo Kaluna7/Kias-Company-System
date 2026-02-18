@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function MISAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("mis");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("mis");
   return (
     <AuditFindingDeptClient
       apiPath="mis"
@@ -10,6 +10,7 @@ export default async function MISAuditFindingPage() {
       departmentLabel="MIS"
       description="Document and track MIS audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
@@ -8,6 +8,7 @@ import { NewWarehouseInput } from "@/app/components/ui/PopUpRiskAssessmentInput"
 import { usePopUp } from "@/app/stores/ComponentsStore/popupStore";
 import { useWarehouseStore } from "@/app/stores/RiskAssessement/whsStore";
 import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
+import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
@@ -22,6 +23,8 @@ export default function WhsClient({ initialData = [] }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState(null);
+  const [paginationLoading, setPaginationLoading] = useState(false);
+  const isLoadingRef = useRef(false);
 
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
@@ -68,7 +71,7 @@ export default function WhsClient({ initialData = [] }) {
         action: () => {
           const warehouse = useWarehouseStore.getState().warehouse;
           if (!warehouse || warehouse.length === 0) {
-            alert("Tidak ada data untuk diexport");
+            if (typeof window !== "undefined" && window.__showToast) window.__showToast("Tidak ada data untuk diexport", "error"); else alert("Tidak ada data untuk diexport");
             return;
           }
           const status = viewDraft ? "Draft" : "Published";
@@ -86,19 +89,31 @@ export default function WhsClient({ initialData = [] }) {
       {
         name: "View Draft",
         action: async () => {
-          setViewDraft(true);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadWarehouse("draft");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(true);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadWarehouse("draft");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
       {
         name: "View Published",
         action: async () => {
-          setViewDraft(false);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadWarehouse("published");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(false);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadWarehouse("published");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
     ];
@@ -146,16 +161,26 @@ export default function WhsClient({ initialData = [] }) {
   );
 
   function WarehouseTableWrapper() {
+    const meta = useWarehouseStore((s) => s.meta);
     const load = useCallback(
-      () => loadWarehouse(viewDraft ? "draft" : "published"),
-      [loadWarehouse, viewDraft]
+      async (page) => {
+        if (isLoadingRef.current) return;
+        isLoadingRef.current = true;
+        setPaginationLoading(true);
+        try {
+          await loadWarehouse(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+        } finally {
+          isLoadingRef.current = false;
+          setPaginationLoading(false);
+        }
+      },
+      [loadWarehouse, viewDraft, meta?.page, meta?.pageSize]
     );
 
     useEffect(() => {
-      if (!initialData || initialData.length === 0 || viewDraft) {
-        load();
-      }
-    }, [load, viewDraft, initialData]);
+      if (!isLoadingRef.current) load(1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewDraft]);
 
     const warehouse = useWarehouseStore((s) => s.warehouse);
     const sortedWarehouse = useMemo(() => {
@@ -174,19 +199,23 @@ export default function WhsClient({ initialData = [] }) {
     }, [warehouse, sortOption]);
 
     return (
-      <DataTable
-        items={sortedWarehouse}
-        load={load}
-        convertMode={convertMode}
-        onCloseConvert={() => setConvertMode(false)}
-        viewDraft={viewDraft}
-        editMode={editMode}
-        onEditRow={(item) => {
-          setSelectedItem(item);
-          openPopUp();
-        }}
-        searchQuery={searchQuery}
-      />
+      <>
+        <DataTable
+          apiPath="whs"
+          items={sortedWarehouse}
+          load={() => load(meta?.page ?? 1)}
+          convertMode={convertMode}
+          onCloseConvert={() => setConvertMode(false)}
+          viewDraft={viewDraft}
+          editMode={editMode}
+          onEditRow={(item) => {
+            setSelectedItem(item);
+            openPopUp();
+          }}
+          searchQuery={searchQuery}
+        />
+        <Pagination meta={meta} onPageChange={(p) => load(p)} loading={paginationLoading} />
+      </>
     );
   }
 

@@ -8,13 +8,15 @@ export const useHrdStore = create((set, get) => ({
 
   setHrd: (data) => set({ hrd: data }),
 
-  loadHrd: async (status = "published") => {
+  loadHrd: async (status = "published", page = 1, pageSize = 50) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/hrd?status=${status}`);
+      const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      const res = await fetch(`/api/RiskAssessment/hrd?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch Hrd");
-      const data = await res.json();
-      set({ hrd: data, currentFilter: status });
-      return data;
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : json;
+      set({ hrd: list, meta: json?.meta ?? null, currentFilter: status });
+      return list;
     } catch (err) {
       console.error("loadHrd error:", err);
       return [];

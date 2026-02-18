@@ -16,13 +16,15 @@ export default function AuditProgram() {
                     src="/images/kias-logo.webp"
                     width={100}
                     height={100}
-                    alt='kias logo'
+                    alt="KIAS logo"
                     className="drop-shadow-lg"
+                    priority
+                    sizes="(max-width: 768px) 64px, 100px"
                   />
                 </div>
               </div>
               <div className="text-center">
-                <h3 className="text-3xl font-bold text-white drop-shadow-lg">AUDIT PROGRAM</h3>
+                <h3 className="text-3xl font-bold text-white" style={{ fontFamily: "system-ui, sans-serif", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>AUDIT PROGRAM</h3>
                 <p className="text-blue-200 mt-1 font-medium">Management Dashboard</p>
               </div>
             </div>

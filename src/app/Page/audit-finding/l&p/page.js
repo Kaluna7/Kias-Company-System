@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function LPAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("l&p");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("l&p");
   return (
     <AuditFindingDeptClient
       apiPath="l&p"
@@ -10,6 +10,7 @@ export default async function LPAuditFindingPage() {
       departmentLabel="SECURITY L&P"
       description="Document and track security L&P audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

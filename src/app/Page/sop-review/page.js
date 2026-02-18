@@ -25,46 +25,30 @@ function getDepartmentApiPath(name) {
   return deptMap[name] || null;
 }
 
-// Server-side function to load SOP statuses (AUTO):
-// - AVAILABLE if department has draft/unpublished SOP rows
-// - Not Available if no rows (or after Publish, because dept table is cleared)
+// Server-side: one batch request for all SOP statuses (fast)
 async function loadSopStatuses() {
   const statusMap = {};
-
-  // Get base URL from headers for server-side fetch
   const headersList = await headers();
-  const host = headersList.get('host') || 'localhost:3000';
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  const host = headersList.get("host") || "localhost:3000";
+  const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
   const baseUrl = `${protocol}://${host}`;
 
-  // Use Promise.allSettled to handle errors gracefully
-  const promises = buttonSopReview
-    .filter(item => item.name !== "Report")
-    .map(async (item) => {
+  try {
+    const res = await fetch(`${baseUrl}/api/SopReview/status`, { cache: "no-store" });
+    const data = await res.json().catch(() => null);
+    const statuses = res.ok && data?.success ? data.statuses || {} : {};
+
+    for (const item of buttonSopReview) {
+      if (item.name === "Report") continue;
       const apiPath = getDepartmentApiPath(item.name);
-      if (!apiPath) {
-        statusMap[item.name] = "Not Available";
-        return;
-      }
-
-      try {
-        const res = await fetch(`${baseUrl}/api/SopReview/${apiPath}/status`, {
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          statusMap[item.name] = "Not Available";
-          return;
-        }
-        const data = await res.json().catch(() => null);
-        statusMap[item.name] = data?.status || "Not Available";
-      } catch (err) {
-        // Silently handle errors - endpoint might not exist yet
-        console.warn(`Failed to load status for ${item.name}:`, err.message);
-        statusMap[item.name] = "Not Available";
-      }
-    });
-
-  await Promise.allSettled(promises);
+      statusMap[item.name] = apiPath ? (statuses[apiPath] || "Not Available") : "Not Available";
+    }
+  } catch (err) {
+    console.warn("Failed to load SOP statuses:", err?.message);
+    for (const item of buttonSopReview) {
+      if (item.name !== "Report") statusMap[item.name] = "Not Available";
+    }
+  }
   return statusMap;
 }
 
@@ -121,15 +105,19 @@ async function SopReviewGrid() {
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = (session?.user?.name || "").trim();
-  const isAdmin = (session?.user?.role || "").toLowerCase() === "admin";
+  const role = (session?.user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+  const isReviewer = role === "reviewer";
   
   console.log(`[SOP Review] Session check:`, {
     userName,
     isAdmin,
+    isReviewer,
     sessionUser: session?.user,
   });
   
   // Get user assignments for SOP Review module
+  // Reviewer needs assignment like regular user, but can only edit reviewer fields
   let allowedDepartments = [];
   if (!isAdmin && userName) {
     try {
@@ -202,7 +190,8 @@ async function SopReviewGrid() {
   
   const isDepartmentEnabled = (deptName) => {
     // Admin can access all departments
-    if (isAdmin) return true;
+    // Reviewer can access all departments (for viewing), but can only edit reviewer fields
+    if (isAdmin || isReviewer) return true;
     // Report is always accessible
     if (deptName === "Report") return true;
     // If no assignments, disable all departments
@@ -346,7 +335,7 @@ export default function SopReview() {
                 </div>
               </div>
               <div className="text-center">
-                <h3 className="text-3xl font-bold text-white drop-shadow-lg">SOP REVIEW</h3>
+                <h3 className="text-3xl font-bold text-white" style={{ fontFamily: "system-ui, sans-serif", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>SOP REVIEW</h3>
                 <p className="text-blue-200 mt-1 font-medium">Management Dashboard</p>
               </div>
             </div>

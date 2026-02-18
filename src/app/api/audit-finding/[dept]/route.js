@@ -43,6 +43,12 @@ function toIntOrNull(v) {
   return Number.isNaN(n) ? null : n;
 }
 
+function toIntSafe(v, fallback) {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
 // Truncate string to max length
 function truncateString(str, maxLength) {
   if (!str || str === null || str === undefined) return null;
@@ -106,15 +112,38 @@ export async function GET(req, { params }) {
     const delegate = getDelegate(dept);
     if (!delegate) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
 
-    const findings = await delegate.findMany({ orderBy: { id: "desc" } });
-    
+    const url = new URL(req.url);
+    const page = Math.max(1, toIntSafe(url.searchParams.get("page"), 1));
+    const pageSize = Math.max(1, Math.min(100, toIntSafe(url.searchParams.get("pageSize"), 50)));
+    const skip = (page - 1) * pageSize;
+
+    const where = {
+      NOT: {
+        completion_status: {
+          equals: "COMPLETED",
+          mode: "insensitive",
+        },
+      },
+    };
+
+    // Exclude findings with completion_status = "COMPLETED" (already published)
+    const [findings, total] = await Promise.all([
+      delegate.findMany({
+        where,
+        orderBy: { id: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      delegate.count({ where }),
+    ]);
+
     // Get audit-program mapping for this department
     // This mapping ensures ALL departments in audit-finding connect to their corresponding audit-program
     const apMapping = deptToAuditProgram[dept];
     if (!apMapping) {
       // If no mapping exists for this department, return findings as-is
       console.warn(`[audit-finding/${dept}] No audit-program mapping found for department: ${dept}`);
-      return NextResponse.json({ data: findings }, { status: 200 });
+      return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
     }
 
     const apModel = getAuditProgramAp(dept);
@@ -391,7 +420,7 @@ export async function GET(req, { params }) {
       })
     );
 
-    return NextResponse.json({ data: enrichedFindings }, { status: 200 });
+    return NextResponse.json({ data: enrichedFindings, meta: { total, page, pageSize } }, { status: 200 });
   } catch (err) {
     console.error(`GET /api/audit-finding/[dept] error:`, err);
     return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 });

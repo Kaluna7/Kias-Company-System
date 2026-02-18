@@ -64,7 +64,7 @@ async function loadAuditFindingReportData() {
       try {
         const endpoint = `${baseUrl}/api/audit-finding/${deptInfo.apiPath}`;
         const res = await fetch(endpoint, {
-          next: { revalidate: 30 },
+          cache: "no-store",
         });
         
         if (!res.ok) {

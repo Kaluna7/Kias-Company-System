@@ -5,17 +5,20 @@ import { create } from "zustand";
 
 export const useFinanceStore = create((set , get) => ({
   finance: [],
+  meta: null,
   currentFilter: "published",
 
   setFinance: (data) => set({ finance: data }),
 
-  loadFinance: async (status = "published") => {
+  loadFinance: async (status = "published", page = 1, pageSize = 50) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/finance?status=${status}`);
+      const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      const res = await fetch(`/api/RiskAssessment/finance?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch finances");
-      const data = await res.json();
-      set({ finance: data, currentFilter: status });
-      return data;
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : json;
+      set({ finance: list, meta: json?.meta ?? null, currentFilter: status });
+      return list;
     } catch (err) {
       console.error("loadFinance error:", err);
       return [];

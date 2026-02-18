@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
+import { useToast } from "@/app/contexts/ToastContext";
 
 // Default options for SELECT fields based on Executive Summary template
 const OBJECTIVE_OPTIONS = [
@@ -56,6 +57,7 @@ export default function AuditReviewDeptClient({
   initialExecutiveSummary = null,
   initialSchedule = null,
 }) {
+  const toast = useToast();
   const [findings, setFindings] = useState(initialFindings);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -308,10 +310,10 @@ export default function AuditReviewDeptClient({
         throw new Error("Failed to save executive summary");
       }
 
-      alert("Data saved successfully!");
+      toast.show("Data saved successfully!", "success");
     } catch (e) {
       setError(e?.message || String(e));
-      alert(`Error: ${e?.message || String(e)}`);
+      toast.show("Error: " + (e?.message || String(e)), "error");
     } finally {
       setLoading(false);
     }
@@ -798,10 +800,10 @@ export default function AuditReviewDeptClient({
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table - responsive: horizontal scroll when narrow */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 mb-4">
-          <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="w-full border-collapse text-xs" style={{ tableLayout: "fixed", width: "100%" }}>
+          <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
+            <table className="w-full border-collapse text-xs min-w-[2200px]" style={{ tableLayout: "fixed" }}>
               <thead>
                 <tr className="bg-gray-100">
                   <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "60px" }}>No.</th>
@@ -869,7 +871,7 @@ export default function AuditReviewDeptClient({
 
         {/* Select Modal */}
         {selectModal.open && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={closeSelectModal}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-white/20 p-4" onClick={closeSelectModal}>
             <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="bg-blue-600 p-4 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-white">Select Options</h3>

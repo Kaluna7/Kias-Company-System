@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import ConfirmModal from "../../features/ConfirmModal";
 import { useFinanceStore } from "@/app/stores/RiskAssessement/financeStore";
+import { useToast } from "@/app/contexts/ToastContext";
 
 export function DataTable({
   items,
@@ -13,7 +14,9 @@ export function DataTable({
   editMode = false,
   onEditRow = () => {},
   searchQuery = "",
+  apiPath = "finance", // Default API path, should be passed from parent
 }) {
+  const toast = useToast();
   const updateStatus = useFinanceStore((s) => s.updateStatus);
   const moveToDraft = useFinanceStore((s) => s.moveToDraft);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -67,7 +70,17 @@ export function DataTable({
     if (!confirmPayload) return;
     const { id, action } = confirmPayload;
     try {
-      if (action === "publish") {
+      if (action === "delete") {
+        // Delete data
+        const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({ error: "Failed to delete" }));
+          throw new Error(error.error || "Failed to delete");
+        }
+        toast.show("Data deleted successfully", "success");
+      } else if (action === "publish") {
         await updateStatus(id, "published");
       } else if (action === "draft") {
         await moveToDraft(id);
@@ -78,14 +91,14 @@ export function DataTable({
       closeConfirm();
     } catch (err) {
       console.error("Confirm action error:", err);
-      alert("Gagal melakukan action: " + (err?.message || err));
+      toast.show("Gagal melakukan action: " + (err?.message || err), "error");
     }
   };
 
   return (
     <div className="p-4">
-      <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm">
-        <table className="min-w-full table-fixed border-collapse text-xs">
+      <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
+        <table className="min-w-[1000px] w-full table-fixed border-collapse text-xs">
           <colgroup>
             <col style={{ width: "5%" }} />
             <col style={{ width: "7%" }} />
@@ -197,15 +210,24 @@ export function DataTable({
                 {(convertMode || editMode) && (
                   <td className="p-1 text-center border border-gray-200">
                     <div className="flex items-center justify-center gap-2">
-                      {/* jika editMode aktif & kita sedang melihat draft -> tampilkan tombol Edit */}
+                      {/* jika editMode aktif & kita sedang melihat draft -> tampilkan tombol Edit dan Delete */}
                       {editMode && viewDraft && (
-                        <button
-                          title="Edit"
-                          className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                          onClick={() => onEditRow(f)}
-                        >
-                          ✏️ Edit
-                        </button>
+                        <>
+                          <button
+                            title="Edit"
+                            className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                            onClick={() => onEditRow(f)}
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            title="Delete"
+                            className="px-2 py-1 bg-red-600 text-white rounded text-xs"
+                            onClick={() => openConfirm({ id: f.risk_id, action: "delete" })}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </>
                       )}
 
                       {/* jika convertMode aktif: tampilkan Publish di viewDraft, atau Move to Draft di published */}
@@ -239,8 +261,20 @@ export function DataTable({
 
       {confirmOpen && confirmPayload && (
         <ConfirmModal
-          title={confirmPayload.action === "publish" ? "Move to Published" : "Confirm"}
-          message={confirmPayload.action === "publish" ? "Are you sure you want to move this data to Published?" : "Are you sure you want to move this data to Draft?"}
+          title={
+            confirmPayload.action === "publish" 
+              ? "Move to Published" 
+              : confirmPayload.action === "delete"
+              ? "Delete Data"
+              : "Confirm"
+          }
+          message={
+            confirmPayload.action === "publish" 
+              ? "Are you sure you want to move this data to Published?" 
+              : confirmPayload.action === "delete"
+              ? "Are you sure you want to delete this data? This action cannot be undone."
+              : "Are you sure you want to move this data to Draft?"
+          }
           onClose={closeConfirm}
           onConfirm={handleConfirm}
         />

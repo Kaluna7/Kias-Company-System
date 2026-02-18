@@ -5,6 +5,56 @@ import { revalidatePath } from "next/cache";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import { resolveSopDept } from "@/app/api/SopReview/_shared/dept";
 
+// Map apiPath to schedule department_id
+const API_PATH_TO_SCHEDULE_ID = {
+  finance: "A1.1",
+  accounting: "A1.2",
+  hrd: "A1.3",
+  "g&a": "A1.4",
+  sdp: "A1.5",
+  tax: "A1.6",
+  "l&p": "A1.7",
+  mis: "A1.8",
+  merch: "A1.9",
+  ops: "A1.10",
+  whs: "A1.11",
+};
+
+async function getScheduleDataForDepartment(apiPath) {
+  try {
+    const scheduleDeptId = API_PATH_TO_SCHEDULE_ID[apiPath];
+    if (!scheduleDeptId) return null;
+
+    const scheduleClient = await pool.connect();
+    try {
+      // Check if schedule table exists
+      const checkTable = await scheduleClient.query(
+        "SELECT to_regclass($1) AS t",
+        ["public.schedule_module_feedback"]
+      );
+      if (!checkTable?.rows?.[0]?.t) return null;
+
+      const res = await scheduleClient.query(
+        `SELECT start_date, end_date, user_name 
+         FROM public.schedule_module_feedback 
+         WHERE module_key = 'sop-review' AND department_id = $1 AND is_configured = true 
+         ORDER BY id DESC LIMIT 1`,
+        [scheduleDeptId]
+      );
+
+      if (res.rows && res.rows.length > 0) {
+        return res.rows[0];
+      }
+      return null;
+    } finally {
+      scheduleClient.release();
+    }
+  } catch (err) {
+    console.error("Error fetching schedule data:", err);
+    return null;
+  }
+}
+
 async function ensureReportTables(client, slug, departmentName) {
   const stepsTable = `sops_report_${slug}`;
   const metaTable = `sop_report_${slug}`;
@@ -33,8 +83,25 @@ async function ensureReportTables(client, slug, departmentName) {
       reviewer_status VARCHAR(50),
       reviewer_name VARCHAR(255),
       reviewer_date DATE,
+      audit_fieldwork_start_date DATE,
+      audit_fieldwork_end_date DATE,
       published_at TIMESTAMPTZ DEFAULT NOW()
     );
+  `);
+  
+  // Add columns if they don't exist (for existing tables)
+  await client.query(`
+    DO $$ 
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${metaTable}' AND column_name = 'audit_fieldwork_start_date') THEN
+        ALTER TABLE ${metaTable} ADD COLUMN audit_fieldwork_start_date DATE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${metaTable}' AND column_name = 'audit_fieldwork_end_date') THEN
+        ALTER TABLE ${metaTable} ADD COLUMN audit_fieldwork_end_date DATE;
+      END IF;
+    END $$;
   `);
 
   return { stepsTable, metaTable };
@@ -103,6 +170,11 @@ export async function POST(req, { params }) {
       const metaRes = await client.query(`SELECT * FROM ${metaTable} ORDER BY id DESC LIMIT 1`);
       const meta = metaRes.rows?.[0] ?? null;
 
+      // Get schedule data for audit fieldwork dates
+      const scheduleData = await getScheduleDataForDepartment(slug);
+      const auditFieldworkStartDate = scheduleData?.start_date || null;
+      const auditFieldworkEndDate = new Date().toISOString().split('T')[0]; // Today's date (publish date)
+
       // Insert into report tables
       for (const s of steps) {
         // eslint-disable-next-line no-await-in-loop
@@ -122,8 +194,8 @@ export async function POST(req, { params }) {
       if (meta) {
         await client.query(
           `INSERT INTO ${reportMeta}
-            (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, published_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+            (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
           [
             meta.department_name || resolved.departmentName,
             "AVAILABLE",
@@ -134,6 +206,8 @@ export async function POST(req, { params }) {
             meta.reviewer_status || "DRAFT",
             meta.reviewer_name || null,
             meta.reviewer_date || null,
+            auditFieldworkStartDate,
+            auditFieldworkEndDate,
           ]
         );
       }

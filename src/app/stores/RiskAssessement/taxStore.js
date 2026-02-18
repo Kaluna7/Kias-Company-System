@@ -9,13 +9,15 @@ export const useTaxStore = create((set, get) => ({
 
   setTax: (data) => set({ tax: data }),
 
-  loadTax: async (status = "published") => {
+  loadTax: async (status = "published", page = 1, pageSize = 50) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/tax?status=${status}`);
+      const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      const res = await fetch(`/api/RiskAssessment/tax?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch tax");
-      const data = await res.json();
-      set({ tax: data, currentFilter: status });
-      return data;
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : json;
+      set({ tax: list, meta: json?.meta ?? null, currentFilter: status });
+      return list;
     } catch (err) {
       console.error("loadTax error:", err);
       return [];

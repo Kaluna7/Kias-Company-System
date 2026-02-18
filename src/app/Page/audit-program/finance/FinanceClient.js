@@ -261,7 +261,7 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
                     status: "draft",
                   });
                 } catch (err) {
-                  alert(`Error deleting record: ${err.message}`);
+                  if (typeof window !== "undefined" && window.__showToast) window.__showToast(`Error deleting record: ${err.message}`, "error"); else alert(`Error deleting record: ${err.message}`);
                   throw err;
                 }
               }}

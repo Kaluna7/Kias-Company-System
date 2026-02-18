@@ -105,7 +105,8 @@ export default function DataTableAudit({
         </button>
       )}
       <div className="flex-1 overflow-auto rounded-2xl shadow-sm border border-gray-200 bg-white">
-        <table className="min-w-full border-collapse text-sm text-gray-700" style={{ tableLayout: "auto" }}>
+        <div className="overflow-x-auto min-h-0">
+          <table className="min-w-[900px] w-full border-collapse text-sm text-gray-700" style={{ tableLayout: "auto" }}>
           <thead>
             <tr className="bg-gray-50 text-gray-700 font-semibold">
               <th
@@ -297,6 +298,7 @@ export default function DataTableAudit({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

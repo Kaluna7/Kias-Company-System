@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function OpsAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("ops");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("ops");
   return (
     <AuditFindingDeptClient
       apiPath="ops"
@@ -10,6 +10,7 @@ export default async function OpsAuditFindingPage() {
       departmentLabel="OPERATIONAL"
       description="Document and track operational audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

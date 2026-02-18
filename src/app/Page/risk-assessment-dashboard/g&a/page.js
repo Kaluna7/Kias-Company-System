@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
@@ -8,6 +8,7 @@ import { NewGeneralAffairInput } from "@/app/components/ui/PopUpRiskAssessmentIn
 import { usePopUp } from "@/app/stores/ComponentsStore/popupStore";
 import { useGeneralAffairStore } from "@/app/stores/RiskAssessement/gaStore";
 import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
+import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
@@ -22,6 +23,8 @@ export default function GeneralAffair() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState(null);
+  const [paginationLoading, setPaginationLoading] = useState(false);
+  const isLoadingRef = useRef(false);
 
   const isOpen = usePopUp((s) => s.isOpen);
   const openPopUp = usePopUp((s) => s.openPopUp);
@@ -65,7 +68,7 @@ export default function GeneralAffair() {
         action: () => {
           const generalAffair = useGeneralAffairStore.getState().generalAffair;
           if (!generalAffair || generalAffair.length === 0) {
-            alert("Tidak ada data untuk diexport");
+            if (typeof window !== "undefined" && window.__showToast) window.__showToast("Tidak ada data untuk diexport", "error"); else alert("Tidak ada data untuk diexport");
             return;
           }
 
@@ -86,19 +89,31 @@ export default function GeneralAffair() {
       {
         name: "View Draft",
         action: async () => {
-          setViewDraft(true);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadGeneralAffair("draft");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(true);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadGeneralAffair("draft");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
       {
         name: "View Published",
         action: async () => {
-          setViewDraft(false);
-          setConvertMode(false);
-          setEditMode(false);
-          await loadGeneralAffair("published");
+          if (isLoadingRef.current) return; // Prevent multiple clicks
+          isLoadingRef.current = true;
+          try {
+            setViewDraft(false);
+            setConvertMode(false);
+            setEditMode(false);
+            await loadGeneralAffair("published");
+          } finally {
+            isLoadingRef.current = false;
+          }
         },
       },
     ];
@@ -146,14 +161,26 @@ export default function GeneralAffair() {
   );
 
   function GeneralAffairTableWrapper() {
+    const meta = useGeneralAffairStore((s) => s.meta);
     const load = useCallback(
-      () => loadGeneralAffair(viewDraft ? "draft" : "published"),
-      [loadGeneralAffair, viewDraft]
+      async (page) => {
+        if (isLoadingRef.current) return;
+        isLoadingRef.current = true;
+        setPaginationLoading(true);
+        try {
+          await loadGeneralAffair(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+        } finally {
+          isLoadingRef.current = false;
+          setPaginationLoading(false);
+        }
+      },
+      [loadGeneralAffair, viewDraft, meta?.page, meta?.pageSize]
     );
 
     useEffect(() => {
-      load();
-    }, [load]);
+      if (!isLoadingRef.current) load(1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewDraft]);
 
     const generalAffair = useGeneralAffairStore((s) => s.generalAffair);
 
@@ -176,19 +203,23 @@ export default function GeneralAffair() {
     }, [generalAffair, sortOption]);
 
     return (
-      <DataTable
-        items={sortedGeneralAffair}
-        load={load}
-        convertMode={convertMode}
-        onCloseConvert={() => setConvertMode(false)}
-        viewDraft={viewDraft}
-        editMode={editMode}
-        onEditRow={(item) => {
-          setSelectedItem(item);
-          openPopUp();
-        }}
-        searchQuery={searchQuery}
-      />
+      <>
+        <DataTable
+          apiPath="g&a"
+          items={sortedGeneralAffair}
+          load={() => load(meta?.page ?? 1)}
+          convertMode={convertMode}
+          onCloseConvert={() => setConvertMode(false)}
+          viewDraft={viewDraft}
+          editMode={editMode}
+          onEditRow={(item) => {
+            setSelectedItem(item);
+            openPopUp();
+          }}
+          searchQuery={searchQuery}
+        />
+        <Pagination meta={meta} onPageChange={(p) => load(p)} loading={paginationLoading} />
+      </>
     );
   }
 

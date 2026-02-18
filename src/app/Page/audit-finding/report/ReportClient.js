@@ -233,8 +233,8 @@ export default function ReportClient({ initialData = [] }) {
 
               {/* Modal Content */}
               <div className="flex-1 overflow-auto p-4">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full table-fixed border-collapse text-xs">
+                <div className="overflow-x-auto -mx-2 sm:mx-0">
+                  <table className="min-w-[900px] w-full table-fixed border-collapse text-xs">
                     <thead>
                       <tr className="bg-gray-100">
                         <th colSpan={2} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">

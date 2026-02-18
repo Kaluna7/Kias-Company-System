@@ -9,17 +9,33 @@ function toIntOrNull(v) {
   return Number.isNaN(n) ? null : n;
 }
 
+function toIntSafe(v, fallback) {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const includeAps = searchParams.get("includeAps") === "true";
+    const page = Math.max(1, toIntSafe(searchParams.get("page"), 1));
+    const pageSize = Math.max(1, Math.min(100, toIntSafe(searchParams.get("pageSize"), 50)));
+    const skip = (page - 1) * pageSize;
 
-    const storeDesigns = await prisma.sdp.findMany({
-      where: status ? { status } : undefined,
-      include: includeAps ? { aps: true } : undefined,
-      orderBy: { risk_id: "desc" },
-    });
+    const where = status ? { status } : undefined;
+
+    const [storeDesigns, total] = await Promise.all([
+      prisma.sdp.findMany({
+        where,
+        include: includeAps ? { aps: true } : undefined,
+        orderBy: { risk_id: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      prisma.sdp.count({ where: where ?? {} }),
+    ]);
 
     const safeSdp = await backfillRiskIdNoForRows(prisma.sdp, storeDesigns);
 
@@ -47,10 +63,10 @@ export async function GET(req) {
           substantive_test: firstAp?.substantive_test ?? p.risk_description ?? "",
         };
       });
-      return new Response(JSON.stringify(flattened), { status: 200 });
+      return new Response(JSON.stringify({ data: flattened, meta: { total, page, pageSize } }), { status: 200 });
     }
 
-    return new Response(JSON.stringify(safeSdp), { status: 200 });
+    return new Response(JSON.stringify({ data: safeSdp, meta: { total, page, pageSize } }), { status: 200 });
   } catch (err) {
     console.error("GET /api/sdp error:", err);
     return new Response(

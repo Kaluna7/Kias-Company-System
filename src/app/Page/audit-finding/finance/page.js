@@ -2,7 +2,7 @@ import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFi
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
 export default async function FinanceAuditFindingPage() {
-  const initialData = await loadAuditFindingInitialData("finance");
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("finance");
   return (
     <AuditFindingDeptClient
       apiPath="finance"
@@ -10,6 +10,7 @@ export default async function FinanceAuditFindingPage() {
       departmentLabel="FINANCE"
       description="Document and track finance audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

@@ -55,3 +55,28 @@ export async function PUT(req, { params }) {
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
+
+export async function DELETE(req, { params }) {
+  try {
+    const id = parseInt(params.id, 10);
+    if (!id || Number.isNaN(id)) {
+      return new Response(JSON.stringify({ error: "Invalid id" }), { status: 400 });
+    }
+
+    // Delete related APs first (cascade)
+    await prisma.financeAp.deleteMany({
+      where: { finance_risk_id: id },
+    });
+
+    // Delete the parent record
+    await prisma.finance.delete({
+      where: { risk_id: id },
+    });
+
+    return new Response(JSON.stringify({ message: "Finance record deleted successfully" }), { status: 200 });
+  } catch (err) {
+    console.error("DELETE /api/RiskAssessment/finance/[id] error:", err);
+    const message = err?.message ?? "Server error";
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
+  }
+}

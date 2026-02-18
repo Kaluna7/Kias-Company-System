@@ -175,4 +175,68 @@ export async function POST(req) {
   }
 }
 
+export async function DELETE(req) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const messageIds = Array.isArray(body?.messageIds)
+      ? body.messageIds.map((id) => Number(id)).filter(Number.isInteger)
+      : [];
+    if (messageIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "messageIds array required" },
+        { status: 400 }
+      );
+    }
+
+    await ensureChatTable();
+    const currentName = (session.user.name || "").trim();
+    const role = (session.user.role || "").toLowerCase();
+    const isAdmin = role === "admin" || role === "reviewer";
+
+    const client = await schedulePool.connect();
+    try {
+      const placeholders = messageIds.map((_, i) => `$${i + 1}`).join(",");
+      const checkQ = `
+        SELECT id, sender_name FROM public.schedule_chat_messages
+        WHERE id IN (${placeholders})
+      `;
+      const checkR = await client.query(checkQ, messageIds);
+      const rows = checkR.rows || [];
+      const allowed = isAdmin || rows.every((r) => (r.sender_name || "").trim() === currentName);
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, error: "Not allowed to delete these messages" },
+          { status: 403 }
+        );
+      }
+      const idsToDelete = rows.map((r) => r.id);
+      if (idsToDelete.length === 0) {
+        return NextResponse.json({ success: true, deleted: 0 }, { status: 200 });
+      }
+      const delPlaceholders = idsToDelete.map((_, i) => `$${i + 1}`).join(",");
+      await client.query(
+        `DELETE FROM public.schedule_chat_messages WHERE id IN (${delPlaceholders})`,
+        idsToDelete
+      );
+      return NextResponse.json({ success: true, deleted: idsToDelete.length }, { status: 200 });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("DELETE /api/chat error:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message ?? String(err) },
+      { status: 500 }
+    );
+  }
+}
+
 

@@ -28,7 +28,7 @@ export async function GET(req, { params }) {
 
     const [rows, metaRows] = await Promise.all([
       selectMaybe(stepsTable, `SELECT id, no, sop_related, status, comment, reviewer, published_at FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`),
-      selectMaybe(metaTable, `SELECT * FROM ${metaTable} ORDER BY id DESC LIMIT 1`),
+      selectMaybe(metaTable, `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at FROM ${metaTable} ORDER BY id DESC LIMIT 1`),
     ]);
 
     return NextResponse.json({ success: true, meta: metaRows?.[0] ?? null, rows }, { status: 200 });

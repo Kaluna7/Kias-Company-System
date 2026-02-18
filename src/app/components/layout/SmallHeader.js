@@ -33,6 +33,13 @@ export default function SmallHeader({
   const viewItems = viewItemsProp ?? [];
   const sortByItems = sortByItemsProp ?? [];
 
+  const hasMobileMenuContent =
+    (role === "admin" && fileItems.length > 0) ||
+    editItems.length > 0 ||
+    viewItems.length > 0 ||
+    sortByItems.length > 0 ||
+    showSearch;
+
   const findItemFromName = (name) => {
     return (
       fileItems.find((i) => i.name === name) ||
@@ -91,17 +98,19 @@ export default function SmallHeader({
             />
           </div>
 
-          {/* Hamburger Button (Mobile Only) */}
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(!isMobileMenuOpen);
-              setActive(null); // Close any open dropdowns
-            }}
-            className="md:hidden text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
-            aria-label="Toggle menu"
-          >
-            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+          {/* Hamburger Button (Mobile Only) - tampil hanya bila ada menu/search */}
+          {hasMobileMenuContent && (
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(!isMobileMenuOpen);
+                setActive(null);
+              }}
+              className="md:hidden text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
+              aria-label="Toggle menu"
+            >
+              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          )}
 
           {/* Menu (Desktop Only) */}
           <div className="hidden md:flex flex-row gap-1 md:gap-2 items-center">

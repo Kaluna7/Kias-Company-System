@@ -2,7 +2,7 @@
 
 import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFindingDeptClient";
 
-export default function AccountingClient({ initialData = [] }) {
+export default function AccountingClient({ initialData = [], initialMeta = null }) {
   return (
     <AuditFindingDeptClient
       apiPath="accounting"
@@ -10,6 +10,7 @@ export default function AccountingClient({ initialData = [] }) {
       departmentLabel="ACCOUNTING"
       description="Document and track accounting audit findings and recommendations"
       initialData={initialData}
+      initialMeta={initialMeta}
     />
   );
 }

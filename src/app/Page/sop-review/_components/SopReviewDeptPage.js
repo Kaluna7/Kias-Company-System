@@ -1,9 +1,116 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
+import { useSession } from "next-auth/react";
 import SOPHeader from "@/app/components/layout/Sop-Review/SOPHeader";
 
+
+// Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
+const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, isReviewer, isAdmin, isUser, useContentVisibility }) {
+  const rowStyle = useContentVisibility ? { contentVisibility: "auto", containIntrinsicSize: "0 80px" } : undefined;
+  return (
+    <tr
+      style={rowStyle}
+      className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-blue-50/30 transition-colors duration-150 border-b border-slate-100/60 group`}
+    >
+      <td className="p-3 text-center align-top sticky left-0 bg-inherit border-r border-slate-200/40">
+        <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+          <span className="text-xs font-bold text-slate-600">{row.no}</span>
+        </div>
+      </td>
+      <td className="p-3 align-top border-r border-slate-200/40">
+        <div className="relative">
+          <textarea
+            value={row.sop_related}
+            onChange={(e) => onUpdate(idx, { sop_related: e.target.value })}
+            className="w-full bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-none leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            rows={2}
+            placeholder="Enter SOP description..."
+            disabled={isReviewer}
+          />
+        </div>
+      </td>
+      <td className="p-3 text-center align-top border-r border-slate-200/40">
+        <select
+          value={row.status || ""}
+          onChange={(e) => onUpdate(idx, { status: e.target.value })}
+          disabled={isReviewer}
+          className={`w-full px-2 py-2 rounded-lg text-xs font-semibold border transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:cursor-not-allowed ${
+            row.status === "APPROVED"
+              ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-200"
+              : row.status === "REJECTED"
+              ? "bg-red-100 text-red-800 border-red-300 hover:bg-red-200"
+              : row.status === "IN REVIEW"
+              ? "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200"
+              : "bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200"
+          }`}
+        >
+          <option value="">Not set</option>
+          <option value="DRAFT">Draft</option>
+          <option value="IN REVIEW">In Review</option>
+          <option value="APPROVED">Approved</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
+      </td>
+      <td className="p-3 align-top border-r border-slate-200/40">
+        <div className="relative">
+          <input
+            value={row.comment || ""}
+            onChange={(e) => onUpdate(idx, { comment: e.target.value })}
+            className="w-full bg-transparent border border-transparent hover:border-green-200 focus:border-green-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            placeholder="Enter review comment..."
+            disabled={isReviewer}
+          />
+        </div>
+      </td>
+      <td className="p-3 text-center align-top border-r border-slate-200/40">
+        <div className="relative">
+          <input
+            value={row.reviewer || ""}
+            onChange={(e) => onUpdate(idx, { reviewer: e.target.value })}
+            className="w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-lg px-3 py-2 text-sm text-center transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            placeholder="Reviewer..."
+            disabled={isAdmin || isUser}
+            readOnly={isUser}
+          />
+        </div>
+      </td>
+      <td className="p-3 text-center align-top">
+        <button
+          onClick={() => onRemove(idx)}
+          disabled={isReviewer}
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-medium transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Delete this SOP item"
+        >
+          <span className="text-sm">🗑️</span>
+          <span className="hidden sm:inline">Delete</span>
+        </button>
+      </td>
+    </tr>
+  );
+});
+
+// Map apiPath to schedule department_id
+const API_PATH_TO_SCHEDULE_ID = {
+  finance: "A1.1",
+  accounting: "A1.2",
+  hrd: "A1.3",
+  "g&a": "A1.4",
+  sdp: "A1.5",
+  tax: "A1.6",
+  "l&p": "A1.7",
+  mis: "A1.8",
+  merch: "A1.9",
+  ops: "A1.10",
+  whs: "A1.11",
+};
+
 export default function SopReviewDeptPage({ apiPath, departmentName }) {
+  const { data: session } = useSession();
+  const role = (session?.user?.role || "").toLowerCase();
+  const isReviewer = role === "reviewer";
+  const isAdmin = role === "admin";
+  const isUser = role === "user";
   const [preparerStatus, setPreparerStatus] = useState("DRAFT");
   const [reviewerStatus, setReviewerStatus] = useState("DRAFT");
   const [sopData, setSopData] = useState([]);
@@ -16,11 +123,25 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [reviewerName, setReviewerName] = useState("");
   const [reviewerDate, setReviewerDate] = useState("");
   const [reviewerComment, setReviewerComment] = useState("");
+  const [schedulePreparerName, setSchedulePreparerName] = useState(""); // From schedule
+  const [schedulePreparerDate, setSchedulePreparerDate] = useState(""); // From schedule
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
 
+  useEffect(() => {
+    const check = () => setIsMobileView(window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || ""));
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Auto-save draft refs (must be defined before useEffects)
+  const saveDraftTimeoutRef = useRef(null);
+  const isSavingDraftRef = useRef(false);
+  const lastSavedDataRef = useRef(null);
 
   const reindex = (list) => list.map((item, idx) => ({ ...item, no: idx + 1 }));
 
@@ -32,6 +153,109 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       return { data: null, raw };
     }
   };
+
+  // Fetch schedule data for preparer (runs first)
+  useEffect(() => {
+    let mounted = true;
+    async function fetchScheduleData() {
+      try {
+        const scheduleDeptId = API_PATH_TO_SCHEDULE_ID[apiPath];
+        if (!scheduleDeptId) {
+          console.warn(`No schedule department_id mapping for apiPath: ${apiPath}`);
+          return;
+        }
+
+        const res = await fetch(`/api/schedule/module?module=sop-review`, { cache: "no-store" });
+        const data = await res.json();
+        
+        if (data.success && Array.isArray(data.rows)) {
+          const scheduleRow = data.rows.find(
+            (row) => row.department_id === scheduleDeptId && row.is_configured
+          );
+          
+          if (scheduleRow && mounted) {
+            const userName = scheduleRow.user_name || "";
+            // IMPORTANT: start_date from API is already in YYYY-MM-DD format (from PostgreSQL TO_CHAR)
+            // Use it directly without any parsing or timezone conversion
+            let startDate = "";
+            if (scheduleRow.start_date) {
+              const dateValue = scheduleRow.start_date;
+              console.log(`[SOP Review] Schedule start_date for ${apiPath}:`, dateValue, "Type:", typeof dateValue);
+              
+              // API returns date as string in YYYY-MM-DD format (from TO_CHAR)
+              if (typeof dateValue === 'string') {
+                const dateStr = String(dateValue).trim();
+                // Use directly if it's already in YYYY-MM-DD format
+                if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  startDate = dateStr;
+                  console.log(`[SOP Review] Using schedule start_date as-is (YYYY-MM-DD): ${startDate}`);
+                } else {
+                  // If it's ISO string with time, extract just the date part
+                  if (dateStr.includes('T')) {
+                    startDate = dateStr.split('T')[0];
+                    console.log(`[SOP Review] Extracted date from ISO string: ${startDate}`);
+                  } else {
+                    console.warn(`[SOP Review] Unexpected date format: ${dateStr}`);
+                    startDate = "";
+                  }
+                }
+              }
+              // If it's somehow a Date object (shouldn't happen with TO_CHAR, but handle it)
+              else if (dateValue instanceof Date) {
+                // Use local date components (not UTC) to preserve the date as stored
+                const year = dateValue.getFullYear();
+                const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+                const day = String(dateValue.getDate()).padStart(2, '0');
+                startDate = `${year}-${month}-${day}`;
+                console.log(`[SOP Review] Formatted schedule start_date using local date: ${startDate}`);
+              }
+              // If it's a number (timestamp) - shouldn't happen, but handle it
+              else if (typeof dateValue === 'number') {
+                const dateObj = new Date(dateValue);
+                // Use local date components to preserve the date
+                const year = dateObj.getFullYear();
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                startDate = `${year}-${month}-${day}`;
+                console.log(`[SOP Review] Formatted schedule start_date from timestamp using local date: ${startDate}`);
+              } else {
+                console.warn(`[SOP Review] Unexpected date value type: ${typeof dateValue}`);
+                startDate = "";
+              }
+              
+              // Final validation
+              if (startDate && !startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                console.warn(`[SOP Review] Invalid date format after processing: ${startDate}`);
+                startDate = "";
+              }
+            } else {
+              console.warn(`[SOP Review] No start_date found in schedule for ${apiPath}`);
+            }
+            
+            setSchedulePreparerName(userName);
+            setSchedulePreparerDate(startDate);
+            
+            // Always set preparer from schedule (schedule takes priority)
+            if (userName) {
+              setPreparerName(userName);
+            }
+            if (startDate) {
+              setPreparerDate(startDate);
+              console.log(`[SOP Review] Set preparerDate to: ${startDate} from schedule per module`);
+            }
+          } else {
+            console.warn(`[SOP Review] No schedule row found for ${apiPath} (deptId: ${API_PATH_TO_SCHEDULE_ID[apiPath]}) or not configured`);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching schedule data:", err);
+      }
+    }
+    fetchScheduleData();
+    return () => {
+      mounted = false;
+    };
+  }, [apiPath]);
 
   useEffect(() => {
     let mounted = true;
@@ -48,6 +272,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           safeJson(metaRes),
         ]);
 
+        let loadedSopData = [];
         if (!res.ok) {
           const msg = (json && json.error) || `HTTP ${res.status} | ${rawSteps || "no body"}`;
           setLoadError(msg);
@@ -62,22 +287,99 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             comment: r.comment || "",
             reviewer: r.reviewer || "",
           }));
-          if (mounted) setSopData(reindex(normalized));
+          if (mounted) {
+            const reindexed = reindex(normalized);
+            setSopData(reindexed);
+            loadedSopData = reindexed;
+          } else {
+            loadedSopData = reindex(normalized);
+          }
         }
 
+        // Load and set meta data, then update lastSavedDataRef
         if (metaRes.ok && Array.isArray(metaJson?.rows) && metaJson.rows.length > 0) {
           const latest = metaJson.rows[0];
           if (mounted) {
             setPreparerStatus(latest.preparer_status || "DRAFT");
             setReviewerStatus(latest.reviewer_status || "DRAFT");
-            setPreparerName(latest.preparer_name || "");
-            setPreparerDate(latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "");
+            
+            // Schedule data takes priority for preparer (already set in schedule useEffect)
+            // IMPORTANT: Only use meta data if schedule data is NOT available
+            // If schedule per module has start_date, it should always be used
+            if (!schedulePreparerName) {
+              setPreparerName(latest.preparer_name || "");
+            }
+            // CRITICAL: Schedule per module start_date ALWAYS takes priority over meta data
+            // Only use meta preparer_date if schedule per module doesn't have start_date
+            if (schedulePreparerDate) {
+              // Schedule per module has start_date, ALWAYS use it (override meta)
+              console.log(`[SOP Review] Schedule per module start_date found: ${schedulePreparerDate}, ALWAYS using it instead of meta`);
+              // Force update preparerDate from schedule per module
+              setPreparerDate(schedulePreparerDate);
+            } else {
+              // No schedule per module start_date, use meta as fallback
+              let preparerDateStr = "";
+              if (latest.preparer_date) {
+                const dateStr = String(latest.preparer_date);
+                if (dateStr.includes('T')) {
+                  preparerDateStr = dateStr.split('T')[0];
+                } else {
+                  preparerDateStr = dateStr.slice(0, 10);
+                }
+                // Ensure it's in YYYY-MM-DD format using UTC to avoid timezone shift
+                if (!preparerDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  const dateObj = new Date(latest.preparer_date);
+                  if (!isNaN(dateObj.getTime())) {
+                    const year = dateObj.getUTCFullYear();
+                    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                    preparerDateStr = `${year}-${month}-${day}`;
+                  } else {
+                    preparerDateStr = "";
+                  }
+                }
+              }
+              setPreparerDate(preparerDateStr);
+              console.log(`[SOP Review] No schedule per module start_date, using meta preparer_date as fallback: ${preparerDateStr}`);
+            }
             setReviewerComment(latest.reviewer_comment || "");
             setReviewerName(latest.reviewer_name || "");
             setReviewerDate(latest.reviewer_date ? String(latest.reviewer_date).slice(0, 10) : "");
           }
+          
+          // Update last saved data reference after loading all data
+          // This ensures auto-save doesn't trigger on initial load
+          // IMPORTANT: Use schedule per module date if available (it takes priority)
+          const finalPreparerDate = schedulePreparerDate || (latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "");
+          const finalPreparerName = schedulePreparerName || latest.preparer_name || "";
+          const loadedData = {
+            sopData: loadedSopData,
+            reviewerStatus: latest.reviewer_status || "DRAFT",
+            reviewerName: latest.reviewer_name || "",
+            reviewerDate: latest.reviewer_date ? String(latest.reviewer_date).slice(0, 10) : "",
+            reviewerComment: latest.reviewer_comment || "",
+            preparerStatus: latest.preparer_status || "DRAFT",
+            preparerName: finalPreparerName,
+            preparerDate: finalPreparerDate,
+          };
+          lastSavedDataRef.current = JSON.stringify(loadedData);
         } else if (!metaRes.ok) {
           console.error("Load meta failed:", rawMeta);
+          // Even if meta load fails, update lastSavedDataRef with current state
+          // Use schedule per module date if available
+          const finalPreparerDate = schedulePreparerDate || "";
+          const finalPreparerName = schedulePreparerName || "";
+          const loadedData = {
+            sopData: loadedSopData,
+            reviewerStatus: "DRAFT",
+            reviewerName: "",
+            reviewerDate: "",
+            reviewerComment: "",
+            preparerStatus: "DRAFT",
+            preparerName: finalPreparerName,
+            preparerDate: finalPreparerDate,
+          };
+          lastSavedDataRef.current = JSON.stringify(loadedData);
         }
       } catch (err) {
         console.error("Fetch existing sops error:", err);
@@ -87,11 +389,35 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         if (mounted) setIsLoading(false);
       }
     }
-    fetchRows();
+    // Only fetch rows after schedule data is loaded (to ensure schedule takes priority)
+    // Add a small delay to ensure schedule useEffect has completed
+    const timeoutId = setTimeout(() => {
+      fetchRows();
+    }, 100);
+    
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
     };
-  }, [apiPath]);
+  }, [apiPath, schedulePreparerName, schedulePreparerDate]);
+  
+  // Ensure schedule per module date is always used (even after meta data loads or user tries to change it)
+  // This useEffect runs whenever schedulePreparerDate changes and ensures it overrides any meta data or user changes
+  useEffect(() => {
+    if (schedulePreparerDate) {
+      console.log(`[SOP Review] Ensuring schedule per module start_date is used: ${schedulePreparerDate}`);
+      // Always override preparerDate with schedule per module date
+      setPreparerDate(schedulePreparerDate);
+    }
+  }, [schedulePreparerDate]);
+  
+  // Prevent user from changing preparerDate if schedule per module has start_date
+  useEffect(() => {
+    if (schedulePreparerDate && isUser && preparerDate !== schedulePreparerDate) {
+      console.warn(`[SOP Review] User tried to change preparerDate from ${preparerDate} to different value, but schedule per module has: ${schedulePreparerDate}. Reverting...`);
+      setPreparerDate(schedulePreparerDate);
+    }
+  }, [preparerDate, schedulePreparerDate, isUser]);
 
   const handleSopParsed = (parsedSops) => {
     if (!Array.isArray(parsedSops) || parsedSops.length === 0) return;
@@ -110,15 +436,15 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     });
   };
 
-  const updateRow = (index, changes) => {
+  const updateRow = useCallback((index, changes) => {
     setSopData((prev) => {
       const copy = prev.map((r) => ({ ...r }));
       copy[index] = { ...copy[index], ...changes };
       return reindex(copy);
     });
-  };
+  }, []);
 
-  const addRow = () => {
+  const addRow = useCallback(() => {
     setSopData((prev) => reindex([...prev, {
       id: null,
       sop_related: "",
@@ -126,21 +452,107 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       comment: "",
       reviewer: "",
     }]));
-  };
+  }, []);
 
-  const removeRow = (index) => {
+  const removeRow = useCallback((index) => {
     if (!confirm("Remove this SOP item from the list?")) return;
     setSopData((prev) => reindex(prev.filter((_, i) => i !== index)));
-  };
+  }, []);
 
-  const preparePayload = (list) =>
+  const preparePayload = useCallback((list) =>
     reindex(list).map((it) => ({
       no: it.no,
       sop_related: (it.sop_related || "").trim(),
       status: it.status || null,
       comment: it.comment || null,
       reviewer: it.reviewer || null,
-    }));
+    })), []);
+
+  // Auto-save draft functionality
+  const saveDraft = useCallback(async (dataToSave, metaToSave = null) => {
+    // Prevent multiple simultaneous saves
+    if (isSavingDraftRef.current) return;
+    
+    // Check if data has actually changed (include reviewer fields in comparison)
+    const currentData = {
+      sopData: dataToSave,
+      reviewerStatus,
+      reviewerName,
+      reviewerDate,
+      reviewerComment,
+      preparerStatus,
+      preparerName,
+      preparerDate,
+    };
+    const dataString = JSON.stringify(currentData);
+    if (dataString === lastSavedDataRef.current) return;
+
+    isSavingDraftRef.current = true;
+    try {
+      const stepsPayload = preparePayload(dataToSave);
+      const metaPayload = metaToSave || {
+        preparer_status: preparerStatus,
+        preparer_name: preparerName || null,
+        preparer_date: preparerDate || null,
+        reviewer_comment: reviewerComment || null,
+        reviewer_status: reviewerStatus,
+        reviewer_name: reviewerName || null,
+        reviewer_date: reviewerDate || null,
+      };
+
+      // Save data with replace mode (delete old data first, then insert new)
+      const [metaRes, res] = await Promise.all([
+        fetch(`/api/SopReview/${apiPath}/meta`, { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify(metaPayload) 
+        }),
+        fetch(`/api/SopReview/${apiPath}`, { 
+          method: "POST", 
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Replace-Mode": "true"  // Enable replace mode
+          }, 
+          body: JSON.stringify(stepsPayload) 
+        }),
+      ]);
+
+      if (metaRes.ok && res.ok) {
+        lastSavedDataRef.current = dataString;
+        console.log("Draft auto-saved successfully (including reviewer fields)");
+      } else {
+        console.warn("Draft auto-save failed, but continuing...");
+      }
+    } catch (err) {
+      console.error("Error auto-saving draft:", err);
+      // Don't show error to user for auto-save failures
+    } finally {
+      isSavingDraftRef.current = false;
+    }
+  }, [apiPath, preparerStatus, preparerName, preparerDate, reviewerComment, reviewerStatus, reviewerName, reviewerDate, preparePayload]);
+
+  // Auto-save when sopData or reviewer fields change (with debounce)
+  useEffect(() => {
+    // Clear existing timeout
+    if (saveDraftTimeoutRef.current) {
+      clearTimeout(saveDraftTimeoutRef.current);
+    }
+
+    // Don't auto-save on initial load
+    if (isLoading) return;
+
+    // Debounce auto-save by 1 second
+    saveDraftTimeoutRef.current = setTimeout(() => {
+      // Save even if sopData is empty (to save reviewer fields)
+      saveDraft(sopData);
+    }, 1000);
+
+    return () => {
+      if (saveDraftTimeoutRef.current) {
+        clearTimeout(saveDraftTimeoutRef.current);
+      }
+    };
+  }, [sopData, isLoading, saveDraft, reviewerStatus, reviewerName, reviewerDate, reviewerComment]);
 
   const handleSidebarSaveDraft = (sidebarData) => {
     try {
@@ -274,7 +686,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         reviewerName={reviewerName}
         reviewerDate={reviewerDate}
         onPreparerNameChange={setPreparerName}
-        onPreparerDateChange={setPreparerDate}
+        onPreparerDateChange={(newDate) => {
+          // Prevent user from changing date if schedule per module has start_date
+          if (schedulePreparerDate && isUser) {
+            console.warn(`[SOP Review] Cannot change preparer date - it's set from schedule per module: ${schedulePreparerDate}`);
+            return; // Ignore the change
+          }
+          setPreparerDate(newDate);
+        }}
         onReviewerCommentChange={setReviewerComment}
         onReviewerNameChange={setReviewerName}
         onReviewerDateChange={setReviewerDate}
@@ -282,6 +701,11 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         onSopParsed={handleSopParsed}
         isPublishing={isSaving}
         saveMessage={saveMessage}
+        isReviewer={isReviewer}
+        isAdmin={isAdmin}
+        isUser={isUser}
+        schedulePreparerName={schedulePreparerName}
+        schedulePreparerDate={schedulePreparerDate}
         sopDataCount={sopData.length}
         isCollapsed={isHeaderCollapsed}
         onToggleCollapse={handleToggleHeader}
@@ -301,7 +725,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
               Failed to load data: {loadError}
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-xl overflow-hidden flex-1 flex flex-col min-h-0 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-lg overflow-hidden flex-1 flex flex-col min-h-0">
               {/* Table Header with SOP title moved here */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-blue-50/30">
                 <div className="flex items-center gap-3">
@@ -357,9 +781,12 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 </div>
               </div>
 
-              {/* Table Content */}
-              <div className="overflow-x-auto overflow-y-auto flex-1">
-                <table className="min-w-full table-fixed border-collapse">
+              {/* Table Content - responsive: horizontal scroll when narrow; touch-friendly scroll + contain on Android */}
+              <div
+                className="overflow-x-auto overflow-y-auto flex-1 -mx-2 sm:mx-0 min-h-0"
+                style={{ WebkitOverflowScrolling: "touch", contain: "layout" }}
+              >
+                <table className="min-w-[700px] w-full table-fixed border-collapse">
                   <thead className="bg-gradient-to-r from-slate-100 to-slate-50 sticky top-0 z-10">
                     <tr className="border-b border-slate-200/60">
                       <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-12 sticky left-0 bg-gradient-to-r from-slate-100 to-slate-50">
@@ -404,100 +831,17 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                   </thead>
                   <tbody>
                     {sopData.map((row, idx) => (
-                      <tr
-                        key={idx}
-                        className={`${
-                          idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
-                        } hover:bg-blue-50/30 transition-colors duration-150 border-b border-slate-100/60 group`}
-                      >
-                        {/* Row Number */}
-                        <td className="p-3 text-center align-top sticky left-0 bg-inherit border-r border-slate-200/40">
-                          <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
-                            <span className="text-xs font-bold text-slate-600">{row.no}</span>
-                          </div>
-                        </td>
-
-                        {/* SOP Description */}
-                        <td className="p-3 align-top border-r border-slate-200/40">
-                          <div className="relative">
-                            <textarea
-                              value={row.sop_related}
-                              onChange={(e) => updateRow(idx, { sop_related: e.target.value })}
-                              className="w-full bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-all duration-200 resize-none leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                              rows={2}
-                              placeholder="Enter SOP description..."
-                            />
-                            {row.sop_related && (
-                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Status */}
-                        <td className="p-3 text-center align-top border-r border-slate-200/40">
-                          <select
-                            value={row.status || ""}
-                            onChange={(e) => updateRow(idx, { status: e.target.value })}
-                            className={`w-full px-2 py-2 rounded-lg text-xs font-semibold border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                              row.status === 'APPROVED'
-                                ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200'
-                                : row.status === 'REJECTED'
-                                ? 'bg-red-100 text-red-800 border-red-300 hover:bg-red-200'
-                                : row.status === 'IN REVIEW'
-                                ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200'
-                                : 'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200'
-                            }`}
-                          >
-                            <option value="">Not set</option>
-                            <option value="DRAFT">📝 Draft</option>
-                            <option value="IN REVIEW">🔄 In Review</option>
-                            <option value="APPROVED">✅ Approved</option>
-                            <option value="REJECTED">❌ Rejected</option>
-                          </select>
-                        </td>
-
-                        {/* Review Comment */}
-                        <td className="p-3 align-top border-r border-slate-200/40">
-                          <div className="relative">
-                            <input
-                              value={row.comment || ""}
-                              onChange={(e) => updateRow(idx, { comment: e.target.value })}
-                              className="w-full bg-transparent border border-transparent hover:border-green-200 focus:border-green-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-                              placeholder="Enter review comment..."
-                            />
-                            {row.comment && (
-                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full"></div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Reviewer */}
-                        <td className="p-3 text-center align-top border-r border-slate-200/40">
-                          <div className="relative">
-                            <input
-                              value={row.reviewer || ""}
-                              onChange={(e) => updateRow(idx, { reviewer: e.target.value })}
-                              className="w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-lg px-3 py-2 text-sm text-center transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                              placeholder="Reviewer..."
-                            />
-                            {row.reviewer && (
-                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-400 rounded-full"></div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="p-3 text-center align-top">
-                          <button
-                            onClick={() => removeRow(idx)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                            title="Delete this SOP item"
-                          >
-                            <span className="text-sm">🗑️</span>
-                            <span className="hidden sm:inline">Delete</span>
-                          </button>
-                        </td>
-                      </tr>
+                      <SopTableRow
+                        key={row.id ?? idx}
+                        row={row}
+                        idx={idx}
+                        onUpdate={updateRow}
+                        onRemove={removeRow}
+                        isReviewer={isReviewer}
+                        isAdmin={isAdmin}
+                        isUser={isUser}
+                        useContentVisibility={isMobileView && sopData.length > 12}
+                      />
                     ))}
                     {sopData.length === 0 && (
                       <tr>
@@ -511,7 +855,6 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                               Start by uploading a PDF document from the header above. The system will automatically extract SOP procedures and populate this table for review.
                             </p>
                             <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-full">
-                              <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
                               <span>Ready to process PDF documents</span>
                             </div>
                           </div>
@@ -640,5 +983,6 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     </main>
   );
 }
+
 
 
