@@ -43,10 +43,12 @@ export async function GET(req) {
 }
 
 /**
- * POST: insert sops (supports array or { sops: [...] } or single item)
+ * POST: save sops. With X-Replace-Mode: true (draft save), replaces all rows then inserts.
+ * Without replace mode, appends (legacy). Prefer replace mode so data does not double on clone/refresh.
  */
 export async function POST(req) {
   try {
+    const replaceMode = req.headers.get("X-Replace-Mode") === "true";
     const text = await req.text();
     let body;
     try { body = text ? JSON.parse(text) : null; } catch (parseErr) {
@@ -58,6 +60,8 @@ export async function POST(req) {
     if (Array.isArray(body)) sopsArray = body;
     else if (Array.isArray(body?.sops)) sopsArray = body.sops;
     else if (body && typeof body === "object" && (body.sop_related || body.name)) sopsArray = [body];
+    const bodyReplace = body && typeof body === "object" && body.replace === true;
+    const finalReplaceMode = replaceMode || bodyReplace;
 
     if (!sopsArray) {
       console.error("POST /api/SopReview/finance: unexpected payload shape:", body);
@@ -67,7 +71,7 @@ export async function POST(req) {
       );
     }
 
-    if (sopsArray.length === 0) {
+    if (sopsArray.length === 0 && !finalReplaceMode) {
       return NextResponse.json({ success:false, error:"Empty array provided" }, { status:400 });
     }
 
@@ -80,6 +84,9 @@ export async function POST(req) {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      if (finalReplaceMode) {
+        await client.query("DELETE FROM sops_finance");
+      }
       const inserted = [];
       for (const item of sopsArray) {
         const q = `INSERT INTO sops_finance (no, sop_related, status, comment, reviewer)

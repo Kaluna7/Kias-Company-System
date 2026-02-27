@@ -1,38 +1,7 @@
-import { headers } from "next/headers";
+import { loadRiskData } from "../loadRiskData";
 import TaxClient from "./TaxClient";
 
-async function loadTaxData(status = "published") {
-  try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
-
-    const params = new URLSearchParams({
-      status: status,
-    });
-
-    const res = await fetch(`${baseUrl}/api/RiskAssessment/tax?${params.toString()}`, {
-      next: { revalidate: 30 }, // Cache for 30 seconds
-      cache: 'force-cache', // Use cache when available
-    });
-
-    if (!res.ok) {
-      console.error("Failed to fetch tax data:", res.status);
-      return [];
-    }
-
-    const json = await res.json();
-    const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
-    return list;
-  } catch (err) {
-    console.error("Error loading tax data:", err);
-    return [];
-  }
-}
-
 export default async function TaxPage() {
-  const initialData = await loadTaxData("published");
-  
-  return <TaxClient initialData={initialData} />;
+  const { initialData, initialMeta } = await loadRiskData("tax", "published");
+  return <TaxClient initialData={initialData} initialMeta={initialMeta} />;
 }

@@ -5,7 +5,10 @@ import { create } from "zustand";
 
 export const useOperationalStore = create((set, get) => ({
   operational: [],
+  meta: null,
   currentFilter: "published",
+
+  setOpsAndMeta: (data, meta) => set({ operational: data, meta: meta ?? null }),
 
   loadOperational: async (status = "published", page = 1, pageSize = 50) => {
     try {

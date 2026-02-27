@@ -4,7 +4,10 @@ import { create } from "zustand";
 
 export const useStorePlanningStore = create((set, get) => ({
   sdp: [],
+  meta: null,
   currentFilter: "published",
+
+  setSdpAndMeta: (data, meta) => set({ sdp: data, meta: meta ?? null }),
 
   loadStorePlanning: async (status = "published", page = 1, pageSize = 50) => {
     try {

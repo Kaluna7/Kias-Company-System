@@ -37,6 +37,52 @@ const deptToAuditProgram = {
   whs: { parent: "warehouse", ap: "WarehouseAp", relation: "warehouse" },
 };
 
+// Map audit-finding dept slug to worksheet_finance / evidence department name (uppercase)
+const deptToWorksheetEvidenceName = {
+  accounting: "ACCOUNTING",
+  finance: "FINANCE",
+  hrd: "HRD",
+  "g&a": "G&A",
+  ga: "G&A",
+  sdp: "DESIGN STORE PLANNER",
+  tax: "TAX",
+  "l&p": "SECURITY L&P",
+  lp: "SECURITY L&P",
+  mis: "MIS",
+  merch: "MERCHANDISE",
+  ops: "OPERATIONAL",
+  whs: "WAREHOUSE",
+};
+
+/** Returns { worksheetHasFile, evidenceApCodesWithFile }. Per-row status: Ready to Publish only when THIS row has evidence file + worksheet file. */
+async function getWorksheetAndEvidenceFileStatus(dept) {
+  const deptName = deptToWorksheetEvidenceName[dept];
+  if (!deptName) return { worksheetHasFile: false, evidenceApCodesWithFile: new Set() };
+  try {
+    const [worksheetLatest, evidenceRows] = await Promise.all([
+      prisma.worksheet_finance.findFirst({
+        where: { department: deptName },
+        orderBy: { created_at: "desc" },
+        select: { file_path: true },
+      }),
+      prisma.evidence.findMany({
+        where: { department: deptName, file_url: { not: null } },
+        select: { ap_code: true },
+      }),
+    ]);
+    const worksheetHasFile = !!(worksheetLatest?.file_path && String(worksheetLatest.file_path).trim());
+    const evidenceApCodesWithFile = new Set(
+      (evidenceRows || [])
+        .map((r) => (r.ap_code != null && String(r.ap_code).trim() !== "" ? String(r.ap_code).trim() : null))
+        .filter(Boolean)
+    );
+    return { worksheetHasFile, evidenceApCodesWithFile };
+  } catch (e) {
+    console.warn(`[audit-finding/${dept}] getWorksheetAndEvidenceFileStatus error:`, e?.message);
+    return { worksheetHasFile: false, evidenceApCodesWithFile: new Set() };
+  }
+}
+
 function toIntOrNull(v) {
   if (v === undefined || v === null || v === "") return null;
   const n = parseInt(v, 10);
@@ -117,7 +163,7 @@ export async function GET(req, { params }) {
     const pageSize = Math.max(1, Math.min(100, toIntSafe(url.searchParams.get("pageSize"), 50)));
     const skip = (page - 1) * pageSize;
 
-    const where = {
+    const whereFinding = {
       NOT: {
         completion_status: {
           equals: "COMPLETED",
@@ -126,301 +172,114 @@ export async function GET(req, { params }) {
       },
     };
 
-    // Exclude findings with completion_status = "COMPLETED" (already published)
-    const [findings, total] = await Promise.all([
-      delegate.findMany({
-        where,
-        orderBy: { id: "desc" },
-        skip,
-        take: pageSize,
-      }),
-      delegate.count({ where }),
-    ]);
-
-    // Get audit-program mapping for this department
-    // This mapping ensures ALL departments in audit-finding connect to their corresponding audit-program
     const apMapping = deptToAuditProgram[dept];
     if (!apMapping) {
-      // If no mapping exists for this department, return findings as-is
-      console.warn(`[audit-finding/${dept}] No audit-program mapping found for department: ${dept}`);
+      const [findings, total] = await Promise.all([
+        delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
+        delegate.count({ where: whereFinding }),
+      ]);
       return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
     }
 
     const apModel = getAuditProgramAp(dept);
     const parentModel = getAuditProgramParent(dept);
-
-    // For ALL departments: If no findings exist, get all data from audit-program (published) as base data
-    // This ensures every department in audit-finding pulls data from audit-program
-    if (findings.length === 0 && apModel && parentModel) {
-      try {
-        console.log(`[audit-finding/${dept}] Loading audit-program data for department: ${dept}`);
-        console.log(`[audit-finding/${dept}] Parent model: ${apMapping.parent}, AP model: ${apMapping.ap}`);
-        
-        const parents = await parentModel.findMany({
-          where: { status: "published" },
-          include: { aps: true },
-          orderBy: { risk_id: "asc" },
-        });
-
-        console.log(`[audit-finding/${dept}] Found ${parents.length} published parents`);
-        const totalAps = parents.reduce((sum, p) => sum + (p.aps?.length || 0), 0);
-        console.log(`[audit-finding/${dept}] Total APs: ${totalAps}`);
-
-        // Flatten: 1 row per AP (same structure as audit-program API)
-        const auditProgramData = parents.flatMap((p) =>
-          p.aps && p.aps.length > 0
-            ? p.aps.map((ap) => ({
-                // Finding fields (empty/null since no finding exists yet)
-                id: null, // No finding ID yet
-                risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
-                risk_description: p.risk_description ?? null,
-                risk_details: p.risk_details ?? null,
-                ap_code: ap.ap_code ?? null,
-                substantive_test: ap.substantive_test ?? null,
-                risk: null,
-                check_yn: null,
-                method: ap.method ?? null,
-                preparer: null,
-                finding_result: null,
-                finding_description: null,
-                recommendation: null,
-                auditee: null,
-                completion_status: null,
-                completion_date: null,
-                created_at: null,
-                updated_at: null,
-                // Audit Program fields (populated)
-                objective: ap.objective ?? null,
-                procedures: ap.procedures ?? null,
-                description: ap.description ?? null,
-                application: ap.application ?? null,
-                owners: p.owners ?? null,
-              }))
-            : [
-                {
-                  // Finding fields
-                  id: null,
-                  risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
-                  risk_description: p.risk_description ?? null,
-                  risk_details: p.risk_details ?? null,
-                  ap_code: null,
-                  substantive_test: null,
-                  risk: null,
-                  check_yn: null,
-                  method: null,
-                  preparer: null,
-                  finding_result: null,
-                  finding_description: null,
-                  recommendation: null,
-                  auditee: null,
-                  completion_status: null,
-                  completion_date: null,
-                  created_at: null,
-                  updated_at: null,
-                  // Audit Program fields
-                  objective: null,
-                  procedures: null,
-                  description: null,
-                  application: null,
-                  owners: p.owners ?? null,
-                },
-              ]
-        );
-
-        console.log(`[audit-finding/${dept}] Returning ${auditProgramData.length} rows from audit-program`);
-        return NextResponse.json({ data: auditProgramData }, { status: 200 });
-      } catch (err) {
-        console.error(`[audit-finding/${dept}] Failed to load audit-program data:`, err);
-        console.error(`[audit-finding/${dept}] Error details:`, err.message, err.stack);
-        // If failed, return empty array
-        return NextResponse.json({ data: [], error: err.message }, { status: 200 });
-      }
+    if (!apModel || !parentModel) {
+      const [findings, total] = await Promise.all([
+        delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
+        delegate.count({ where: whereFinding }),
+      ]);
+      return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
     }
 
-    // For ALL departments: Enrich existing findings with data from audit-program
-    // This ensures that even if findings exist, they are enriched with latest audit-program data
-    const enrichedFindings = await Promise.all(
-      findings.map(async (finding) => {
-        const enriched = { ...finding };
-        
-        try {
-          const apModel = getAuditProgramAp(dept);
-          const parentModel = getAuditProgramParent(dept);
-          
-          if (!apModel || !parentModel) {
-            return enriched;
-          }
+    // Always use audit program (published) as source of truth — same as evidence. Load all findings (unpublished) to merge.
+    const [parents, allFindings] = await Promise.all([
+      parentModel.findMany({
+        where: { status: "published" },
+        include: { aps: true },
+        orderBy: { risk_id: "asc" },
+      }),
+      delegate.findMany({ where: whereFinding, orderBy: { id: "desc" } }),
+    ]);
 
-          // Strategy 1: Try to find matching AP by ap_code (exact match, trim whitespace)
-          // Only get published audit programs
-          if (finding.ap_code) {
-            const apCodeTrimmed = String(finding.ap_code).trim();
-            const ap = await apModel.findFirst({
-              where: { 
-                ap_code: apCodeTrimmed,
-                [apMapping.relation]: {
-                  status: "published"
-                }
-              },
-              include: {
-                [apMapping.relation]: {
-                  select: {
-                    owners: true,
-                    risk_id_no: true,
-                    risk_id: true,
-                  },
-                },
-              },
-            });
-            
-            if (ap) {
-              enriched.objective = ap.objective ?? null;
-              enriched.procedures = ap.procedures ?? null;
-              enriched.description = ap.description ?? null;
-              enriched.application = ap.application ?? null;
-              enriched.owners = ap[apMapping.relation]?.owners ?? null;
-            }
-          }
-          
-          // Strategy 2: If no AP match by ap_code, try to find by risk_id or risk_id_no
-          if (!enriched.objective && finding.risk_id) {
-            const riskIdTrimmed = String(finding.risk_id).trim();
-            
-            // First try to find parent by risk_id_no (string match), only published
-            let parent = await parentModel.findFirst({
-              where: {
-                risk_id_no: riskIdTrimmed,
-                status: "published"
-              },
-              include: {
-                aps: {
-                  where: finding.ap_code ? {
-                    ap_code: String(finding.ap_code).trim()
-                  } : undefined,
-                  take: 1,
-                },
-              },
-            });
+    const findingByKey = new Map();
+    for (const f of allFindings) {
+      const rId = (f.risk_id != null && f.risk_id !== "") ? String(f.risk_id).trim() : "";
+      const ap = (f.ap_code != null && f.ap_code !== "") ? String(f.ap_code).trim() : "";
+      const key = `${rId}::${ap}`;
+      if (!findingByKey.has(key)) findingByKey.set(key, f);
+    }
 
-            // If not found by risk_id_no, try by risk_id (integer), only published
-            if (!parent) {
-              const riskIdInt = toIntOrNull(finding.risk_id);
-              if (riskIdInt) {
-                parent = await parentModel.findFirst({
-                  where: { 
-                    risk_id: riskIdInt,
-                    status: "published"
-                  },
-                  include: {
-                    aps: {
-                      where: finding.ap_code ? {
-                        ap_code: String(finding.ap_code).trim()
-                      } : undefined,
-                      take: 1,
-                    },
-                  },
-                });
-              }
-            }
+    const { worksheetHasFile, evidenceApCodesWithFile } = await getWorksheetAndEvidenceFileStatus(dept);
 
-            if (parent) {
-              enriched.owners = parent.owners ?? null;
-              
-              // If we have an AP from the parent, use its data
-              if (parent.aps && parent.aps.length > 0) {
-                const ap = parent.aps[0];
-                enriched.objective = ap.objective ?? null;
-                enriched.procedures = ap.procedures ?? null;
-                enriched.description = ap.description ?? null;
-                enriched.application = ap.application ?? null;
-              } else if (finding.ap_code) {
-                // If we have parent but no matching AP, try to find any AP with matching code
-                const apCodeTrimmed = String(finding.ap_code).trim();
-                const ap = await apModel.findFirst({
-                  where: {
-                    ap_code: apCodeTrimmed,
-                    [apMapping.relation]: {
-                      risk_id: parent.risk_id,
-                    },
-                  },
-                });
-                
-                if (ap) {
-                  enriched.objective = ap.objective ?? null;
-                  enriched.procedures = ap.procedures ?? null;
-                  enriched.description = ap.description ?? null;
-                  enriched.application = ap.application ?? null;
-                }
-              }
-            }
-          }
-
-          // Strategy 3: Try to match by risk_id_no if risk_id didn't match, only published
-          if (!enriched.objective && finding.risk_id) {
-            // Try to find parent by risk_id_no directly (maybe risk_id in finding is actually risk_id_no)
-            const parent = await parentModel.findFirst({
-              where: {
-                risk_id_no: String(finding.risk_id).trim(),
-                status: "published"
-              },
-              include: {
-                aps: {
-                  where: finding.ap_code ? {
-                    ap_code: String(finding.ap_code).trim()
-                  } : undefined,
-                  take: 1,
-                },
-              },
-            });
-
-            if (parent) {
-              enriched.owners = parent.owners ?? null;
-              if (parent.aps && parent.aps.length > 0) {
-                const ap = parent.aps[0];
-                enriched.objective = ap.objective ?? null;
-                enriched.procedures = ap.procedures ?? null;
-                enriched.description = ap.description ?? null;
-                enriched.application = ap.application ?? null;
-              }
-            }
-          }
-
-          // Strategy 4: If still no match and we have risk_description, try fuzzy match, only published
-          if (!enriched.objective && finding.risk_description) {
-            const parent = await parentModel.findFirst({
-              where: {
-                risk_description: {
-                  contains: finding.risk_description.substring(0, 50), // First 50 chars
-                  mode: 'insensitive',
-                },
-                status: "published"
-              },
-              include: {
-                aps: {
-                  take: 1,
-                },
-              },
-            });
-
-            if (parent && parent.aps && parent.aps.length > 0) {
-              const ap = parent.aps[0];
-              enriched.objective = ap.objective ?? null;
-              enriched.procedures = ap.procedures ?? null;
-              enriched.description = ap.description ?? null;
-              enriched.application = ap.application ?? null;
-              enriched.owners = parent.owners ?? null;
-            }
-          }
-        } catch (err) {
-          // If join fails, continue with original data
-          console.error(`Failed to enrich finding ${finding.id} with audit-program data:`, err);
-        }
-        
-        return enriched;
-      })
+    const auditProgramData = parents.flatMap((p) =>
+      p.aps && p.aps.length > 0
+        ? p.aps.map((ap) => {
+            const riskId = p.risk_id_no ?? String(p.risk_id) ?? "";
+            const apCode = ap.ap_code ?? "";
+            const apCodeTrimmed = String(apCode).trim();
+            const key = `${String(riskId).trim()}::${apCodeTrimmed}`;
+            const finding = findingByKey.get(key);
+            const hasEvidenceFileForRow = evidenceApCodesWithFile.has(apCodeTrimmed);
+            const completionStatus = !hasEvidenceFileForRow ? "Draft" : (worksheetHasFile ? "Ready to Publish" : "Draft");
+            return {
+              id: finding?.id ?? null,
+              risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
+              risk_description: p.risk_description ?? null,
+              risk_details: p.risk_details ?? null,
+              ap_code: ap.ap_code ?? null,
+              substantive_test: ap.substantive_test ?? null,
+              risk: finding?.risk ?? null,
+              check_yn: finding?.check_yn ?? null,
+              method: finding?.method ?? ap.method ?? null,
+              preparer: finding?.preparer ?? null,
+              finding_result: finding?.finding_result ?? null,
+              finding_description: finding?.finding_description ?? null,
+              recommendation: finding?.recommendation ?? null,
+              auditee: finding?.auditee ?? null,
+              completion_status: completionStatus,
+              completion_date: finding?.completion_date ?? null,
+              created_at: finding?.created_at ?? null,
+              updated_at: finding?.updated_at ?? null,
+              objective: ap.objective ?? null,
+              procedures: ap.procedures ?? null,
+              description: ap.description ?? null,
+              application: ap.application ?? null,
+              owners: p.owners ?? null,
+            };
+          })
+        : [
+            {
+              id: null,
+              risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
+              risk_description: p.risk_description ?? null,
+              risk_details: p.risk_details ?? null,
+              ap_code: null,
+              substantive_test: null,
+              risk: null,
+              check_yn: null,
+              method: null,
+              preparer: null,
+              finding_result: null,
+              finding_description: null,
+              recommendation: null,
+              auditee: null,
+              completion_status: "Draft",
+              completion_date: null,
+              created_at: null,
+              updated_at: null,
+              objective: null,
+              procedures: null,
+              description: null,
+              application: null,
+              owners: p.owners ?? null,
+            },
+          ]
     );
 
-    return NextResponse.json({ data: enrichedFindings, meta: { total, page, pageSize } }, { status: 200 });
+    const total = auditProgramData.length;
+    const dataWithStatus = auditProgramData.slice(skip, skip + pageSize);
+
+    return NextResponse.json({ data: dataWithStatus, meta: { total, page, pageSize } }, { status: 200 });
   } catch (err) {
     console.error(`GET /api/audit-finding/[dept] error:`, err);
     return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 });

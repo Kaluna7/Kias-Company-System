@@ -5,9 +5,11 @@ import { create } from "zustand";
 
 export const useWarehouseStore = create((set, get) => ({
   warehouse: [],
+  meta: null,
   currentFilter: "published",
 
   setWarehouse: (data) => set({ warehouse: data }),
+  setWarehouseAndMeta: (data, meta) => set({ warehouse: data, meta: meta ?? null }),
 
   loadWarehouse: async (status = "published", page = 1, pageSize = 50) => {
     try {

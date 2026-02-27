@@ -34,12 +34,16 @@ export async function POST(req) {
         reviewer_date: body.reviewerDate ? new Date(body.reviewerDate) : null,
         status_documents: body.statusDocuments || null,
         status_worksheet: body.statusWorksheet || "IN PROGRESS",
-        status_wp: body.statusWP || "Not Checked",
+        status_wp: (body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null),
         file_path: body.filePath || null,
         audit_area: body.auditArea || null,
       },
     });
-    return new Response(JSON.stringify({ success: true, data: created }), {
+    await prisma.worksheet_finance.update({
+      where: { id: created.id },
+      data: { status_wp: null },
+    });
+    return new Response(JSON.stringify({ success: true, data: { ...created, status_wp: null } }), {
       status: 201,
       headers: { "Content-Type": "application/json" },
     });
@@ -49,6 +53,30 @@ export async function POST(req) {
       JSON.stringify({ success: false, error: err.message ?? "Server error" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
+  }
+}
+
+export async function PATCH(req) {
+  try {
+    const body = await req.json();
+    const latest = await prisma.worksheet_finance.findFirst({
+      where: { department: "TAX" },
+      orderBy: { created_at: "desc" },
+    });
+    if (latest) {
+      await prisma.worksheet_finance.update({
+        where: { id: latest.id },
+        data: { status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null },
+      });
+    } else {
+      await prisma.worksheet_finance.create({
+        data: { department: "TAX", status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null },
+      });
+    }
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } catch (err) {
+    console.error("PATCH /api/worksheet/tax error:", err);
+    return new Response(JSON.stringify({ success: false, error: err.message ?? "Server error" }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
 

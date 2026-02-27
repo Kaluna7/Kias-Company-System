@@ -372,14 +372,9 @@ export async function POST(req) {
         console.log(`Removed archive for module ${module_key} to allow new schedule to appear in progress`);
       }
       
-      // Always reset published data for this department when new schedule is created
-      // This ensures progress returns to 0 for new schedules (even if data was published before)
-      const deptKey = getDeptKeyFromScheduleId(department_id);
-      if (deptKey) {
-        await resetPublishedDataForDepartment(module_key, deptKey, client);
-        console.log(`Reset published data for ${module_key} ${deptKey} to make progress return to 0 for new schedule`);
-      }
-      
+      // Jangan reset published data - setiap publish harus tetap tersimpan di report
+      // (previously: reset would truncate report tables and lose all publish history)
+
       return NextResponse.json({ success: true, row: savedRow }, { status: 200 });
     } finally {
       client.release();

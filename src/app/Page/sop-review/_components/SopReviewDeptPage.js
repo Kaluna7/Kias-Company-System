@@ -142,6 +142,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const saveDraftTimeoutRef = useRef(null);
   const isSavingDraftRef = useRef(false);
   const lastSavedDataRef = useRef(null);
+  const isPublishingRef = useRef(false);
 
   const reindex = (list) => list.map((item, idx) => ({ ...item, no: idx + 1 }));
 
@@ -588,6 +589,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   }
 
   const publishToReport = async () => {
+    if (isPublishingRef.current) return;
     if (sopData.length === 0) {
       setSaveMessage({ type: "error", text: "No SOP items to publish." });
       setTimeout(() => setSaveMessage(null), 3000);
@@ -602,12 +604,12 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       return;
     }
 
+    isPublishingRef.current = true;
     setIsSaving(true);
     setSaveMessage(null);
     try {
-      // 1) Ensure latest draft saved to department tables
-      const stepsPayload = preparePayload(sopData);
-      const metaPayload = {
+      // Send steps + meta directly in publish body - single source of truth, avoids DB read race and duplicate rows
+      const meta = {
         department_name: departmentName,
         preparer_status: preparerStatus,
         preparer_name: preparerName || null,
@@ -617,19 +619,11 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         reviewer_name: reviewerName || null,
         reviewer_date: reviewerDate || null,
       };
-
-      const [metaRes, res] = await Promise.all([
-        fetch(`/api/SopReview/${apiPath}/meta`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(metaPayload) }),
-        fetch(`/api/SopReview/${apiPath}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stepsPayload) }),
-      ]);
-      if (!metaRes.ok || !res.ok) {
-        const metaTxt = await metaRes.text().catch(() => "");
-        const stepsTxt = await res.text().catch(() => "");
-        throw new Error(`Failed to save draft before publishing. Meta: ${metaTxt || metaRes.status} | Steps: ${stepsTxt || res.status}`);
-      }
-
-      // 2) Publish (move to report + clear dept tables)
-      const pubRes = await fetch(`/api/SopReview/${apiPath}/publish`, { method: "POST" });
+      const pubRes = await fetch(`/api/SopReview/${apiPath}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ steps: sopData, meta }),
+      });
       const pubJson = await pubRes.json().catch(() => ({}));
       if (!pubRes.ok || !pubJson.success) {
         throw new Error(pubJson.error || `Publish failed (HTTP ${pubRes.status})`);
@@ -650,6 +644,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       console.error("Publish error:", err);
       setSaveMessage({ type: "error", text: err?.message || "Failed to publish." });
     } finally {
+      isPublishingRef.current = false;
       setIsSaving(false);
       setTimeout(() => setSaveMessage(null), 5000);
     }

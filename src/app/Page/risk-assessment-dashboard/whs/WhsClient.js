@@ -12,7 +12,7 @@ import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
-export default function WhsClient({ initialData = [] }) {
+export default function WhsClient({ initialData = [], initialMeta = null }) {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin";
@@ -30,13 +30,18 @@ export default function WhsClient({ initialData = [] }) {
   const openPopUp = usePopUp((s) => s.openPopUp);
   const closePopUp = usePopUp((s) => s.closePopUp);
   const loadWarehouse = useWarehouseStore((s) => s.loadWarehouse);
-  const setWarehouse = useWarehouseStore((s) => s.setWarehouse);
+  const setWarehouseAndMeta = useWarehouseStore((s) => s.setWarehouseAndMeta);
 
+  const initDoneRef = useRef(false);
   useEffect(() => {
-    if (initialData && initialData.length > 0) {
-      setWarehouse(initialData);
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
+    if (initialData?.length > 0 || initialMeta) {
+      setWarehouseAndMeta(initialData ?? [], initialMeta);
     }
-  }, [initialData, setWarehouse]);
+  }, [initialData, initialMeta, setWarehouseAndMeta]);
+
+  const skipLoadForPublishedRef = useRef(!!(initialData?.length > 0));
 
   const items = useMemo(() => {
     const base = [];
@@ -177,8 +182,16 @@ export default function WhsClient({ initialData = [] }) {
       [loadWarehouse, viewDraft, meta?.page, meta?.pageSize]
     );
 
+    const prevViewDraftRef = useRef(viewDraft);
     useEffect(() => {
-      if (!isLoadingRef.current) load(1);
+      const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
+      prevViewDraftRef.current = viewDraft;
+      if (!viewDraftChanged) {
+        if (viewDraft) load(1);
+        else if (!skipLoadForPublishedRef.current) load(1);
+        return;
+      }
+      load(1);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [viewDraft]);
 

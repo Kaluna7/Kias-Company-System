@@ -7,7 +7,8 @@ import { headers } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 // Reuse a single Prisma instance in dev for better performance
 const prisma = globalThis.prisma || new PrismaClient();
@@ -140,7 +141,7 @@ async function WorksheetContent() {
     return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
   };
 
-  // Ambil data terakhir per department dari database (satu query, performa bagus)
+  // Ambil data terakhir per department dari database (order by created_at desc, ambil baris pertama per department = terbaru)
   const departments = baseWorksheets.map((w) => w.department);
 
   let latestByDept = {};
@@ -148,18 +149,16 @@ async function WorksheetContent() {
     const rows = await prisma.worksheet_finance.findMany({
       where: { department: { in: departments } },
       orderBy: { created_at: "desc" },
-      distinct: ["department"],
       select: {
         department: true,
         status_wp: true,
-        status_worksheet: true,
+        file_path: true,
         created_at: true,
       },
     });
-
+    // Baris sudah urut created_at desc → pertama kali ketemu department = row terbaru
     for (const row of rows) {
       if (!row.department) continue;
-      // Simpan hanya baris terbaru per department
       if (!latestByDept[row.department]) {
         latestByDept[row.department] = row;
       }
@@ -168,21 +167,15 @@ async function WorksheetContent() {
     console.error("Failed to load worksheet summaries:", e);
   }
 
+  // Status worksheet di dashboard tidak diambil dari data tersimpan (supaya tidak tampil "Available" dari save lama); tampil "-"
   const worksheets = baseWorksheets.map((base) => {
     const row = latestByDept[base.department];
-
-    const statusWP = row?.status_wp || "Not Checked";
-    const status =
-      row?.status_worksheet ||
-      // Default sama dengan UI awal
-      (base.department === "FINANCE" || base.department === "OPERATIONAL"
-        ? "In Progress"
-        : "Draft");
-
+    const status = "";
+    const statusWP = row?.status_wp ?? "";
     return {
       ...base,
-      statusWP,
       status,
+      statusWP,
     };
   });
 
@@ -212,8 +205,8 @@ async function WorksheetContent() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm text-gray-500">In Progress</p>
-                <p className="text-2xl font-bold text-gray-800">{worksheets.filter(item => item.status === 'In Progress').length}</p>
+                <p className="text-sm text-gray-500">Available</p>
+                <p className="text-2xl font-bold text-gray-800">{worksheets.filter(item => item.status === 'Available').length}</p>
               </div>
             </div>
           </div>
@@ -227,7 +220,7 @@ async function WorksheetContent() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Pending Review</p>
-                <p className="text-2xl font-bold text-gray-800">{worksheets.filter(item => item.statusWP === 'Not Checked').length}</p>
+                <p className="text-2xl font-bold text-gray-800">{worksheets.filter(item => !item.statusWP || item.statusWP === 'Not Checked').length}</p>
               </div>
             </div>
           </div>
@@ -263,19 +256,16 @@ async function WorksheetContent() {
                 >
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="text-lg font-semibold text-gray-600">{worksheet.department}</h3>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      worksheet.status === 'In Progress' 
-                        ? 'bg-gray-200 text-gray-600' 
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {worksheet.status}
-                    </span>
                   </div>
-                  
                   <div className="flex justify-between items-center">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
-                      {worksheet.statusWP}
+                      {worksheet.status || "-"}
                     </span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                      {worksheet.statusWP || "-"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
                     <div className="text-gray-400 flex items-center">
                       <span className="text-sm font-medium">Locked</span>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -292,19 +282,18 @@ async function WorksheetContent() {
               >
                 <div className="flex justify-between items-start mb-3">
                   <h3 className="text-lg font-semibold text-gray-800">{worksheet.department}</h3>
+                </div>
+                <div className="flex justify-between items-center">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    worksheet.status === 'In Progress' 
-                      ? 'bg-blue-100 text-blue-800' 
-                      : 'bg-gray-100 text-gray-800'
+                    worksheet.status === 'Available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                   }`}>
-                    {worksheet.status}
+                    {worksheet.status || "-"}
+                  </span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    {worksheet.statusWP || "-"}
                   </span>
                 </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                    {worksheet.statusWP}
-                  </span>
+                <div className="flex justify-between items-center mt-1">
                   <div className="text-blue-600 flex items-center">
                     <span className="text-sm font-medium">Open</span>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

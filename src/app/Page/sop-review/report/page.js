@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import ReportClient from "./ReportClient";
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
 
+export const dynamic = "force-dynamic";
+
 const DEPT_TO_API = {
   Finnance: { api: "finance", dept: "FINANCE" },
   Finance: { api: "finance", dept: "FINANCE" },
@@ -86,10 +88,9 @@ async function loadReportData() {
       if (!map) return null;
       const apiPath = map.api;
       try {
-        const publishedRes = await fetch(`${baseUrl}/api/SopReview/${apiPath}/published`, { cache: "no-store" });
+        const publishedRes = await fetch(`${baseUrl}/api/SopReview/${apiPath}/published?all=1`, { cache: "no-store" });
         const publishedJson = await publishedRes.json().catch(() => ({}));
-        const meta = publishedRes.ok ? publishedJson.meta || null : null;
-        const steps = publishedRes.ok && Array.isArray(publishedJson.rows) ? publishedJson.rows : [];
+        const publishes = publishedRes.ok && Array.isArray(publishedJson.publishes) ? publishedJson.publishes : [];
         const scheduleDeptId = DEPT_TO_SCHEDULE_ID[map.dept];
         const scheduleData = scheduleDeptId ? scheduleMap[scheduleDeptId] : null;
         let audit_period_start = "#####";
@@ -112,12 +113,11 @@ async function loadReportData() {
             else audit_period_end = "#####";
           }
         }
-        const preparer = scheduleData?.user_name || "";
-        return {
+        return publishes.map(({ meta, rows }) => ({
           apiPath,
           department: map.dept,
           meta,
-          steps: steps.map((r, idx) => ({
+          steps: (rows || []).map((r, idx) => ({
             no: r.no ?? idx + 1,
             sop_related: r.sop_related || "",
             status: r.status || "DRAFT",
@@ -126,20 +126,20 @@ async function loadReportData() {
           })),
           audit_period_start,
           audit_period_end,
-          preparer,
+          preparer: meta?.preparer_name || scheduleData?.user_name || "",
           published_at: meta?.published_at || null,
           audit_fieldwork_start_date: meta?.audit_fieldwork_start_date || null,
           audit_fieldwork_end_date: meta?.audit_fieldwork_end_date || null,
-        };
+        }));
       } catch (e) {
         console.warn(`Failed to load data for ${b.name}:`, e.message);
-        return { apiPath, department: map.dept, meta: null, steps: [], audit_period_start: "#####", audit_period_end: "#####", preparer: "" };
+        return [];
       }
     })
   );
   return results
-    .filter((r) => r.status === "fulfilled" && r.value !== null)
-    .map((r) => r.value)
+    .filter((r) => r.status === "fulfilled")
+    .flatMap((r) => (Array.isArray(r.value) ? r.value : r.value ? [r.value] : []))
     .filter((row) => (row.meta?.published_at || row.published_at) != null);
 }
 

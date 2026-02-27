@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import prisma from "@/app/lib/prisma";
@@ -23,6 +23,34 @@ function getApDelegate(department) {
   const delegateName = deptToApDelegate[key];
   if (!delegateName) return null;
   return prisma[delegateName];
+}
+
+function parseAttachmentsField(fileUrl, fileName) {
+  if (!fileUrl) return [];
+  try {
+    const parsed = JSON.parse(fileUrl);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((item) => item && typeof item.url === "string")
+        .map((item) => ({
+          url: item.url,
+          name: item.name || "",
+          uploaded_at: item.uploaded_at || null,
+        }));
+    }
+  } catch (e) {
+    // fall through to treat as single string
+  }
+  if (typeof fileUrl === "string") {
+    return [
+      {
+        url: fileUrl,
+        name: fileName || "",
+        uploaded_at: null,
+      },
+    ];
+  }
+  return [];
 }
 
 export function makeEvidenceHandlers(defaultDepartment) {
@@ -60,24 +88,47 @@ export function makeEvidenceHandlers(defaultDepartment) {
       });
 
       if (existingEvidence) {
+        const currentAttachments = parseAttachmentsField(existingEvidence.file_url, existingEvidence.file_name);
+        if (currentAttachments.length >= 5) {
+          return NextResponse.json(
+            { success: false, error: "Maximum 5 documents allowed for each AP." },
+            { status: 400 },
+          );
+        }
+        const updatedAttachments = [
+          ...currentAttachments,
+          { url: fileUrl, name: originalName, uploaded_at: new Date().toISOString() },
+        ];
         await prisma.evidence.update({
           where: { id: existingEvidence.id },
-          data: { file_url: fileUrl, file_name: originalName, updated_at: new Date() },
+          data: {
+            file_url: JSON.stringify(updatedAttachments),
+            file_name: updatedAttachments[0]?.name || null,
+            updated_at: new Date(),
+          },
         });
       } else {
+        const attachments = [
+          { url: fileUrl, name: originalName, uploaded_at: new Date().toISOString() },
+        ];
         await prisma.evidence.create({
           data: {
             department: department.toUpperCase(),
             ap_id: apIdNum,
             ap_code: ap_code || null,
-            file_url: fileUrl,
+            file_url: JSON.stringify(attachments),
             file_name: originalName,
             status: "IN PROGRESS",
           },
         });
       }
 
-      return NextResponse.json({ success: true, fileUrl, fileName: originalName, message: "File uploaded successfully" });
+      return NextResponse.json({
+        success: true,
+        fileUrl,
+        fileName: originalName,
+        message: "File uploaded successfully",
+      });
     } catch (error) {
       console.error("Error uploading file:", error);
       return NextResponse.json({ error: error.message || "Failed to upload file" }, { status: 500 });
@@ -120,8 +171,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
               ap_id: apIdNum ?? existingEvidence.ap_id,
               ap_code: apCode || null,
               substantive_test: evidence.substantive_test || null,
-              file_url: evidence.attachment || existingEvidence.file_url,
-              file_name: evidence.file_name || existingEvidence.file_name,
+              // keep existing attachments; uploads handled via POST/DELETE
+              file_url: existingEvidence.file_url,
+              file_name: existingEvidence.file_name,
               status: evidence.status || "IN PROGRESS",
               overall_status: overallStatus || "IN PROGRESS",
               updated_at: new Date(),
@@ -135,8 +187,8 @@ export function makeEvidenceHandlers(defaultDepartment) {
               ap_id: apIdNum,
               ap_code: apCode || null,
               substantive_test: evidence.substantive_test || null,
-              file_url: evidence.attachment || null,
-              file_name: evidence.file_name || null,
+              file_url: null,
+              file_name: null,
               status: evidence.status || "IN PROGRESS",
               overall_status: overallStatus || "IN PROGRESS",
             },
@@ -200,23 +252,50 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const evidenceByApId = {};
       for (const ev of evidenceRows) {
         if (ev.ap_id == null) continue;
-        if (!evidenceByApId[ev.ap_id]) evidenceByApId[ev.ap_id] = ev; // keep latest
+        const attachments = parseAttachmentsField(ev.file_url, ev.file_name);
+        if (!evidenceByApId[ev.ap_id]) {
+          evidenceByApId[ev.ap_id] = {
+            base: ev,
+            attachments,
+          };
+        } else {
+          // merge additional attachments (keep max 5 for response)
+          const existing = evidenceByApId[ev.ap_id];
+          const combined = [...attachments, ...existing.attachments];
+          // de-duplicate by url
+          const seen = new Set();
+          const unique = [];
+          for (const att of combined) {
+            if (!att || !att.url || seen.has(att.url)) continue;
+            seen.add(att.url);
+            unique.push(att);
+            if (unique.length >= 5) break;
+          }
+          evidenceByApId[ev.ap_id] = {
+            base: ev,
+            attachments: unique,
+          };
+        }
       }
 
       const merged = apList
         .filter((ap) => ap.ap_code && String(ap.ap_code).trim() !== "")
         .map((ap) => {
-          const ev = evidenceByApId[ap.ap_id];
+          const evGroup = evidenceByApId[ap.ap_id];
+          const base = evGroup?.base;
+          const attachments = evGroup?.attachments || [];
+          const primary = attachments[0] || null;
           return {
-            id: ev?.id ?? null,
+            id: base?.id ?? null,
             ap_id: ap.ap_id,
             ap_code: ap.ap_code || "",
             substantive_test: ap.substantive_test || "",
-            attachment: ev?.file_url || "",
-            file_name: ev?.file_name || "",
-            status: ev?.status || "",
-            created_at: ev?.created_at ?? null,
-            updated_at: ev?.updated_at ?? null,
+            attachment: primary?.url || "",
+            file_name: primary?.name || "",
+            attachments,
+            status: base?.status || "",
+            created_at: base?.created_at ?? null,
+            updated_at: base?.updated_at ?? null,
           };
         });
 
@@ -233,7 +312,89 @@ export function makeEvidenceHandlers(defaultDepartment) {
     }
   };
 
-  return { GET, POST, PUT };
+  const DELETE = async (req) => {
+    try {
+      const body = await req.json();
+      const { department, ap_id, ap_code, fileUrl } = body || {};
+
+      const dept = (department || defaultDepartment || "").toUpperCase();
+      if (!dept) {
+        return NextResponse.json({ success: false, error: "Department is required" }, { status: 400 });
+      }
+      if (!fileUrl) {
+        return NextResponse.json({ success: false, error: "fileUrl is required" }, { status: 400 });
+      }
+
+      const apIdNum = ap_id ? parseInt(ap_id, 10) : null;
+      const where = {
+        department: dept,
+        ...(apIdNum ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
+      };
+
+      const existingEvidence = await prisma.evidence.findFirst({ where });
+      if (!existingEvidence) {
+        return NextResponse.json(
+          { success: false, error: "Evidence record not found for this AP." },
+          { status: 404 },
+        );
+      }
+
+      const currentAttachments = parseAttachmentsField(
+        existingEvidence.file_url,
+        existingEvidence.file_name,
+      );
+      if (!currentAttachments.length) {
+        return NextResponse.json(
+          { success: false, error: "No attachments found for this AP." },
+          { status: 400 },
+        );
+      }
+
+      const remaining = currentAttachments.filter((att) => att.url !== fileUrl);
+      if (remaining.length === currentAttachments.length) {
+        return NextResponse.json(
+          { success: false, error: "Attachment not found for this AP." },
+          { status: 404 },
+        );
+      }
+
+      // Try to remove physical file as best-effort (ignore errors)
+      try {
+        const publicPathPrefix = "/uploads/";
+        if (fileUrl.startsWith(publicPathPrefix)) {
+          const filePath = join(process.cwd(), "public", fileUrl.replace(publicPathPrefix, ""));
+          if (existsSync(filePath)) {
+            await unlink(filePath).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to delete evidence file from disk:", e);
+      }
+
+      await prisma.evidence.update({
+        where: { id: existingEvidence.id },
+        data: {
+          file_url: remaining.length ? JSON.stringify(remaining) : null,
+          file_name: remaining[0]?.name || null,
+          updated_at: new Date(),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Attachment removed successfully.",
+        attachments: remaining,
+      });
+    } catch (error) {
+      console.error("Error deleting evidence attachment:", error);
+      return NextResponse.json(
+        { success: false, error: error.message || "Failed to delete attachment" },
+        { status: 500 },
+      );
+    }
+  };
+
+  return { GET, POST, PUT, DELETE };
 }
 
 

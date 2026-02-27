@@ -9,6 +9,7 @@ export const useFinanceStore = create((set , get) => ({
   currentFilter: "published",
 
   setFinance: (data) => set({ finance: data }),
+  setFinanceAndMeta: (data, meta) => set({ finance: data, meta: meta ?? null }),
 
   loadFinance: async (status = "published", page = 1, pageSize = 50) => {
     try {

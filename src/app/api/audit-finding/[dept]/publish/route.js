@@ -1,7 +1,29 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@/generated/prisma";
+import { pool } from "@/app/api/SopReview/_shared/pool";
 
 const prisma = globalThis.prisma || new PrismaClient();
+
+const deptToSlug = {
+  accounting: "accounting",
+  finance: "finance",
+  hrd: "hrd",
+  "g&a": "ga",
+  ga: "ga",
+  sdp: "sdp",
+  tax: "tax",
+  "l&p": "lp",
+  lp: "lp",
+  mis: "mis",
+  merch: "merch",
+  ops: "ops",
+  whs: "whs",
+};
+
+function qIdent(name) {
+  if (!/^[a-z0-9_]+$/i.test(name)) throw new Error(`Invalid identifier: ${name}`);
+  return name;
+}
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
 const deptToModel = {
@@ -272,6 +294,24 @@ export async function PUT(req, { params }) {
             console.error(`Error deleting audit-program data for finding ${finding.id}:`, err);
           }
         }
+      }
+    }
+
+    // Reset all meta after publish: status and finding result/file so form is clean
+    const slug = deptToSlug[dept?.toLowerCase()];
+    if (slug) {
+      try {
+        const metaTable = qIdent(`audit_finding_meta_${slug}`);
+        const client = await pool.connect();
+        try {
+          await client.query(
+            `UPDATE ${metaTable} SET preparer_status = NULL, final_status = NULL, finding_result = NULL, finding_result_file_name = NULL, updated_at = NOW()`
+          );
+        } finally {
+          client.release();
+        }
+      } catch (metaErr) {
+        console.warn(`Publish: could not reset meta for ${dept}:`, metaErr.message);
       }
     }
 

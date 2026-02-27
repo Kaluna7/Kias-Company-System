@@ -4,7 +4,10 @@ import { create } from "zustand";
 
 export const useMerchandiseStore = create((set, get) => ({
   merchandise: [],
+  meta: null,
   currentFilter: "published",
+
+  setMerchAndMeta: (data, meta) => set({ merchandise: data, meta: meta ?? null }),
 
   loadMerchandise: async (status = "published", page = 1, pageSize = 50) => {
     try {

@@ -5,7 +5,10 @@ import { create } from "zustand";
 
 export const useLossPreventionStore = create((set, get) => ({
   lp: [],
+  meta: null,
   currentFilter: "published",
+
+  setLpAndMeta: (data, meta) => set({ lp: data, meta: meta ?? null }),
 
   loadLossPrevention: async (status = "published", page = 1, pageSize = 50) => {
     try {

@@ -4,7 +4,10 @@ import { create } from "zustand";
 
 export const useGeneralAffairStore = create((set, get) => ({
   generalAffair: [],
+  meta: null,
   currentFilter: "published",
+
+  setGaAndMeta: (data, meta) => set({ generalAffair: data, meta: meta ?? null }),
 
   loadGeneralAffair: async (status = "published", page = 1, pageSize = 50) => {
     try {

@@ -97,14 +97,32 @@ export default function EvidenceDeptPage({
 
       const rows = Array.isArray(result?.data) ? result.data : [];
       setApData(
-        rows.map((r) => ({
-          ap_id: r.ap_id,
-          ap_code: r.ap_code || "",
-          substantive_test: r.substantive_test || "",
-          attachment: r.attachment || "",
-          file_name: r.file_name || "",
-          status: r.status || "",
-        }))
+        rows.map((r) => {
+          const attachments = Array.isArray(r.attachments)
+            ? r.attachments.map((att, idx) => ({
+                url: att.url,
+                name: att.name || att.file_name || `Document ${idx + 1}`,
+                uploaded_at: att.uploaded_at || null,
+              }))
+            : r.attachment
+              ? [
+                  {
+                    url: r.attachment,
+                    name: r.file_name || "",
+                    uploaded_at: null,
+                  },
+                ]
+              : [];
+          return {
+            ap_id: r.ap_id,
+            ap_code: r.ap_code || "",
+            substantive_test: r.substantive_test || "",
+            attachment: r.attachment || "",
+            file_name: r.file_name || "",
+            status: r.status || "",
+            attachments,
+          };
+        })
       );
 
       if (result?.meta) {
@@ -134,22 +152,43 @@ export default function EvidenceDeptPage({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const row = apData[index];
+    if (Array.isArray(row.attachments) && row.attachments.length >= 5) {
+      setError("Maximum 5 documents allowed for each AP.");
+      e.target.value = "";
+      return;
+    }
+
     setUploadingIndex(index);
     setError("");
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("ap_id", apData[index].ap_id);
-      formData.append("ap_code", apData[index].ap_code);
+      formData.append("ap_id", row.ap_id);
+      formData.append("ap_code", row.ap_code);
       formData.append("department", departmentLabel);
 
       const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
       const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         const newData = [...apData];
-        newData[index].attachment = result.fileUrl || "";
-        newData[index].file_name = result.fileName || file.name;
+        const existingAttachments = Array.isArray(row.attachments) ? row.attachments : [];
+        const updatedAttachments = [
+          ...existingAttachments,
+          {
+            url: result.fileUrl,
+            name: result.fileName || file.name,
+            uploaded_at: new Date().toISOString(),
+          },
+        ].slice(0, 5);
+
+        newData[index] = {
+          ...row,
+          attachment: updatedAttachments[0]?.url || "",
+          file_name: updatedAttachments[0]?.name || "",
+          attachments: updatedAttachments,
+        };
         setApData(newData);
       } else {
         setError(result.error || "Upload failed");
@@ -160,6 +199,54 @@ export default function EvidenceDeptPage({
     } finally {
       setUploadingIndex(null);
       e.target.value = "";
+    }
+  };
+
+  const handleDeleteAttachment = async (rowIndex, fileUrl) => {
+    const row = apData[rowIndex];
+    if (!row || !fileUrl) return;
+    setError("");
+
+    try {
+      setUploadingIndex(rowIndex);
+
+      const response = await fetch(`/api/evidence/${evidenceApiSlug}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          department: departmentLabel,
+          ap_id: row.ap_id,
+          ap_code: row.ap_code,
+          fileUrl,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Failed to delete attachment");
+      }
+
+      const remaining = Array.isArray(result.attachments)
+        ? result.attachments.map((att, idx) => ({
+            url: att.url,
+            name: att.name || `Document ${idx + 1}`,
+            uploaded_at: att.uploaded_at || null,
+          }))
+        : [];
+
+      const newData = [...apData];
+      newData[rowIndex] = {
+        ...row,
+        attachments: remaining,
+        attachment: remaining[0]?.url || "",
+        file_name: remaining[0]?.name || "",
+      };
+      setApData(newData);
+    } catch (err) {
+      console.error("Delete attachment error:", err);
+      setError(err.message || "Failed to delete attachment");
+    } finally {
+      setUploadingIndex(null);
     }
   };
 
@@ -286,7 +373,7 @@ export default function EvidenceDeptPage({
                   <tr className="bg-gray-100">
                     <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">AP Code</th>
                     <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">Substantive Test</th>
-                    <th className="border border-gray-200 px-4 py-3 text-center font-semibold text-sm">Attachment</th>
+                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">Attachment</th>
                     <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">File Name</th>
                     <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">Action</th>
                   </tr>
@@ -314,32 +401,68 @@ export default function EvidenceDeptPage({
                       <tr key={`${row.ap_id}-${index}`} className={index % 2 === 0 ? "bg-gray-50" : "bg-white"}>
                         <td className="border border-gray-200 px-4 py-3 text-gray-800 font-medium">{row.ap_code || "-"}</td>
                         <td className="border border-gray-200 px-4 py-3 text-gray-800">{row.substantive_test || "-"}</td>
-                        <td className="border border-gray-200 px-4 py-3 text-center">
-                          {row.attachment ? (
-                            <a
-                              href={row.attachment}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                            >
-                              Open
-                            </a>
+                        <td className="border border-gray-200 px-4 py-3 text-gray-800 text-sm">
+                          {row.attachments && row.attachments.length > 0 ? (
+                            <div className="space-y-1">
+                              {row.attachments.map((file, fileIdx) => (
+                                <div
+                                  key={file.url || `${row.ap_id}-${fileIdx}`}
+                                  className="flex items-center justify-between gap-2"
+                                >
+                                  <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs truncate max-w-[180px]"
+                                    title={file.name}
+                                  >
+                                    {file.name || `Document ${fileIdx + 1}`}
+                                  </a>
+                                  {!isReviewer && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAttachment(index, file.url)}
+                                      className="inline-flex items-center justify-center rounded-full border border-red-200 text-red-600 hover:bg-red-50 w-6 h-6 text-xs"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 text-xs">No document</span>
                           )}
                         </td>
-                        <td className="border border-gray-200 px-4 py-3 text-gray-800 text-sm">{row.file_name || "-"}</td>
+                        <td className="border border-gray-200 px-4 py-3 text-gray-800 text-sm">
+                          {row.file_name || "-"}
+                        </td>
                         <td className="border border-gray-200 px-4 py-3">
-                          <label className={`flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 shadow-md hover:shadow-lg ${isReviewer ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                          <label
+                            className={`flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 shadow-md hover:shadow-lg ${
+                              isReviewer || (row.attachments && row.attachments.length >= 5)
+                                ? "opacity-50 cursor-not-allowed"
+                                : "cursor-pointer"
+                            }`}
+                          >
                             {uploadingIndex === index ? "Uploading..." : "UPLOAD"}
                             <input
                               type="file"
                               className="hidden"
                               onChange={(e) => handleFileUpload(index, e)}
                               accept=".pdf,.zip,.doc,.docx,.xlsx,.xls"
-                              disabled={uploadingIndex === index || isReviewer}
+                              disabled={
+                                uploadingIndex === index ||
+                                isReviewer ||
+                                (row.attachments && row.attachments.length >= 5)
+                              }
                             />
                           </label>
+                          {row.attachments && row.attachments.length >= 5 && (
+                            <div className="mt-1 text-[11px] text-amber-600">
+                              Maksimal 5 dokumen per AP.
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))

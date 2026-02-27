@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import ConfirmModal from "../../features/ConfirmModal";
-import { useFinanceStore } from "@/app/stores/RiskAssessement/financeStore";
 import { useToast } from "@/app/contexts/ToastContext";
 
 export function DataTable({
@@ -14,17 +13,14 @@ export function DataTable({
   editMode = false,
   onEditRow = () => {},
   searchQuery = "",
-  apiPath = "finance", // Default API path, should be passed from parent
+  apiPath = "finance",
 }) {
   const toast = useToast();
-  const updateStatus = useFinanceStore((s) => s.updateStatus);
-  const moveToDraft = useFinanceStore((s) => s.moveToDraft);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState(null);
 
-  useEffect(() => {
-    if (typeof load === "function") load();
-  }, [load]);
+  // NOTE: Do NOT call load() in useEffect - parent passes inline fn, new ref every render = infinite loop.
+  // Parent TableWrapper handles initial load; load() only called after confirm actions below.
 
   // filter berdasarkan searchQuery
   const filteredItems = useMemo(() => {
@@ -53,8 +49,15 @@ export function DataTable({
     );
   }, [items, searchQuery]);
 
-  if (!filteredItems || filteredItems.length === 0)
-    return <div className="p-4 text-gray-500">Tidak ada data ditemukan.</div>;
+  if (!filteredItems || filteredItems.length === 0) {
+    return (
+      <div className="p-4">
+        <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-8 text-center text-gray-500">
+          Tidak ada data ditemukan.
+        </div>
+      </div>
+    );
+  }
 
   const openConfirm = (payload) => {
     setConfirmPayload(payload);
@@ -71,7 +74,6 @@ export function DataTable({
     const { id, action } = confirmPayload;
     try {
       if (action === "delete") {
-        // Delete data
         const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}`, {
           method: "DELETE",
         });
@@ -81,11 +83,24 @@ export function DataTable({
         }
         toast.show("Data deleted successfully", "success");
       } else if (action === "publish") {
-        await updateStatus(id, "published");
+        const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "published" }),
+        });
+        if (!res.ok) throw new Error("Failed to update status");
       } else if (action === "draft") {
-        await moveToDraft(id);
+        const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/draft`, {
+          method: "PUT",
+        });
+        if (!res.ok) throw new Error("Failed to move to draft");
       } else {
-        await updateStatus(id, action);
+        const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: action }),
+        });
+        if (!res.ok) throw new Error("Failed to update status");
       }
       if (typeof load === "function") await load();
       closeConfirm();
@@ -95,29 +110,32 @@ export function DataTable({
     }
   };
 
+  const showActionCol = convertMode || editMode;
+
   return (
-    <div className="p-4">
-      <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
-        <table className="min-w-[1000px] w-full table-fixed border-collapse text-xs">
+    <div className="p-4 flex flex-col min-h-0">
+      <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0 flex-1 min-h-0" style={{ maxHeight: "calc(100vh - 220px)" }}>
+        <table className="border-collapse text-xs" style={{ minWidth: "1600px", tableLayout: "fixed", width: "100%" }}>
           <colgroup>
-            <col style={{ width: "5%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "6%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "4%" }} />
-            <col style={{ width: "4%" }} />
-            <col style={{ width: "4%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "6%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "4%" }} />
-            <col style={{ width: "4%" }} />
+            <col style={{ width: "80px" }} />
+            <col style={{ width: "90px" }} />
+            <col style={{ width: "105px" }} />
+            <col style={{ width: "95px" }} />
+            <col style={{ width: "125px" }} />
+            <col style={{ width: "125px" }} />
+            <col style={{ width: "130px" }} />
+            <col style={{ width: "90px" }} />
+            <col style={{ width: "115px" }} />
+            <col style={{ width: "105px" }} />
+            <col style={{ width: "130px" }} />
+            <col style={{ width: "85px" }} />
+            <col style={{ width: "145px" }} />
+            <col style={{ width: "115px" }} />
+            <col style={{ width: "85px" }} />
+            {showActionCol && <col style={{ width: "120px" }} />}
           </colgroup>
 
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-gray-100">
               {[
                 "RISK ID NO.",
@@ -136,14 +154,13 @@ export function DataTable({
                 "Onset Timeframe",
                 "Status",
               ].map((h) => (
-                <th key={h} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">
+                <th key={h} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 whitespace-normal break-words align-top">
                   {h}
                 </th>
               ))}
 
-              {/* Action column muncul jika convertMode atau editMode aktif */}
-              {(convertMode || editMode) && (
-                <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">
+              {showActionCol && (
+                <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 whitespace-nowrap">
                   Action
                   {convertMode && (
                     <button onClick={onCloseConvert} className="ml-2 text-red-500 hover:text-red-700 font-bold text-xs">
@@ -186,16 +203,17 @@ export function DataTable({
                     }
                   }
 
+                  const cellKey = `${f.risk_id ?? idx}-${i}`;
                   if ([4, 5, 6, 10, 12].includes(i)) {
                     return (
-                      <td key={i} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top ${extraClass}`} title={typeof val === "string" ? val : undefined}>
+                      <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                         {val}
                       </td>
                     );
                   }
 
                   return (
-                    <td key={i} className={`p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap ${extraClass}`} title={typeof val === "string" ? val : undefined}>
+                    <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                       {val}
                     </td>
                   );
@@ -207,8 +225,8 @@ export function DataTable({
                   </span>
                 </td>
 
-                {(convertMode || editMode) && (
-                  <td className="p-1 text-center border border-gray-200">
+                {showActionCol && (
+                  <td className="p-1 text-center border border-gray-200 align-top">
                     <div className="flex items-center justify-center gap-2">
                       {/* jika editMode aktif & kita sedang melihat draft -> tampilkan tombol Edit dan Delete */}
                       {editMode && viewDraft && (

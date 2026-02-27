@@ -4,9 +4,11 @@ import { create } from "zustand";
 
 export const useHrdStore = create((set, get) => ({
   hrd: [],
+  meta: null,
   currentFilter: "published",
 
   setHrd: (data) => set({ hrd: data }),
+  setHrdAndMeta: (data, meta) => set({ hrd: data, meta: meta ?? null }),
 
   loadHrd: async (status = "published", page = 1, pageSize = 50) => {
     try {

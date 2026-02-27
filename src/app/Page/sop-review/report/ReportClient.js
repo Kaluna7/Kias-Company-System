@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { useToast } from "@/app/contexts/ToastContext";
 
@@ -119,6 +119,9 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     }
   };
 
+  const PAGE_SIZE = 15;
+  const [currentPage, setCurrentPage] = useState(1);
+
   const groupedData = useMemo(() => {
     const groups = {};
     (rows || []).forEach((r) => {
@@ -133,8 +136,9 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       const periodEnd = r.audit_period_end && r.audit_period_end !== "#####"
         ? String(r.audit_period_end).slice(0, 10)
         : schedule?.end_date ? String(schedule.end_date).slice(0, 10) : "no-period";
+      const metaId = r.meta?.id != null ? String(r.meta.id) : "";
       const publishedAtStr = publishedAt ? String(publishedAt) : "no-publish";
-      const groupKey = `${periodStart}|||${periodEnd}|||${r.department}|||${publishedAtStr}|||${r.apiPath}`;
+      const groupKey = `${metaId}|||${periodStart}|||${periodEnd}|||${r.department}|||${publishedAtStr}|||${r.apiPath}`;
       if (!groups[groupKey]) {
         const auditFieldworkStart = periodStart !== "no-period" ? formatDateForDisplay(periodStart) : "#####";
         const auditFieldworkEnd = meta?.audit_fieldwork_end_date ? formatDateForDisplay(meta.audit_fieldwork_end_date) : "#####";
@@ -189,6 +193,22 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       return 0;
     });
   }, [rows, getScheduleForDepartment]);
+
+  const totalGroups = groupedData.length;
+  const totalPages = Math.max(1, Math.ceil(totalGroups / PAGE_SIZE));
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return groupedData.slice(start, start + PAGE_SIZE);
+  }, [groupedData, currentPage]);
+
+  const goToPage = (page) => {
+    const p = Math.max(1, Math.min(page, totalPages));
+    setCurrentPage(p);
+  };
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
 
   const handleView = (group) => {
     if (!group?.items || group.items.length === 0) {
@@ -439,218 +459,537 @@ ${stepCount >= maxSteps ? `<tr><td colspan="5" style="text-align:center;color:#6
   };
 
   return (
-    <div className="flex flex-col">
-      <div className="p-4">
-        <div className="mb-4">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">SOP Review Report</h1>
-          <p className="text-xs sm:text-sm text-gray-600">Comprehensive overview of all department SOP reviews (published)</p>
+    <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
+              SOP Review Report
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-slate-600">
+              Comprehensive overview of all department SOP reviews that have been published.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700 ring-1 ring-inset ring-green-200">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              <span>Completed</span>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2.5 py-1 text-[11px] font-medium text-yellow-700 ring-1 ring-inset ring-yellow-200">
+              <span className="h-2 w-2 rounded-full bg-yellow-400" />
+              <span>In Progress</span>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200">
+              <span className="h-2 w-2 rounded-full bg-red-500" />
+              <span>Draft / Not Started</span>
+            </span>
+          </div>
         </div>
-        <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm mt-4">
-          <table className="min-w-full table-fixed border-collapse text-xs">
-            <colgroup>
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "12%" }} />
-            </colgroup>
-            <thead>
-              <tr className="bg-gray-100">
-                {["Department", "Preparer", "Reviewer", "Audit Period Start", "Audit Period End", "Status", "Action"].map((h) => (
-                  <th key={h} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {groupedData.map((row, idx) => {
-                const totalSteps = row.items.reduce((sum, item) => sum + (item._detail?.steps?.length || 0), 0);
-                const hasData = totalSteps > 0;
-                return (
-                  <tr
-                    key={`${row.audit_period_start}-${row.audit_period_end}-${row.department}-${idx}`}
-                    className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}
-                  >
-                    <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap font-semibold">
-                      {row.department || "-"}
-                    </td>
-                    <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top">
-                      {row.preparer || "-"}
-                    </td>
-                    <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top">
-                      {row.reviewer || "-"}
-                    </td>
-                    <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                      {formatDateForDisplay(row.audit_period_start) !== "#####" ? formatDateForDisplay(row.audit_period_start) : "-"}
-                    </td>
-                    <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                      {formatDateForDisplay(row.audit_period_end) !== "#####" ? formatDateForDisplay(row.audit_period_end) : "-"}
-                    </td>
-                    <td
-                      className={`p-1 text-xs text-center border border-gray-200 font-semibold ${
-                        hasData ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                      }`}
+
+        <div className="mt-2 rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/70">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 sm:px-4 py-2.5">
+            <p className="text-[11px] sm:text-xs text-slate-600">
+              Use this report to quickly review audit periods, fieldwork dates, status per department, and reviewer comments.
+            </p>
+            {totalGroups > 0 && (
+              <span className="hidden sm:inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 ring-1 ring-inset ring-slate-200">
+                {totalGroups} grouped record{totalGroups > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <div className="overflow-auto">
+            <table className="min-w-full border-collapse text-[11px] sm:text-xs">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                  {[
+                    "Audit Fieldwork - Start",
+                    "Audit Fieldwork - End",
+                    "Audit Period - Start",
+                    "Audit Period - End",
+                    "Department",
+                    "SOP Sheet",
+                    "SOP Availability",
+                    "Preparer",
+                    "Preparer Completion Date",
+                    "SOP Preparer",
+                    "SOP Reviewer",
+                    "SOP Reviewer Status",
+                    "Reviewer Date",
+                    "SOP Reviewer Comments",
+                    "Action",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-center text-[10px] sm:text-xs font-semibold border border-slate-200 whitespace-nowrap"
                     >
-                      {hasData ? "AVAILABLE" : "-"}
-                    </td>
-                    <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">
-                      <button
-                        className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded text-xs hover:bg-blue-100"
-                        onClick={() => handleView(row)}
-                      >
-                        View
-                      </button>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedData.map((row, idx) => {
+                  const totalSteps = row.items.reduce(
+                    (sum, item) => sum + (item._detail?.steps?.length || 0),
+                    0
+                  );
+                  const hasData = totalSteps > 0;
+                  const item = row.items?.[0] || row;
+                  const sopSheet = getScheduleDepartmentId(row.department) || "-";
+                  const getPreparerStatusBg = (s) => {
+                    const st = (s || "DRAFT").toUpperCase();
+                    if (st === "COMPLETED") return "bg-green-50 text-green-800 ring-1 ring-inset ring-green-200";
+                    if (st === "DRAFT") return "bg-red-50 text-red-800 ring-1 ring-inset ring-red-200";
+                    return "bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-200";
+                  };
+                  const getReviewerStatusBg = (s) => {
+                    const st = (s || "DRAFT").toUpperCase();
+                    if (st === "COMPLETED" || st === "APPROVED")
+                      return "bg-green-50 text-green-800 ring-1 ring-inset ring-green-200";
+                    if (st === "DRAFT") return "bg-red-50 text-red-800 ring-1 ring-inset ring-red-200";
+                    return "bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-200";
+                  };
+                  return (
+                    <tr
+                      key={`${row.audit_period_start}-${row.audit_period_end}-${row.department}-${idx}`}
+                      className={`${
+                        idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"
+                      } hover:bg-slate-100 transition-colors`}
+                    >
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {row.audit_fieldwork_start !== "#####"
+                          ? row.audit_fieldwork_start
+                          : "#####"
+                        }
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {row.audit_fieldwork_end !== "#####"
+                          ? row.audit_fieldwork_end
+                          : "#####"
+                        }
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {formatDateForDisplay(row.audit_period_start) !== "#####"
+                          ? formatDateForDisplay(row.audit_period_start)
+                          : "#####"
+                        }
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {formatDateForDisplay(row.audit_period_end) !== "#####"
+                          ? formatDateForDisplay(row.audit_period_end)
+                          : "#####"
+                        }
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-900 border border-slate-200 text-center whitespace-nowrap font-semibold">
+                        {row.department || "-"}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {sopSheet}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-center border border-slate-200">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-medium ${
+                            hasData
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
+                              : "bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200"
+                          }`}
+                        >
+                          {hasData ? "Available" : "Not Available"}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-left break-words whitespace-pre-wrap align-top max-w-[140px]">
+                        {row.preparer || "-"}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {item.preparer_completion_date !== "-" ? item.preparer_completion_date : "0"}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-center border border-slate-200 font-semibold">
+                        <span
+                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getPreparerStatusBg(
+                            item.sop_preparer_status
+                          )}`}
+                        >
+                          {item.sop_preparer_status || "DRAFT"}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {item.reviewer !== "-" ? item.reviewer : "0"}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-center border border-slate-200 font-semibold">
+                        <span
+                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getReviewerStatusBg(
+                            item.sop_reviewer_status
+                          )}`}
+                        >
+                          {item.sop_reviewer_status || "DRAFT"}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                        {item.reviewer_date !== "-" ? item.reviewer_date : "0"}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-left break-words whitespace-pre-wrap align-top max-w-[160px]">
+                        {item.reviewer_comments || ""}
+                      </td>
+                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center">
+                        <button
+                          className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
+                          onClick={() => handleView(row)}
+                        >
+                          <span>View</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {groupedData.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={15}
+                      className="p-6 text-center text-sm sm:text-base text-slate-600 bg-slate-50"
+                    >
+                      No SOP Review data has been published yet. Please publish data on the SOP Review
+                      page per department first.
                     </td>
                   </tr>
-                );
-              })}
-              {groupedData.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-4 text-center text-sm text-gray-600">
-                    No SOP Review data has been published yet. Please publish data on the SOP Review page per department first.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {totalGroups > PAGE_SIZE && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-3 sm:px-4 py-2.5 bg-slate-50/60">
+              <p className="text-xs sm:text-sm text-slate-600">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+                {Math.min(currentPage * PAGE_SIZE, totalGroups)} of {totalGroups} report
+                {totalGroups > 1 ? "s" : ""}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  className="px-3 py-1.5 text-xs sm:text-sm font-medium rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="text-xs sm:text-sm text-slate-600">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  className="px-3 py-1.5 text-xs sm:text-sm font-medium rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {viewOpen && selectedDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="bg-white rounded-lg shadow-lg w-[min(900px,95vw)] max-h-[85vh] overflow-auto">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800">SOP Review Data Detail — {selectedDetail?.department || "Department"}</h3>
-                <div className="flex items-center gap-2">
-                  {selectedDetail?.items?.length > 0 && (
-                    <>
-                      <button onClick={() => handleExportExcel(selectedDetail)} className="px-2 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded text-xs hover:bg-green-100">
-                        Export Excel
-                      </button>
-                      <button 
-                        onClick={() => handleExportPDF(selectedDetail)} 
-                        disabled={isExportingPDF}
-                        className={`px-2 py-1.5 border rounded text-xs ${
-                          isExportingPDF 
-                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" 
-                            : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
-                        }`}
-                      >
-                        {isExportingPDF ? "Exporting..." : "Export PDF"}
-                      </button>
-                    </>
-                  )}
-                  <button className="text-gray-600 hover:text-gray-800 p-1" onClick={() => { setViewOpen(false); setSelectedDetail(null); }} aria-label="Close">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div className="p-4 space-y-4 text-sm text-gray-800">
-                {!selectedDetail?.items || selectedDetail.items.length === 0 ? (
-                  <div className="text-center py-8 px-2">
-                    <p className="text-gray-600">No data yet. Please publish data first on the relevant SOP Review department page.</p>
-                  </div>
-                ) : (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-3 sm:px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-[min(960px,100vw)] max-h-[88vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-slate-50/70">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900">
+                SOP Review Data Detail — {selectedDetail?.department || "Department"}
+              </h3>
+              <div className="flex items-center gap-2">
+                {selectedDetail?.items?.length > 0 && (
                   <>
-                    <div className="mb-4">
-                      <h4 className="font-semibold text-gray-700 mb-2">Group Information</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 p-3 rounded">
-                        <div><div className="font-semibold text-gray-700 text-xs">Department</div><div className="text-sm">{selectedDetail.department || "-"}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Preparer</div><div className="text-sm">{selectedDetail.preparer || "-"}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Reviewer</div><div className="text-sm">{selectedDetail.reviewer || "-"}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Audit Period Start</div><div className="text-sm">{formatDateForDisplay(selectedDetail.audit_period_start)}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Audit Period End</div><div className="text-sm">{formatDateForDisplay(selectedDetail.audit_period_end)}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Audit Fieldwork Start</div><div className="text-sm">{formatDateForDisplay(selectedDetail.audit_fieldwork_start)}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Audit Fieldwork End</div><div className={`text-sm ${selectedDetail.items?.some((i) => i.exceeds_audit_period) ? "text-red-600 font-bold" : ""}`}>{formatDateForDisplay(selectedDetail.audit_fieldwork_end)}{selectedDetail.items?.some((i) => i.exceeds_audit_period) ? " ⚠️" : ""}</div></div>
-                        <div><div className="font-semibold text-gray-700 text-xs">Published At</div><div className="text-sm">{selectedDetail.published_at ? String(selectedDetail.published_at).slice(0, 19) : "-"}</div></div>
-                      </div>
-                    </div>
-                    {selectedDetail.items.map((item, itemIdx) => {
-                      if (!item._detail?.steps || item._detail.steps.length === 0) return null;
-                      const getStatusBadge = (status) => {
-                        const s = (status || "DRAFT").toUpperCase();
-                        if (s === "APPROVED") return "bg-green-100 text-green-800";
-                        if (s === "REJECTED") return "bg-red-100 text-red-800";
-                        if (s === "IN REVIEW") return "bg-blue-100 text-blue-800";
-                        return "bg-yellow-100 text-yellow-800";
-                      };
-                      return (
-                        <div key={itemIdx} className="space-y-2">
-                          <h4 className="font-semibold text-gray-700">SOP Steps — {item.department} ({item._detail.steps.length} items)</h4>
-                          {item._detail?.meta && (
-                            <div className="bg-gray-50 rounded p-2 border border-gray-200 mb-2">
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                                <div><span className="font-semibold text-gray-700">Preparer:</span> {item._detail.meta.preparer_name || item.preparer || "-"}</div>
-                                <div><span className="font-semibold text-gray-700">Preparer Status:</span> {item._detail.meta.preparer_status || "DRAFT"}</div>
-                                <div><span className="font-semibold text-gray-700">Reviewer:</span> {item._detail.meta.reviewer_name || "-"}</div>
-                                <div><span className="font-semibold text-gray-700">Reviewer Status:</span> {item._detail.meta.reviewer_status || "DRAFT"}</div>
+                    <button
+                      onClick={() => handleExportExcel(selectedDetail)}
+                      className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-medium hover:bg-emerald-100"
+                    >
+                      Export Excel
+                    </button>
+                    <button
+                      onClick={() => handleExportPDF(selectedDetail)}
+                      disabled={isExportingPDF}
+                      className={`px-2.5 py-1.5 rounded-full text-[11px] font-medium border ${
+                        isExportingPDF
+                          ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed"
+                          : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                      }`}
+                    >
+                      {isExportingPDF ? "Exporting..." : "Export PDF"}
+                    </button>
+                  </>
+                )}
+                <button
+                  className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  onClick={() => {
+                    setViewOpen(false);
+                    setSelectedDetail(null);
+                  }}
+                  aria-label="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-sm text-slate-800">
+              {!selectedDetail?.items || selectedDetail.items.length === 0 ? (
+                <div className="text-center py-10 px-2">
+                  <p className="text-slate-600">
+                    No data yet. Please publish data first on the relevant SOP Review department page.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {selectedDetail.items.map((item, itemIdx) => {
+                    if (!item._detail?.steps || item._detail.steps.length === 0) return null;
+                    const itemMeta = item._detail?.meta || {};
+                    const itemPreparer = itemMeta.preparer_name || item.preparer || "-";
+                    const itemReviewer = itemMeta.reviewer_name || item.reviewer || "-";
+                    const itemPublishedAt = itemMeta.published_at || selectedDetail.published_at;
+                    const getStatusBadge = (status) => {
+                      const s = (status || "DRAFT").toUpperCase();
+                      if (s === "APPROVED") return "bg-green-50 text-green-800 ring-1 ring-inset ring-green-200";
+                      if (s === "REJECTED") return "bg-red-50 text-red-800 ring-1 ring-inset ring-red-200";
+                      if (s === "IN REVIEW") return "bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200";
+                      return "bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-200";
+                    };
+                    return (
+                      <div
+                        key={itemMeta.id ?? `item-${itemIdx}`}
+                        className="mb-6 sm:mb-8 space-y-3 sm:space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4"
+                      >
+                        <div className="mb-2 sm:mb-3">
+                          <h4 className="font-semibold text-slate-800 mb-1.5 text-sm sm:text-base">
+                            Data Publish — {item.department}{" "}
+                            <span className="text-xs sm:text-sm font-normal text-slate-500">
+                              (tanggal:{" "}
+                              {itemPublishedAt ? String(itemPublishedAt).slice(0, 19) : "-"}
+                              )
+                            </span>
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 bg-white rounded-lg border border-slate-100 p-3 sm:p-4">
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Department
+                              </div>
+                              <div className="text-sm text-slate-900">{item.department || "-"}</div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Preparer
+                              </div>
+                              <div className="text-sm text-slate-900">{itemPreparer}</div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Reviewer
+                              </div>
+                              <div className="text-sm text-slate-900">{itemReviewer}</div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Preparer Completion Date
+                              </div>
+                              <div className="text-sm text-slate-900">
+                                {item.preparer_completion_date !== "-"
+                                  ? item.preparer_completion_date
+                                  : "-"}
                               </div>
                             </div>
-                          )}
-                          <div className="overflow-x-auto rounded-lg border border-gray-200">
-                            <table className="min-w-[600px] w-full text-xs border-collapse">
-                              <thead><tr className="bg-gray-100">
-                                <th className="p-2 text-left font-semibold text-gray-700 border border-gray-200">No</th>
-                                <th className="p-2 text-left font-semibold text-gray-700 border border-gray-200">SOP Related</th>
-                                <th className="p-2 text-left font-semibold text-gray-700 border border-gray-200">Status</th>
-                                <th className="p-2 text-left font-semibold text-gray-700 border border-gray-200">Reviewer</th>
-                                <th className="p-2 text-left font-semibold text-gray-700 border border-gray-200">Comment</th>
-                              </tr></thead>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Audit Period Start
+                              </div>
+                              <div className="text-sm text-slate-900">
+                                {item.audit_period_start !== "#####"
+                                  ? item.audit_period_start
+                                  : "-"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Audit Period End
+                              </div>
+                              <div className="text-sm text-slate-900">
+                                {item.audit_period_end !== "#####"
+                                  ? item.audit_period_end
+                                  : "-"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Audit Fieldwork Start
+                              </div>
+                              <div className="text-sm text-slate-900">
+                                {item.audit_fieldwork_start !== "#####"
+                                  ? item.audit_fieldwork_start
+                                  : "-"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Audit Fieldwork End
+                              </div>
+                              <div
+                                className={`text-sm ${
+                                  item.exceeds_audit_period ? "text-red-600 font-semibold" : "text-slate-900"
+                                }`}
+                              >
+                                {item.audit_fieldwork_end !== "#####"
+                                  ? item.audit_fieldwork_end
+                                  : "-"}
+                                {item.exceeds_audit_period ? " ⚠️" : ""}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Published At
+                              </div>
+                              <div className="text-sm text-slate-900">
+                                {itemPublishedAt ? String(itemPublishedAt).slice(0, 19) : "-"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="font-semibold text-slate-800 mb-2 sm:mb-3">
+                            SOP Steps ({item._detail.steps.length} items)
+                          </h4>
+                          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                            <table className="min-w-[640px] w-full text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 text-slate-700">
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                    No
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                    SOP Related
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                    Status
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                    Reviewer
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                    Comment
+                                  </th>
+                                </tr>
+                              </thead>
                               <tbody>
                                 {item._detail.steps.map((step, idx) => (
-                                  <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                    <td className="p-2 border border-gray-200">{step.no || idx + 1}</td>
-                                    <td className="p-2 border border-gray-200">{step.sop_related || "-"}</td>
-                                    <td className="p-2 border border-gray-200"><span className={`px-2 py-1 rounded text-[10px] font-semibold ${getStatusBadge(step.status)}`}>{step.status || "DRAFT"}</span></td>
-                                    <td className="p-2 border border-gray-200">{step.reviewer || "-"}</td>
-                                    <td className="p-2 border border-gray-200 whitespace-pre-wrap break-words">{step.comment || "-"}</td>
+                                  <tr
+                                    key={`${itemMeta.id}-step-${idx}`}
+                                    className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}
+                                  >
+                                    <td className="px-2.5 py-2 border border-slate-200">
+                                      {step.no || idx + 1}
+                                    </td>
+                                    <td className="px-2.5 py-2 border border-slate-200">
+                                      {step.sop_related || "-"}
+                                    </td>
+                                    <td className="px-2.5 py-2 border border-slate-200">
+                                      <span
+                                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusBadge(
+                                          step.status
+                                        )}`}
+                                      >
+                                        {step.status || "DRAFT"}
+                                      </span>
+                                    </td>
+                                    <td className="px-2.5 py-2 border border-slate-200">
+                                      {step.reviewer || "-"}
+                                    </td>
+                                    <td className="px-2.5 py-2 border border-slate-200 whitespace-pre-wrap break-words">
+                                      {step.comment || "-"}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
                         </div>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {periodDatePickerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:px-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[min(500px,95vw)] overflow-hidden">
-              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0"><span className="text-white text-base sm:text-lg">📅</span></div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Set Audit Period Dates</h3>
+      {periodDatePickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:px-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[min(500px,95vw)] overflow-hidden">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <span className="text-white text-base sm:text-lg">📅</span>
                 </div>
-                <button className="w-8 h-8 flex-shrink-0 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600" onClick={() => setPeriodDatePickerOpen(false)}>✕</button>
+                <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">
+                  Set Audit Period Dates
+                </h3>
               </div>
-              <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Audit Period Start</label>
-                  <input type="date" className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={tempPeriodStartDate} onChange={(e) => setTempPeriodStartDate(e.target.value)} min={selectedScheduleBounds.min} max={selectedScheduleBounds.max} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Audit Period End</label>
-                  <input type="date" className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={tempPeriodEndDate} onChange={(e) => setTempPeriodEndDate(e.target.value)} min={tempPeriodStartDate || undefined} max={selectedScheduleBounds.max} />
-                </div>
-                <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-4 border-t border-slate-200">
-                  <button className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-sm" onClick={() => setPeriodDatePickerOpen(false)}>Cancel</button>
-                  <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm shadow-sm" onClick={saveAuditPeriod}>Save</button>
-                </div>
+              <button
+                className="w-8 h-8 flex-shrink-0 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600"
+                onClick={() => setPeriodDatePickerOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Audit Period Start
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={tempPeriodStartDate}
+                  onChange={(e) => setTempPeriodStartDate(e.target.value)}
+                  min={selectedScheduleBounds.min}
+                  max={selectedScheduleBounds.max}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Audit Period End
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={tempPeriodEndDate}
+                  onChange={(e) => setTempPeriodEndDate(e.target.value)}
+                  min={tempPeriodStartDate || undefined}
+                  max={selectedScheduleBounds.max}
+                />
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-4 border-t border-slate-200">
+                <button
+                  className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-sm"
+                  onClick={() => setPeriodDatePickerOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm shadow-sm"
+                  onClick={saveAuditPeriod}
+                >
+                  Save
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 }

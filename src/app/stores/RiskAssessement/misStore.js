@@ -4,7 +4,10 @@ import { create } from "zustand";
 
 export const useMisStore = create((set, get) => ({
   mis: [],
+  meta: null,
   currentFilter: "published",
+
+  setMisAndMeta: (data, meta) => set({ mis: data, meta: meta ?? null }),
 
   loadMis: async (status = "published", page = 1, pageSize = 50) => {
     try {

@@ -2,8 +2,8 @@ export const runtime = "nodejs";
 
 import { makeEvidenceHandlers } from "../_shared/handlers";
 
-const { GET, POST, PUT } = makeEvidenceHandlers("L&P");
+const { GET, POST, PUT, DELETE } = makeEvidenceHandlers("L&P");
 
-export { GET, POST, PUT };
+export { GET, POST, PUT, DELETE };
 
 

@@ -5,8 +5,8 @@ const nextConfig = {
     // elsewhere on the machine (prevents incorrect workspace-root inference).
     root: process.cwd(),
   },
-  // Allow dev server to be accessed via ngrok tunnel (untuk akses dari HP)
-  allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok.io"],
+  // Allow dev server to be accessed via ngrok tunnel (untuk akses dari HP) dan local network
+  allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok.io", "192.168.146.1"],
 };
 
 export default nextConfig;

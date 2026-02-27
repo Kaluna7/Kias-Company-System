@@ -16,6 +16,23 @@ async function selectMaybe(tableName, sql) {
   }
 }
 
+async function ensureReportMetaIdColumn(stepsTable) {
+  const client = await pool.connect();
+  try {
+    const check = await client.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name='report_meta_id'`,
+      [stepsTable]
+    );
+    if (!check?.rows?.length) {
+      await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS report_meta_id INTEGER`);
+    }
+  } catch (e) {
+    await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN report_meta_id INTEGER`).catch(() => {});
+  } finally {
+    client.release();
+  }
+}
+
 export async function GET(req, { params }) {
   try {
     const p = await Promise.resolve(params);
@@ -25,6 +42,21 @@ export async function GET(req, { params }) {
 
     const stepsTable = `sops_report_${resolved.slug}`;
     const metaTable = `sop_report_${resolved.slug}`;
+
+    const { searchParams } = new URL(req.url || "", "http://localhost");
+    const all = searchParams.get("all") === "1" || searchParams.get("all") === "true";
+
+    if (all) {
+      await ensureReportMetaIdColumn(stepsTable);
+      const metaRows = await selectMaybe(metaTable, `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at FROM ${metaTable} ORDER BY id ASC`);
+      const publishes = [];
+      for (const meta of metaRows) {
+        const metaId = Number(meta.id);
+        const steps = await selectMaybe(stepsTable, `SELECT id, no, sop_related, status, comment, reviewer, published_at FROM ${stepsTable} WHERE report_meta_id = ${metaId} ORDER BY no ASC NULLS LAST, id ASC`);
+        publishes.push({ meta, rows: steps });
+      }
+      return NextResponse.json({ success: true, publishes }, { status: 200 });
+    }
 
     const [rows, metaRows] = await Promise.all([
       selectMaybe(stepsTable, `SELECT id, no, sop_related, status, comment, reviewer, published_at FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`),

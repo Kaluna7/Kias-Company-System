@@ -75,19 +75,54 @@ export default async function B2AuditFinding() {
     return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
   };
 
-  const auditFindings = [
-    { id: 'B2.1', department: 'FINANCE', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.2', department: 'ACCOUNTING', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.3', department: 'HRD', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.4', department: 'G&A', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.5', department: 'STORE DESIGN PLANNER', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.6', department: 'TAX', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.7', department: 'SECURITY L&P', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.8', department: 'MIS', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.9', department: 'MERCHANDISE', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.10', department: 'OPERATIONAL', statusWP: 'Not Checked', process: 'IN PROGRESS' },
-    { id: 'B2.11', department: 'WAREHOUSE', statusWP: 'Not Checked', process: 'IN PROGRESS' }
+  // Base list: id, department, apiPath (for /api/audit-finding/{apiPath}/meta)
+  const baseFindings = [
+    { id: 'B2.1', department: 'FINANCE', apiPath: 'finance' },
+    { id: 'B2.2', department: 'ACCOUNTING', apiPath: 'accounting' },
+    { id: 'B2.3', department: 'HRD', apiPath: 'hrd' },
+    { id: 'B2.4', department: 'G&A', apiPath: 'g&a' },
+    { id: 'B2.5', department: 'STORE DESIGN PLANNER', apiPath: 'sdp' },
+    { id: 'B2.6', department: 'TAX', apiPath: 'tax' },
+    { id: 'B2.7', department: 'SECURITY L&P', apiPath: 'l&p' },
+    { id: 'B2.8', department: 'MIS', apiPath: 'mis' },
+    { id: 'B2.9', department: 'MERCHANDISE', apiPath: 'merch' },
+    { id: 'B2.10', department: 'OPERATIONAL', apiPath: 'ops' },
+    { id: 'B2.11', department: 'WAREHOUSE', apiPath: 'whs' },
   ];
+
+  // Fetch status from each department's meta (preparer_status / final_status)
+  let baseUrl = '';
+  try {
+    const headersList = await headers();
+    const host = headersList.get('host') || 'localhost:3000';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    baseUrl = `${protocol}://${host}`;
+  } catch (_) {}
+
+  const metaResults = await Promise.all(
+    baseFindings.map(async (base) => {
+      if (!baseUrl) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
+      try {
+        const res = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`, { cache: 'no-store' });
+        if (!res.ok) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
+        const json = await res.json().catch(() => null);
+        const meta = json?.success ? json.data : null;
+        const preparerStatus = (meta?.preparer_status || '').toUpperCase().trim();
+        const finalStatus = (meta?.final_status || '').toUpperCase().trim();
+        // Process: from preparer_status or final_status; show nothing (-) when neither is set
+        const process = preparerStatus || finalStatus || '';
+        // statusWP (Not Checked / Checked): from page meta — Checked when COMPLETED/APPROVED, else Not Checked
+        const statusWP = (preparerStatus === 'COMPLETED' || preparerStatus === 'APPROVED' || finalStatus === 'COMPLETED' || finalStatus === 'APPROVED')
+          ? 'Checked'
+          : 'Not Checked';
+        return { ...base, statusWP, process, finalStatus };
+      } catch (_) {
+        return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
+      }
+    })
+  );
+
+  const auditFindings = metaResults;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
@@ -109,17 +144,6 @@ export default async function B2AuditFinding() {
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-white">B2 AUDIT FINDING</h3>
                 <p className="text-blue-100 mt-1">Audit Management System</p>
-              </div>
-              <div className="flex items-center">
-                <Link
-                  href="/Page/audit-finding/report"
-                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Report
-                </Link>
               </div>
             </div>
           </div>
@@ -164,7 +188,7 @@ export default async function B2AuditFinding() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Pending Review</p>
-                <p className="text-2xl font-bold text-gray-800">{auditFindings.filter(item => item.statusWP === 'Not Checked').length}</p>
+                <p className="text-2xl font-bold text-gray-800">{auditFindings.filter(item => (item.finalStatus || '').toUpperCase() === 'PENDING REVIEW').length}</p>
               </div>
             </div>
           </div>
@@ -178,7 +202,7 @@ export default async function B2AuditFinding() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Completed</p>
-                <p className="text-2xl font-bold text-gray-800">0</p>
+                <p className="text-2xl font-bold text-gray-800">{auditFindings.filter(item => (item.process || '').toUpperCase() === 'COMPLETED').length}</p>
               </div>
             </div>
           </div>
@@ -222,14 +246,14 @@ export default async function B2AuditFinding() {
                       </span>
                       <h3 className="text-lg font-semibold text-gray-600">{finding.department}</h3>
                     </div>
-                    <div className="flex flex-col items-end space-y-1">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
-                        {finding.statusWP}
-                      </span>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
-                        {finding.process}
-                      </span>
-                    </div>
+                  <div className="flex flex-col items-end space-y-1">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                      {finding.finalStatus || "-"}
+                    </span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                      {finding.process || "-"}
+                    </span>
+                  </div>
                   </div>
                   
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -264,10 +288,10 @@ export default async function B2AuditFinding() {
                   </div>
                   <div className="flex flex-col items-end space-y-1">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      {finding.statusWP}
+                      {finding.finalStatus || "-"}
                     </span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {finding.process}
+                      {finding.process || "-"}
                     </span>
                   </div>
                 </div>

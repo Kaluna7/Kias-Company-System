@@ -72,6 +72,15 @@ async function ensureReportTables(client, slug, departmentName) {
   `);
 
   await client.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${stepsTable}' AND column_name = 'report_meta_id') THEN
+        ALTER TABLE ${stepsTable} ADD COLUMN report_meta_id INTEGER;
+      END IF;
+    END $$;
+  `);
+
+  await client.query(`
     CREATE TABLE IF NOT EXISTS ${metaTable} (
       id SERIAL PRIMARY KEY,
       department_name VARCHAR(255) DEFAULT '${String(departmentName || "").replace(/'/g, "''")}',
@@ -118,6 +127,17 @@ export async function POST(req, { params }) {
     const stepsTable = `sops_${slug}`;
     const metaTable = `sop_${slug}`;
 
+    // Read steps + meta from body (single source of truth - avoids race with save and duplicate rows in report)
+    let bodySteps = null;
+    let bodyMeta = null;
+    try {
+      const body = await req.json().catch(() => null);
+      if (body) {
+        if (Array.isArray(body.steps) && body.steps.length > 0) bodySteps = body.steps;
+        if (body.meta && typeof body.meta === "object") bodyMeta = body.meta;
+      }
+    } catch (_) {}
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -156,46 +176,64 @@ export async function POST(req, { params }) {
         resolved.departmentName
       );
 
-      // Load current steps
-      const stepsRes = await client.query(
-        `SELECT no, sop_related, status, comment, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
-      );
-      const steps = stepsRes.rows || [];
-      if (steps.length === 0) {
+      // Advisory lock per department: only one publish at a time per dept (prevents double rows in sops_report_*)
+      const lockKey = Math.abs(String("sop-pub-" + slug).split("").reduce((a, c) => ((a << 5) - a) + c.charCodeAt(0), 0) % 0x7FFFFFFF);
+      await client.query("SELECT pg_advisory_xact_lock($1)", [lockKey]);
+
+      let steps;
+      let meta;
+
+      if (bodySteps && bodySteps.length > 0) {
+        // Use body as single source of truth - no DB read, no race, no duplicate rows
+        const seen = new Set();
+        steps = bodySteps.filter((s) => {
+          const no = Number(s.no);
+          const norm = String(s.sop_related ?? "").replace(/\s+/g, " ").trim();
+          const key = `${Number.isNaN(no) ? "" : no}\t${norm}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        meta = bodyMeta ?? null;
+      } else {
+        // Fallback: read from DB (legacy or when body not sent)
+        await client.query(`LOCK TABLE ${stepsTable} IN EXCLUSIVE MODE`);
+        await client.query(`LOCK TABLE ${metaTable} IN EXCLUSIVE MODE`);
+        const stepsRes = await client.query(
+          `SELECT no, sop_related, status, comment, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
+        );
+        const rawSteps = stepsRes.rows || [];
+        const seen = new Set();
+        steps = rawSteps.filter((s) => {
+          const no = Number(s.no);
+          const norm = String(s.sop_related ?? "").replace(/\s+/g, " ").trim();
+          const key = `${Number.isNaN(no) ? "" : no}\t${norm}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        const metaRes = await client.query(`SELECT * FROM ${metaTable} ORDER BY id DESC LIMIT 1`);
+        meta = metaRes.rows?.[0] ?? null;
+      }
+
+      if (!steps || steps.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json({ success: false, error: "No SOP data to publish" }, { status: 400 });
       }
-
-      // Load latest meta (optional)
-      const metaRes = await client.query(`SELECT * FROM ${metaTable} ORDER BY id DESC LIMIT 1`);
-      const meta = metaRes.rows?.[0] ?? null;
 
       // Get schedule data for audit fieldwork dates
       const scheduleData = await getScheduleDataForDepartment(slug);
       const auditFieldworkStartDate = scheduleData?.start_date || null;
       const auditFieldworkEndDate = new Date().toISOString().split('T')[0]; // Today's date (publish date)
 
-      // Insert into report tables
-      for (const s of steps) {
-        // eslint-disable-next-line no-await-in-loop
-        await client.query(
-          `INSERT INTO ${reportSteps} (no, sop_related, status, comment, reviewer, published_at)
-           VALUES ($1,$2,$3,$4,$5,NOW())`,
-          [
-            s.no ?? null,
-            s.sop_related ?? "",
-            s.status ?? "DRAFT",
-            s.comment ?? "",
-            s.reviewer ?? "",
-          ]
-        );
-      }
-
+      // Insert meta first, then steps with report_meta_id (agar setiap publish punya baris terpisah)
+      let reportMetaId = null;
       if (meta) {
-        await client.query(
+        const metaInsert = await client.query(
           `INSERT INTO ${reportMeta}
             (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+           RETURNING id`,
           [
             meta.department_name || resolved.departmentName,
             "AVAILABLE",
@@ -209,6 +247,23 @@ export async function POST(req, { params }) {
             auditFieldworkStartDate,
             auditFieldworkEndDate,
           ]
+        );
+        reportMetaId = metaInsert?.rows?.[0]?.id ?? null;
+      }
+
+      // Batch insert all steps in one query (prevents double rows from any race)
+      if (steps.length > 0) {
+        const values = [];
+        const params = [];
+        let idx = 1;
+        for (const s of steps) {
+          values.push(`($${idx},$${idx + 1},$${idx + 2},$${idx + 3},$${idx + 4},NOW(),$${idx + 5})`);
+          params.push(s.no ?? null, s.sop_related ?? "", s.status ?? "DRAFT", s.comment ?? "", s.reviewer ?? "", reportMetaId);
+          idx += 6;
+        }
+        await client.query(
+          `INSERT INTO ${reportSteps} (no, sop_related, status, comment, reviewer, published_at, report_meta_id) VALUES ${values.join(", ")}`,
+          params
         );
       }
 

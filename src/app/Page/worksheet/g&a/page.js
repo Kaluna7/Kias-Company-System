@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
+
+const API = "/api/worksheet/g&a";
 
 export default function GAWorksheet() {
   const [preparer, setPreparer] = useState("");
@@ -9,12 +11,26 @@ export default function GAWorksheet() {
   const [date1, setDate1] = useState("");
   const [date2, setDate2] = useState("");
   const [statusDocuments, setStatusDocuments] = useState("");
-  const [statusWorksheet, setStatusWorksheet] = useState("Draft");
-  const [statusWP, setStatusWP] = useState("Not Checked");
+  const [statusWP, setStatusWP] = useState("");
   const [filePath, setFilePath] = useState("");
   const [auditArea, setAuditArea] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(API);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const latest = data?.rows?.[0];
+        if (!latest || cancelled) return;
+        setStatusWP(latest.status_wp ?? "");
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -47,6 +63,15 @@ export default function GAWorksheet() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  const saveStatusWP = async (value) => {
+    try {
+      const res = await fetch(API, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ statusWP: value }) });
+      const data = await res.json();
+      if (data.success) showNotification("success", "Status WP tersimpan.");
+      else showNotification("error", data?.error || "Gagal menyimpan Status WP.");
+    } catch (_) { showNotification("error", "Gagal menyimpan Status WP."); }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -62,7 +87,7 @@ export default function GAWorksheet() {
           preparerDate: date1 ? new Date(date1).toISOString().split("T")[0] : null,
           reviewerDate: date2 ? new Date(date2).toISOString().split("T")[0] : null,
           statusDocuments,
-          statusWorksheet,
+          statusWorksheet: filePath ? "Available" : "Not Available",
           statusWP,
           filePath,
           auditArea,
@@ -72,6 +97,14 @@ export default function GAWorksheet() {
       const data = await response.json();
       if (data.success) {
         showNotification("success", "Data has been saved successfully.");
+        setPreparer("");
+        setReviewer("");
+        setDate1("");
+        setDate2("");
+        setStatusDocuments("");
+        setStatusWP("");
+        setFilePath("");
+        setAuditArea("");
       } else {
         showNotification(
           "error",
@@ -190,30 +223,30 @@ export default function GAWorksheet() {
                   />
                 </div>
 
-                {/* Status Worksheet */}
+                {/* Status Worksheet - auto: Available when file uploaded, Not Available when no file */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    STATUS WORKSHEET :
+                    STATUS WORKSHEET
                   </label>
-                  <select
-                    value={statusWorksheet}
-                    onChange={(e) => setStatusWorksheet(e.target.value)}
-                    className="w-full bg-gray-100 border border-gray-300 rounded-md px-3 py-2 text-gray-800"
-                  >
-                    <option value="Draft">Draft</option>
-                    <option value="Available">Available</option>
-                    <option value="Not Available">Not Available</option>
-                  </select>
+                  <div className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-gray-800 font-medium">
+                    {filePath ? "Available" : "Not Available"}
+                  </div>
                 </div>
 
                 {/* Status WP */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    STATUS WP :
+                    STATUS WP
                   </label>
-                  <div className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 font-medium">
-                    {statusWP}
-                  </div>
+                  <select
+                    value={statusWP}
+                    onChange={(e) => { const v = e.target.value; setStatusWP(v); saveStatusWP(v); }}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all"
+                  >
+                    <option value="">- Select -</option>
+                    <option value="Not Checked">Not Checked</option>
+                    <option value="Checked">Checked</option>
+                  </select>
                 </div>
               </div>
 

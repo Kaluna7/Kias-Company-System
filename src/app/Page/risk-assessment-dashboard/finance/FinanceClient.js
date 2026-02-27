@@ -12,7 +12,7 @@ import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
-export default function FinanceClient({ initialData = [] }) {
+export default function FinanceClient({ initialData = [], initialMeta = null }) {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin";
@@ -30,14 +30,18 @@ export default function FinanceClient({ initialData = [] }) {
   const openPopUp = usePopUp((s) => s.openPopUp);
   const closePopUp = usePopUp((s) => s.closePopUp);
   const loadFinance = useFinanceStore((s) => s.loadFinance);
-  const setFinance = useFinanceStore((s) => s.setFinance);
+  const setFinanceAndMeta = useFinanceStore((s) => s.setFinanceAndMeta);
 
-  // Initialize store with server data
+  const initDoneRef = useRef(false);
   useEffect(() => {
-    if (initialData && initialData.length > 0) {
-      setFinance(initialData);
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
+    if (initialData?.length > 0 || initialMeta) {
+      setFinanceAndMeta(initialData ?? [], initialMeta);
     }
-  }, [initialData, setFinance]);
+  }, [initialData, initialMeta, setFinanceAndMeta]);
+
+  const skipLoadForPublishedRef = useRef(!!(initialData?.length > 0));
 
   // ✅ Menu tombol utama (hanya admin yang punya tombol New Data + Export)
   const items = useMemo(() => {
@@ -185,8 +189,16 @@ export default function FinanceClient({ initialData = [] }) {
       [loadFinance, viewDraft, meta?.page, meta?.pageSize]
     );
 
+    const prevViewDraftRef = useRef(viewDraft);
     useEffect(() => {
-      if (!isLoadingRef.current) load(1);
+      const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
+      prevViewDraftRef.current = viewDraft;
+      if (!viewDraftChanged) {
+        if (viewDraft) load(1);
+        else if (!skipLoadForPublishedRef.current) load(1);
+        return;
+      }
+      load(1);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [viewDraft]);
 

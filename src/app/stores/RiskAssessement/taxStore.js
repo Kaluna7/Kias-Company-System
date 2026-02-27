@@ -5,9 +5,11 @@ import { create } from "zustand";
 
 export const useTaxStore = create((set, get) => ({
   tax: [],
+  meta: null,
   currentFilter: "published",
 
   setTax: (data) => set({ tax: data }),
+  setTaxAndMeta: (data, meta) => set({ tax: data, meta: meta ?? null }),
 
   loadTax: async (status = "published", page = 1, pageSize = 50) => {
     try {

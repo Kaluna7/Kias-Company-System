@@ -8,6 +8,7 @@ export const useAccountingStore = create((set, get) => ({
   currentFilter: "published",
 
   setAccounting: (data) => set({ accounting: data }),
+  setAccountingAndMeta: (data, meta) => set({ accounting: data, meta: meta ?? null }),
 
   loadAccounting: async (status = "published", page = 1, pageSize = 50) => {
     try {

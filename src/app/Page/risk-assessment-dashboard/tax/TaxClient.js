@@ -12,7 +12,7 @@ import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
 
-export default function TaxClient({ initialData = [] }) {
+export default function TaxClient({ initialData = [], initialMeta = null }) {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin";
@@ -30,13 +30,18 @@ export default function TaxClient({ initialData = [] }) {
   const openPopUp = usePopUp((s) => s.openPopUp);
   const closePopUp = usePopUp((s) => s.closePopUp);
   const loadTax = useTaxStore((s) => s.loadTax);
-  const setTax = useTaxStore((s) => s.setTax);
+  const setTaxAndMeta = useTaxStore((s) => s.setTaxAndMeta);
 
+  const initDoneRef = useRef(false);
   useEffect(() => {
-    if (initialData && initialData.length > 0) {
-      setTax(initialData);
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
+    if (initialData?.length > 0 || initialMeta) {
+      setTaxAndMeta(initialData ?? [], initialMeta);
     }
-  }, [initialData, setTax]);
+  }, [initialData, initialMeta, setTaxAndMeta]);
+
+  const skipLoadForPublishedRef = useRef(!!(initialData?.length > 0));
 
   const items = useMemo(() => {
     const base = [];
@@ -177,8 +182,16 @@ export default function TaxClient({ initialData = [] }) {
       [loadTax, viewDraft, meta?.page, meta?.pageSize]
     );
 
+    const prevViewDraftRef = useRef(viewDraft);
     useEffect(() => {
-      if (!isLoadingRef.current) load(1);
+      const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
+      prevViewDraftRef.current = viewDraft;
+      if (!viewDraftChanged) {
+        if (viewDraft) load(1);
+        else if (!skipLoadForPublishedRef.current) load(1);
+        return;
+      }
+      load(1);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [viewDraft]);
 
