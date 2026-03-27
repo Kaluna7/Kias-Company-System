@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import MerchClient from "./MerchClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadMerchData(status = "published", year) {
   try {
     const headersList = await headers();

@@ -1,8 +1,11 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+export const dynamic = "force-dynamic";
 
-export default function ReportPage() {
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+function ReportPageContent() {
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
@@ -61,6 +64,14 @@ export default function ReportPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function ReportPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <ReportPageContent />
+    </Suspense>
   );
 }
 

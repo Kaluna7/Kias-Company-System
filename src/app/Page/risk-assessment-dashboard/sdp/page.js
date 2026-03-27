@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import SdpClient from "./SdpClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function SDPPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import GaClient from "./GaClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function GaPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

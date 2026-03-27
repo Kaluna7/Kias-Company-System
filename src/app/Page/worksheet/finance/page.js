@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 const API = "/api/worksheet/finance";
 
-export default function FinanceWorksheet() {
+function FinanceWorksheetPageContent() {
   const { data: session } = useSession();
   const role = (session?.user?.role || "").toLowerCase();
   const isReviewer = role === "reviewer";
@@ -464,6 +466,14 @@ export default function FinanceWorksheet() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function FinanceWorksheet() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <FinanceWorksheetPageContent />
+    </Suspense>
   );
 }
 

@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import TaxClient from "./TaxClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadTaxData(status = "published", year) {
   try {
     const headersList = await headers();

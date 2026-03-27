@@ -2,6 +2,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { buttonRiskAssessment } from "@/app/data/riskAssessmentConfig";
 
+export const dynamic = "force-dynamic";
+
 export default async function RiskAssessmentDashboard({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

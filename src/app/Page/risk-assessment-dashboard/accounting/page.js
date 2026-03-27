@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import AccountingClient from "./AccountingClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function AccountingPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import HrdClient from "./HrdClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadHrdData(status = "published", year) {
   try {
     const headersList = await headers();

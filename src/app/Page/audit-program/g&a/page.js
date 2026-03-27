@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import GaClient from "./GaClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadGaData(status = "published", year) {
   try {
     const headersList = await headers();

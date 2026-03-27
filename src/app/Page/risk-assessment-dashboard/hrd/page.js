@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import HrdClient from "./HrdClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function HrdPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
