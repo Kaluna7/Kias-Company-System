@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -46,6 +46,58 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
   }, [initialData, initialMeta, setHrdAndMeta]);
 
   const skipLoadForPublishedRef = useRef(!!(initialData?.length > 0));
+  const meta = useHrdStore((s) => s.meta);
+  const hrds = useHrdStore((s) => s.hrd);
+  const loadPage = useCallback(
+    async (page, pageSize = 50) => {
+      if (isLoadingRef.current) return;
+      isLoadingRef.current = true;
+      setPaginationLoading(true);
+      try {
+        await loadHrd(
+          viewDraft ? "draft" : "published",
+          page ?? 1,
+          pageSize,
+          yearParam || undefined
+        );
+      } finally {
+        isLoadingRef.current = false;
+        setPaginationLoading(false);
+      }
+    },
+    [loadHrd, viewDraft, yearParam]
+  );
+  const loadCurrentPage = useCallback(
+    () => loadPage(meta?.page ?? 1, meta?.pageSize ?? 50),
+    [loadPage, meta?.page, meta?.pageSize]
+  );
+  const prevViewDraftRef = useRef(viewDraft);
+  useEffect(() => {
+    const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
+    prevViewDraftRef.current = viewDraft;
+    if (!viewDraftChanged) {
+      if (viewDraft) loadPage(1);
+      else if (!skipLoadForPublishedRef.current) loadPage(1);
+      return;
+    }
+    loadPage(1);
+  }, [viewDraft, loadPage]);
+
+  const sortedHrds = useMemo(() => {
+    if (!sortOption || !hrds) return hrds;
+    return [...hrds].sort((a, b) => {
+      const valA = a[sortOption.key];
+      const valB = b[sortOption.key];
+      if (valA === undefined || valB === undefined) return 0;
+      if (sortOption.key === "risk_id_no") {
+        const cmp = compareCode(valA, valB);
+        return sortOption.order === "asc" ? cmp : -cmp;
+      }
+      if (sortOption.order === "asc") return valA > valB ? 1 : -1;
+      else return valA < valB ? 1 : -1;
+    });
+  }, [hrds, sortOption]);
+
 
   const items = useMemo(() => {
     const base = [];
@@ -126,7 +178,7 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
         },
       },
     ];
-  }, [isAdmin, loadHrd]);
+  }, [isAdmin, loadHrd, yearParam]);
 
   const editItems = useMemo(
     () =>
@@ -169,78 +221,6 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
     []
   );
 
-  function HrdTableWrapper() {
-    const meta = useHrdStore((s) => s.meta);
-    const load = useCallback(
-      async (page) => {
-        if (isLoadingRef.current) return;
-        isLoadingRef.current = true;
-        setPaginationLoading(true);
-        try {
-          await loadHrd(
-            viewDraft ? "draft" : "published",
-            page ?? meta?.page ?? 1,
-            meta?.pageSize ?? 50,
-            yearParam || undefined
-          );
-        } finally {
-          isLoadingRef.current = false;
-          setPaginationLoading(false);
-        }
-      },
-      [loadHrd, viewDraft, meta?.page, meta?.pageSize]
-    );
-
-    const prevViewDraftRef = useRef(viewDraft);
-    useEffect(() => {
-      const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
-      prevViewDraftRef.current = viewDraft;
-      if (!viewDraftChanged) {
-        if (viewDraft) load(1);
-        else if (!skipLoadForPublishedRef.current) load(1);
-        return;
-      }
-      load(1);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewDraft]);
-
-    const hrds = useHrdStore((s) => s.hrd);
-    const sortedHrds = useMemo(() => {
-      if (!sortOption || !hrds) return hrds;
-      return [...hrds].sort((a, b) => {
-        const valA = a[sortOption.key];
-        const valB = b[sortOption.key];
-        if (valA === undefined || valB === undefined) return 0;
-        if (sortOption.key === "risk_id_no") {
-          const cmp = compareCode(valA, valB);
-          return sortOption.order === "asc" ? cmp : -cmp;
-        }
-        if (sortOption.order === "asc") return valA > valB ? 1 : -1;
-        else return valA < valB ? 1 : -1;
-      });
-    }, [hrds, sortOption]);
-
-    return (
-      <>
-        <DataTable
-          apiPath="hrd"
-          items={sortedHrds}
-          load={() => load(meta?.page ?? 1)}
-          convertMode={convertMode}
-          onCloseConvert={() => setConvertMode(false)}
-          viewDraft={viewDraft}
-          editMode={editMode}
-          onEditRow={(item) => {
-            setSelectedItem(item);
-            openPopUp();
-          }}
-          searchQuery={searchQuery}
-        />
-        <Pagination meta={meta} onPageChange={(p) => load(p)} loading={paginationLoading} />
-      </>
-    );
-  }
-
   return (
     <main className="flex flex-col w-full h-screen overflow-hidden">
       <div className="flex flex-col flex-1 w-full h-full">
@@ -267,7 +247,21 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
               defaultData={selectedItem}
             />
           )}
-          <HrdTableWrapper />
+          <DataTable
+            apiPath="hrd"
+            items={sortedHrds}
+            load={loadCurrentPage}
+            convertMode={convertMode}
+            onCloseConvert={() => setConvertMode(false)}
+            viewDraft={viewDraft}
+            editMode={editMode}
+            onEditRow={(item) => {
+              setSelectedItem(item);
+              openPopUp();
+            }}
+            searchQuery={searchQuery}
+          />
+          <Pagination meta={meta} onPageChange={(p) => loadPage(p)} loading={paginationLoading} />
         </div>
       </div>
     </main>
