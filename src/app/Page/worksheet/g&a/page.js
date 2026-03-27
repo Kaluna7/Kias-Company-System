@@ -2,13 +2,13 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 const API = "/api/worksheet/g&a";
 
-export default function GAWorksheet() {
+function GAWorksheetPageContent() {
   const [preparer, setPreparer] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [date1, setDate1] = useState("");
@@ -446,6 +446,14 @@ export default function GAWorksheet() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function GAWorksheet() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <GAWorksheetPageContent />
+    </Suspense>
   );
 }
 

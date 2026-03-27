@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 const API = "/api/worksheet/sdp";
 
-export default function SDPWorksheet() {
+function SDPWorksheetPageContent() {
   const [preparer, setPreparer] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [date1, setDate1] = useState("");
@@ -444,6 +446,14 @@ export default function SDPWorksheet() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function SDPWorksheet() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <SDPWorksheetPageContent />
+    </Suspense>
   );
 }
 

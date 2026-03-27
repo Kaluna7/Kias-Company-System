@@ -1,9 +1,12 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+
+export const dynamic = "force-dynamic";
+
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
-export default function WorksheetFinanceReport() {
+function WorksheetFinanceReportPageContent() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -297,6 +300,14 @@ export default function WorksheetFinanceReport() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function WorksheetFinanceReport() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <WorksheetFinanceReportPageContent />
+    </Suspense>
   );
 }
 
