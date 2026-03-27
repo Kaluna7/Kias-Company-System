@@ -206,6 +206,7 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
       <div className="flex flex-col flex-1 w-full h-full">
         <SmallHeader
           label={`Finance Audit Program - ${viewDraft ? "Draft Data" : "Published Data"}`}
+          backHref={`/Page/audit-program${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
           fileItems={fileItems}
           viewItems={viewItems}
           sortByItems={sortByItems}

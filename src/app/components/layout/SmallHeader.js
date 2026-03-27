@@ -15,6 +15,7 @@ export default function SmallHeader({
   sortByItems: sortByItemsProp = null,
   onSearch,
   showSearch = true,
+  backHref = "",
 }) {
   const { data: session, status } = useSession();
   const [active, setActive] = useState(null);
@@ -87,6 +88,15 @@ export default function SmallHeader({
       <header className="w-full bg-[#141D38]/85 backdrop-blur-xl backdrop-saturate-150 border-b border-white/20 min-h-[56px] md:h-14 flex items-center justify-between fixed px-3 sm:px-4 md:px-6 py-2 md:py-0 shadow-lg shadow-black/10">
         {/* Left Section: Logo + Hamburger (Mobile) / Menu (Desktop) */}
         <div className="flex items-center gap-4 md:gap-6">
+          {backHref && (
+            <a
+              href={backHref}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/15 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-white/25 transition-colors"
+            >
+              <span aria-hidden="true">←</span>
+              <span>Back</span>
+            </a>
+          )}
           {/* Logo */}
           <div className="flex-shrink-0">
             <Image

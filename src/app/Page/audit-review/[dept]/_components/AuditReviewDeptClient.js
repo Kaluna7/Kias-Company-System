@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { useToast } from "@/app/contexts/ToastContext";
 
@@ -105,12 +105,59 @@ export default function AuditReviewDeptClient({
   const [limitationsTime, setLimitationsTime] = useState([]);
   const [limitationsResource, setLimitationsResource] = useState([]);
   const [internalAuditTeam, setInternalAuditTeam] = useState([]);
+  const [isLocked, setIsLocked] = useState(Boolean(initialExecutiveSummary?.is_locked));
 
   // Key Findings state
   const [keyFindings, setKeyFindings] = useState([]);
   const [hasSavedReviewFindings, setHasSavedReviewFindings] = useState(
     Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0,
   );
+
+  const autoAuditPeriod = useMemo(() => {
+    const sourceRows = Array.isArray(initialFindings) ? initialFindings : [];
+    const dates = sourceRows
+      .map((row) => row?.completion_date || row?.updated_at || null)
+      .filter(Boolean)
+      .map((value) => {
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (dates.length === 0) {
+      return { start: "", end: "", label: "" };
+    }
+
+    const toIso = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    const toLabel = (dateStr) => {
+      if (!dateStr) return "";
+      try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return "";
+        return date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "2-digit",
+        });
+      } catch {
+        return "";
+      }
+    };
+
+    const start = toIso(dates[0]);
+    const end = toIso(dates[dates.length - 1]);
+    return {
+      start,
+      end,
+      label: `${toLabel(start)} - ${toLabel(end)}`,
+    };
+  }, [initialFindings]);
 
   // Modal state for SELECT fields
   const [selectModal, setSelectModal] = useState({
@@ -137,6 +184,7 @@ export default function AuditReviewDeptClient({
         setLimitationsTime(parsed.limitationsTime || []);
         setLimitationsResource(parsed.limitationsResource || []);
         setInternalAuditTeam(parsed.internalAuditTeam || []);
+        setIsLocked(Boolean(parsed.isLocked));
       } else if (initialExecutiveSummary) {
         // Load from initial data
         setObjectiveOfAudit(initialExecutiveSummary.objective_of_audit ? JSON.parse(initialExecutiveSummary.objective_of_audit) : []);
@@ -148,6 +196,7 @@ export default function AuditReviewDeptClient({
         setLimitationsTime(initialExecutiveSummary.limitations_time ? JSON.parse(initialExecutiveSummary.limitations_time) : []);
         setLimitationsResource(initialExecutiveSummary.limitations_resource ? JSON.parse(initialExecutiveSummary.limitations_resource) : []);
         setInternalAuditTeam(initialExecutiveSummary.internal_audit_team ? JSON.parse(initialExecutiveSummary.internal_audit_team) : []);
+        setIsLocked(Boolean(initialExecutiveSummary.is_locked));
       }
     } catch (err) {
       console.warn("Error loading executive summary:", err);
@@ -162,12 +211,10 @@ export default function AuditReviewDeptClient({
       return;
     }
 
-    if (!auditPeriodStart || !auditPeriodEnd) {
-      if (initialFindings && initialFindings.length > 0) {
-        setKeyFindings(initialFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
-      }
+    if (initialFindings && initialFindings.length > 0) {
+      setKeyFindings(initialFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
     }
-  }, [initialReviewedFindings, initialFindings, auditPeriodStart, auditPeriodEnd]);
+  }, [initialReviewedFindings, initialFindings]);
 
   // Save executive summary to localStorage
   useEffect(() => {
@@ -185,6 +232,7 @@ export default function AuditReviewDeptClient({
           limitationsTime,
           limitationsResource,
           internalAuditTeam,
+          isLocked,
         })
       );
     } catch (err) {
@@ -201,6 +249,7 @@ export default function AuditReviewDeptClient({
     limitationsTime,
     limitationsResource,
     internalAuditTeam,
+    isLocked,
   ]);
 
   // Format date
@@ -305,7 +354,7 @@ export default function AuditReviewDeptClient({
   };
 
   // Save all data
-  const handleSaveAll = async () => {
+  const handleSaveAll = async (nextLocked = isLocked) => {
     try {
       setLoading(true);
       setError(null);
@@ -331,6 +380,7 @@ export default function AuditReviewDeptClient({
           limitationsTime: JSON.stringify(limitationsTime),
           limitationsResource: JSON.stringify(limitationsResource),
           internalAuditTeam: JSON.stringify(internalAuditTeam),
+          isLocked: nextLocked,
         }),
       });
 
@@ -356,8 +406,9 @@ export default function AuditReviewDeptClient({
         setKeyFindings(findingsJson.rows.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
       }
       setHasSavedReviewFindings(true);
+      setIsLocked(nextLocked);
 
-      toast.show("Data saved successfully!", "success");
+      toast.show(nextLocked ? "Data saved and locked for report!" : "Data saved and unlocked from report!", "success");
     } catch (e) {
       setError(e?.message || String(e));
       toast.show("Error: " + (e?.message || String(e)), "error");
@@ -366,116 +417,21 @@ export default function AuditReviewDeptClient({
     }
   };
 
-  // Set audit period from schedule
+  // Set audit period automatically from published/completed findings.
   useEffect(() => {
-    if (initialSchedule) {
-      if (initialSchedule.start_date && initialSchedule.end_date) {
-        const startDate = new Date(initialSchedule.start_date).toISOString().split('T')[0];
-        const endDate = new Date(initialSchedule.end_date).toISOString().split('T')[0];
-        setAuditPeriodStart(startDate);
-        setAuditPeriodEnd(endDate);
-        setScopeTimeframeAuditPeriod(`${formatDate(initialSchedule.start_date)} - ${formatDate(initialSchedule.end_date)}`);
-      }
-    }
-  }, [initialSchedule]);
+    setAuditPeriodStart(autoAuditPeriod.start || "");
+    setAuditPeriodEnd(autoAuditPeriod.end || "");
+    setScopeTimeframeAuditPeriod(autoAuditPeriod.label || "");
+  }, [autoAuditPeriod]);
 
-  // Fetch findings based on audit period (date range)
-  const fetchFindingsByDateRange = async (startDate, endDate) => {
-    if (!startDate || !endDate) {
-      // Jika tidak ada audit period yang dipilih, kosongkan tabel
-      setKeyFindings([]);
+  const handleBack = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) {
+      window.history.back();
       return;
     }
-    
-    try {
-      setLoading(true);
-      // Review butuh data COMPLETED, jadi sertakan semuanya
-      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}?include_completed=1`);
-      if (res.ok) {
-        const json = await res.json();
-        const dataArray = json.success && Array.isArray(json.data) 
-          ? json.data 
-          : (Array.isArray(json.data) ? json.data : []);
-        
-        // Filter STRICT berdasarkan audit period (date range)
-        // Hanya data yang berada dalam rentang audit period yang akan ditampilkan
-        const periodStart = new Date(startDate);
-        periodStart.setHours(0, 0, 0, 0); // Start of day
-        const periodEnd = new Date(endDate);
-        periodEnd.setHours(23, 59, 59, 999); // End of day
-        
-        const filteredFindings = dataArray.filter(row => {
-          // Must be COMPLETED
-          const status = row.completion_status?.toUpperCase();
-          if (status !== "COMPLETED") return false;
-          
-          // Filter STRICT berdasarkan audit period:
-          // Gunakan completion_date jika ada, jika tidak gunakan updated_at (tanggal publish)
-          // Data HARUS berada dalam rentang audit period yang dipilih, jika tidak maka tidak akan muncul
-          const rowDate = row.completion_date 
-            ? new Date(row.completion_date)
-            : (row.updated_at ? new Date(row.updated_at) : null);
-          
-          if (!rowDate || isNaN(rowDate.getTime())) {
-            // Jika tidak ada tanggal yang valid, data tidak akan muncul
-            return false;
-          }
-          
-          // Normalize row date to start of day for comparison
-          const rowDateNormalized = new Date(rowDate);
-          rowDateNormalized.setHours(0, 0, 0, 0);
-          
-          // Check if row date is STRICTLY within the selected audit period
-          // Hanya data yang berada dalam rentang ini yang akan muncul
-          const isWithinPeriod = rowDateNormalized >= periodStart && rowDateNormalized <= periodEnd;
-          
-          if (!isWithinPeriod) {
-            // Data di luar rentang audit period tidak akan muncul
-            return false;
-          }
-          
-          return true;
-        });
-        
-        // Map findings
-        const mappedFindings = filteredFindings.map((finding, idx) =>
-          normalizeKeyFindingRow(finding, idx),
-        );
-        
-        setKeyFindings(mappedFindings);
-      }
-    } catch (err) {
-      console.error("Error fetching findings by date range:", err);
-      setError(err?.message || String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle date range change - Hanya tampilkan data jika audit period dipilih
-  useEffect(() => {
-    if (hasSavedReviewFindings) {
-      if (auditPeriodStart && auditPeriodEnd) {
-        const startFormatted = formatDate(auditPeriodStart);
-        const endFormatted = formatDate(auditPeriodEnd);
-        setScopeTimeframeAuditPeriod(`${startFormatted} - ${endFormatted}`);
-      }
-      return;
-    }
-
-    if (auditPeriodStart && auditPeriodEnd) {
-      fetchFindingsByDateRange(auditPeriodStart, auditPeriodEnd);
-      // Update scopeTimeframeAuditPeriod display
-      const startFormatted = formatDate(auditPeriodStart);
-      const endFormatted = formatDate(auditPeriodEnd);
-      setScopeTimeframeAuditPeriod(`${startFormatted} - ${endFormatted}`);
-    } else {
-      // Jika audit period tidak dipilih, kosongkan tabel
-      setKeyFindings([]);
-      setScopeTimeframeAuditPeriod("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auditPeriodStart, auditPeriodEnd, apiPath, hasSavedReviewFindings]);
+    window.location.href = "/Page/audit-review";
+  }, []);
 
   return (
     <>
@@ -496,6 +452,19 @@ export default function AuditReviewDeptClient({
         }
       `}</style>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-50/95 to-blue-50/80">
+      <div className="fixed top-2 left-2 sm:top-4 sm:left-4 z-40">
+        <button
+          onClick={handleBack}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full shadow-md hover:shadow-lg border border-slate-300 bg-white/95 text-xs sm:text-sm font-semibold text-slate-700 transition-all duration-300"
+          title="Back"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+      </div>
+
       {/* Header */}
       <header
         className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl transition-all duration-700 ease-out max-h-[90vh] overflow-y-auto overscroll-contain ${
@@ -814,27 +783,33 @@ export default function AuditReviewDeptClient({
         {/* Header Card */}
         <div className="mb-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
-            <div className="text-xs font-semibold text-slate-500 tracking-wide">{titleCode} AUDIT REVIEW</div>
-            <div className="text-lg font-bold text-slate-900">{deptName}</div>
-            <div className="text-sm text-slate-600">Internal Audit Review Executive Summary</div>
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">1.3 Audit Period:</label>
-              <input
-                type="date"
-                value={auditPeriodStart}
-                onChange={(e) => setAuditPeriodStart(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-slate-300 bg-white rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              />
-              <span className="text-xs text-slate-600">to</span>
-              <input
-                type="date"
-                value={auditPeriodEnd}
-                onChange={(e) => setAuditPeriodEnd(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-slate-300 bg-white rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              />
-              {scopeTimeframeAuditPeriod && (
-                <span className="text-xs text-slate-500 ml-2">({scopeTimeframeAuditPeriod})</span>
-              )}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-slate-500 tracking-wide">{titleCode} AUDIT REVIEW</div>
+                <div className="text-lg font-bold text-slate-900">{deptName}</div>
+                <div className="text-sm text-slate-600">Internal Audit Review Executive Summary</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                  isLocked
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}>
+                  {isLocked ? "Locked for Report" : "Unlocked"}
+                </span>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleSaveAll(!isLocked)}
+                  className={`inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                    isLocked
+                      ? "bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  } disabled:opacity-60 disabled:cursor-not-allowed`}
+                >
+                  {loading ? "Saving..." : isLocked ? "Unlock" : "Lock"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

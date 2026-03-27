@@ -1086,8 +1086,30 @@ export default function AuditFindingDeptClient({
     }
   };
 
+  const handleBack = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = "/Page/audit-finding";
+  }, []);
+
   return (
     <main className="min-h-screen w-full bg-[#E6F0FA]">
+      <div className="fixed z-40 top-3 left-4">
+        <button
+          onClick={handleBack}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full shadow-md border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          title="Back"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+      </div>
+
       {/* Header collapse toggle */}
       <div className="fixed z-40 top-3 right-4">
         <button

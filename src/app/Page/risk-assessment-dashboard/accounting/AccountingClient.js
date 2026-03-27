@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -96,7 +96,7 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
     return base;
   }, [isAdmin, openPopUp, viewDraft, convertMode]);
 
-  // ✅ Tombol "View Draft / Published" hanya admin
+  // âœ… Tombol "View Draft / Published" hanya admin
   const viewItems = useMemo(() => {
     if (!isAdmin) return [];
     return [
@@ -264,6 +264,7 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
           editItems={editItems}
           sortByItems={sortByItems}
           onSearch={setSearchQuery}
+          backHref={`/Page/risk-assessment-dashboard${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
         />
         <div className="flex-1 w-full h-full overflow-hidden mt-20 md:mt-14">
           {/* Search bar untuk mobile - di atas table */}
@@ -286,4 +287,5 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
     </main>
   );
 }
+
 

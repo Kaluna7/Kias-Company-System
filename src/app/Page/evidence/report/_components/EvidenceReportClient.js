@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 export default function EvidenceReportClient({ initialData }) {
   // Data sudah difilter di server berdasarkan year & status COMPLETE.
@@ -80,9 +80,31 @@ export default function EvidenceReportClient({ initialData }) {
     setViewOpen(true);
   };
 
+  const handleBack = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = "/Page/evidence";
+  }, []);
+
   return (
     <main className="min-h-screen w-full bg-[#E6F0FA]">
       <div className="px-3 sm:px-4 pt-6 pb-4 flex flex-col h-full">
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </button>
+        </div>
+
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm text-slate-700 font-semibold">B3.1 EVIDENCE REPORT</div>
         </div>

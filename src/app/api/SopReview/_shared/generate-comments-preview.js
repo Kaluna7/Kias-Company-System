@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
-const API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyByg_otFYurK-Aw0KLtoknlw4x5usJDW10";
-const MODEL = process.env.GOOGLE_AI_MODEL || "gemini-2.5-flash";
-const BASE_URL = process.env.GOOGLE_AI_BASEURL || "https://generativelanguage.googleapis.com/v1beta";
-const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:generateContent`;
+const API_KEY = process.env.GOOGLE_API_KEY;
+const MODEL = process.env.GOOGLE_AI_MODEL;
+const BASE_URL = process.env.GOOGLE_AI_BASEURL;
+const GEN_PATH = process.env.GOOGLE_AI_GENPATH;
+const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:${GEN_PATH}`;
 
 async function callGemini(prompt) {
   const body = { contents: [{ parts: [{ text: prompt }] }] };
@@ -80,26 +81,19 @@ function isEchoOfStep(comment, step, threshold = 0.35) {
 function buildSinglePromptStrict(item) {
   const step = (item.sop_related || "").replace(/\n+/g, " ").trim().slice(0, 1400);
   return [
-    "Anda adalah asisten profesional. Buat TEPAT SATU KALIMAT (1 sentence) sebagai komentar reviewer untuk langkah SOP di bawah.",
+    "Anda adalah asisten profesional. Buat komentar reviewer untuk langkah SOP di bawah.",
     "PERSYARATAN (WAJIB):",
-    "1) KELUARKAN HANYA 1 KALIMAT. Jangan keluarkan teks lain.",
-    "2) Jangan menyalin atau mengulang langsung frasa lengkap dari langkah. Tidak lebih dari 30% kata yang sama.",
-    "3) Gunakan bahasa profesional dan ringkas (~8–20 kata).",
-    "4) Komentar harus actionable: jelaskan apa yang harus dicek/konfirmasi reviewer.",
+    "1) Gunakan bahasa yang sama dengan bahasa pada langkah SOP.",
+    "2) Panjang komentar maksimal 2 kalimat.",
+    "3) Bahasa harus profesional, jelas, mudah dipahami, dan actionable.",
+    "4) Jangan menyalin atau mengulang langsung frasa lengkap dari langkah. Tidak lebih dari 30% kata yang sama.",
     "5) Jangan sertakan numbering, 'Comment:', atau JSON.",
+    "6) Keluarkan HANYA isi komentar.",
     "",
     `Langkah: ${step}`,
     "",
-    "KELUARKAN HANYA satu kalimat komentar sesuai aturan."
+    "KELUARKAN HANYA komentar sesuai aturan."
   ].join("\n");
-}
-
-function fallbackCommentForStep(step) {
-  if (!step || typeof step !== "string") return "Periksa kelengkapan dokumen dan persetujuan sebelum memproses.";
-  if (/tanda tangan|ttd|atasan/i.test(step)) return "Pastikan tanda tangan atasan dan tanggal persetujuan tercantum.";
-  if (/input|sistem|payroll/i.test(step)) return "Verifikasi data dan otorisasi sebelum input ke sistem.";
-  if (/formulir|form/i.test(step)) return "Periksa kelengkapan formulir dan lampiran sebelum pengajuan.";
-  return "Periksa kelengkapan dokumen dan persetujuan sebelum memproses.";
 }
 
 export async function POST(req) {
@@ -115,7 +109,7 @@ export async function POST(req) {
       let comment = "";
       const r = await callGemini(buildSinglePromptStrict(it));
       comment = normalizeGeneratedText(r.generated || r.rawResponse || "");
-      if (!comment || isEchoOfStep(comment, step, 0.35)) comment = fallbackCommentForStep(step);
+      if (isEchoOfStep(comment, step, 0.35)) comment = "";
       if (comment.length > 400) comment = comment.slice(0, 400).trim();
       comments.push({ id: it.id ?? null, sop_related: step, comment });
     }

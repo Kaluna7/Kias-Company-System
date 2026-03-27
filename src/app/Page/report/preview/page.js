@@ -65,6 +65,34 @@ const DEFAULT_APPENDICES = [
   },
 ];
 
+function parseJsonList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatExecutiveSummaryItem(item) {
+  if (item == null) return "-";
+  if (typeof item === "string" || typeof item === "number") return String(item);
+  if (typeof item === "object") {
+    const name = item?.name ? String(item.name) : "";
+    const region = item?.region ? String(item.region) : "";
+    if (name && region) return `${name} - ${region}`;
+    if (name) return name;
+    if (region) return region;
+    return Object.values(item)
+      .filter((value) => value != null && value !== "")
+      .map((value) => String(value))
+      .join(" - ") || "-";
+  }
+  return String(item);
+}
+
 function ReportPreviewPageContent() {
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
@@ -112,6 +140,20 @@ function ReportPreviewPageContent() {
     "IR. WONG BUDI SETIAWAN",
   );
   const [presidentDirectorDate, setPresidentDirectorDate] = useState("");
+
+  const updateAuditRowField = (deptKey, rowIndex, field, value) => {
+    setFindingSections((prev) =>
+      prev.map((section) => {
+        if (section.deptKey !== deptKey) return section;
+        return {
+          ...section,
+          auditRows: (section.auditRows || []).map((row, idx) =>
+            idx === rowIndex ? { ...row, [field]: value } : row
+          ),
+        };
+      })
+    );
+  };
 
   const formattedAuditCommitteeDate = auditCommitteeDate
     ? new Date(auditCommitteeDate).toLocaleDateString("en-US", {
@@ -347,11 +389,13 @@ function ReportPreviewPageContent() {
               publishes.forEach((pub) => {
                 (pub.rows || []).forEach((row, idx) => {
                   const sopRelated = (row.sop_related || "").toString().trim();
+                  const status = (row.status || "").toString().toUpperCase();
                   if (!sopRelated) return;
+                  if (status !== "APPROVED") return;
                   sopRows.push({
                     no: row.no ?? idx + 1,
                     sopRelated,
-                    status: (row.status || "").toString().toUpperCase(),
+                    status,
                     reviewComment: (row.comment || "").toString(),
                   });
                 });
@@ -369,78 +413,59 @@ function ReportPreviewPageContent() {
             // ignore SOP errors for consolidated report
           }
 
-          // Load Audit Review findings. If no saved review rows yet, fallback to
-          // completed audit-finding rows so preview matches what is visible in Audit Review.
+          // Load Audit Review findings from the audit review module only.
           let auditRows = [];
+          let executiveSummary = null;
           try {
-            const reviewRes = await fetch(
-              `/api/audit-review/${dept.apiPath}/findings?year=${encodeURIComponent(String(year))}`,
-            );
-            if (reviewRes.ok) {
+            try {
+              const summaryRes = await fetch(`/api/audit-review/${dept.apiPath}/executive-summary`);
+              if (summaryRes.ok) {
+                const summaryJson = await summaryRes.json().catch(() => ({}));
+                executiveSummary = summaryJson?.data || null;
+              }
+            } catch {
+              executiveSummary = null;
+            }
+
+            const loadAuditReviewRows = async (withYear = true) => {
+              const reviewUrl = withYear
+                ? `/api/audit-review/${dept.apiPath}/findings?year=${encodeURIComponent(String(year))}`
+                : `/api/audit-review/${dept.apiPath}/findings`;
+              const reviewRes = await fetch(reviewUrl);
+              if (!reviewRes.ok) return [];
               const reviewJson = await reviewRes.json().catch(() => ({}));
-              const rows = Array.isArray(reviewJson.rows) ? reviewJson.rows : [];
+              return Array.isArray(reviewJson.rows) ? reviewJson.rows : [];
+            };
+
+            let rows = await loadAuditReviewRows(true);
+            if (rows.length === 0) {
+              rows = await loadAuditReviewRows(false);
+            }
+
+            if (rows.length > 0) {
               auditRows = rows.map((r, idx) => ({
                 no: r.no ?? idx + 1,
                 riskId: r.riskId ?? r.risk_id ?? "",
                 risk: r.risk ?? "",
                 riskDetails: r.riskDetails ?? r.risk_details ?? "",
                 effectIfNotMitigate: r.effectIfNotMitigate ?? r.impact_description ?? "",
+                riskLevel: r.riskLevel ?? r.risk ?? "",
                 apCode: r.apNo ?? r.apCode ?? r.ap_code ?? "",
                 substantiveTest: r.substantiveTest ?? r.substantive_test ?? "",
-                riskLevel: r.riskLevel ?? r.risk ?? "",
-                methodology: r.method ?? r.methodology ?? "",
+                methodology: r.method ?? "",
                 findingResult: r.findingResult ?? r.finding_result ?? "",
                 findingDescription: r.findingDescription ?? r.finding_description ?? "",
                 recommendation: r.recommendation ?? "",
-                auditeeComment: r.preparerRespo ?? r.auditeeComment ?? r.auditee ?? "",
-                followUpDetail: r.timeline ?? r.followUpDetail ?? "",
+                auditeeComment: "",
+                followUpDetail: "",
               }));
-            }
-
-            if (auditRows.length === 0) {
-              const afRes = await fetch(
-                `/api/audit-finding/${dept.apiPath}?include_completed=1`,
-              );
-              if (afRes.ok) {
-                const afJson = await afRes.json().catch(() => ({}));
-                const rows = Array.isArray(afJson.data) ? afJson.data : [];
-
-                const fallbackRows = rows.filter((row) => {
-                  if (!year) return true;
-
-                  const rowDate = row.completion_date
-                    ? new Date(row.completion_date)
-                    : row.updated_at
-                      ? new Date(row.updated_at)
-                      : null;
-
-                  if (!rowDate || Number.isNaN(rowDate.getTime())) return false;
-                  return rowDate.getFullYear() === year;
-                });
-
-                auditRows = fallbackRows.map((r, idx) => ({
-                  no: idx + 1,
-                  riskId: r.risk_id ?? "",
-                  risk: r.risk_description ?? "",
-                  riskDetails: r.risk_details ?? "",
-                  effectIfNotMitigate: r.impact_description ?? "",
-                  apCode: r.ap_code ?? "",
-                  substantiveTest: r.substantive_test ?? "",
-                  riskLevel: r.risk ?? "",
-                  methodology: r.method ?? "",
-                  findingResult: r.finding_result ?? "",
-                  findingDescription: r.finding_description ?? "",
-                  recommendation: r.recommendation ?? "",
-                  auditeeComment: r.auditee ?? "",
-                  followUpDetail: "",
-                }));
-              }
             }
 
             console.log("[REPORT-PREVIEW] Audit review data", {
               dept: dept.label,
               apiPath: dept.apiPath,
               year,
+              isLocked: Boolean(executiveSummary?.is_locked),
               totalBackendRows: auditRows.length,
               mappedRows: auditRows.length,
             });
@@ -466,13 +491,31 @@ function ReportPreviewPageContent() {
             // fallback ke department label
           }
 
-          if (sopRows.length > 0 || auditRows.length > 0) {
+          const isAuditReviewLocked = executiveSummary?.is_locked === true;
+          const visibleAuditRows = isAuditReviewLocked ? auditRows : [];
+
+          if (sopRows.length > 0 || visibleAuditRows.length > 0) {
+            const normalizedSopRows = sopRows.map((row, idx) => ({
+              ...row,
+              no: idx + 1,
+            }));
             sections.push({
               deptKey: dept.key,
               deptLabel: dept.label,
               areaAudit,
-              sopRows,
-              auditRows,
+              executiveSummary: isAuditReviewLocked && executiveSummary
+                ? {
+                    objectiveOfAudit: parseJsonList(executiveSummary.objective_of_audit),
+                    scopeAreasCovered: parseJsonList(executiveSummary.scope_areas_covered),
+                    scopeMethodology: parseJsonList(executiveSummary.scope_methodology),
+                    limitationsScope: parseJsonList(executiveSummary.limitations_scope),
+                    limitationsTime: parseJsonList(executiveSummary.limitations_time),
+                    limitationsResource: parseJsonList(executiveSummary.limitations_resource),
+                    internalAuditTeam: parseJsonList(executiveSummary.internal_audit_team),
+                  }
+                : null,
+              sopRows: normalizedSopRows,
+              auditRows: visibleAuditRows,
             });
           }
         }
@@ -2159,8 +2202,8 @@ function ReportPreviewPageContent() {
             className={`flex-1 min-h-0 min-w-0 overflow-hidden text-[11px] leading-relaxed space-y-6 ${!page.isFirstPageForDept ? "pt-4" : ""}`}
             style={{ paddingBottom: `${FINDING_SAFE_ZONE_REM}rem` }}
           >
-            {/* Section header hanya di halaman pertama departemen; halaman lanjutan (lanjutan tabel) tanpa header ini */}
-            {page.isFirstPageForDept && (
+            {/* Ulangi header saat halaman audit berdiri sendiri agar jelas masih department yang sama */}
+            {(page.isFirstPageForDept || (page.auditRows.length > 0 && page.isFirstAuditChunk && page.sopRows.length === 0)) && (
               <div>
                 <p className="font-bold">
                   5&nbsp;&nbsp;&nbsp;Finding &amp; Recommendation
@@ -2169,6 +2212,98 @@ function ReportPreviewPageContent() {
                   5.{deptIndexMap[page.dept.deptKey] || 1}&nbsp;&nbsp;Department&nbsp;&nbsp;
                   <span className="font-semibold">{page.dept.deptLabel}</span>
                 </p>
+              </div>
+            )}
+
+            {page.isFirstPageForDept && page.dept.executiveSummary && (
+              <div className="border border-gray-300 rounded px-3 py-2 text-[10px] bg-gray-50/70 space-y-2">
+                <p className="font-semibold">Executive Summary</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div>
+                    <p className="font-medium">Objective of the Audit</p>
+                    {page.dept.executiveSummary.objectiveOfAudit.length > 0 ? (
+                      <ul className="list-disc list-inside">
+                        {page.dept.executiveSummary.objectiveOfAudit.map((item, idx) => (
+                          <li key={`obj-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">1.1 Scope - Areas Covered</p>
+                    {page.dept.executiveSummary.scopeAreasCovered.length > 0 ? (
+                      <ul className="list-disc list-inside">
+                        {page.dept.executiveSummary.scopeAreasCovered.map((item, idx) => (
+                          <li key={`scope-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">1.2 Methodology</p>
+                    {page.dept.executiveSummary.scopeMethodology.length > 0 ? (
+                      <ul className="list-disc list-inside">
+                        {page.dept.executiveSummary.scopeMethodology.map((item, idx) => (
+                          <li key={`method-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">1.4 Limitations - Scope</p>
+                    {page.dept.executiveSummary.limitationsScope.length > 0 ? (
+                      <ul className="list-disc list-inside">
+                        {page.dept.executiveSummary.limitationsScope.map((item, idx) => (
+                          <li key={`limit-scope-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">Limitations - Time</p>
+                    {page.dept.executiveSummary.limitationsTime.length > 0 ? (
+                      <ul className="list-disc list-inside">
+                        {page.dept.executiveSummary.limitationsTime.map((item, idx) => (
+                          <li key={`limit-time-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">Limitations - Resource</p>
+                    {page.dept.executiveSummary.limitationsResource.length > 0 ? (
+                      <ul className="list-disc list-inside">
+                        {page.dept.executiveSummary.limitationsResource.map((item, idx) => (
+                          <li key={`limit-resource-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="font-medium">Internal Audit Team</p>
+                  {page.dept.executiveSummary.internalAuditTeam.length > 0 ? (
+                    <ul className="list-disc list-inside">
+                      {page.dept.executiveSummary.internalAuditTeam.map((item, idx) => (
+                        <li key={`team-${idx}`}>{formatExecutiveSummaryItem(item)}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>-</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -2271,9 +2406,9 @@ function ReportPreviewPageContent() {
                         <th className="border border-blue-800 px-1.5 py-0.5 text-center min-w-0">No</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Risk ID</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Risk Details</th>
+                        <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Risk Level</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Audit Program Code</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Substantive Test</th>
-                        <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Risk Level</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Methodology</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Finding Result</th>
                         <th className="border border-blue-800 px-1.5 py-0.5 text-left min-w-0">Finding Description</th>
@@ -2292,17 +2427,33 @@ function ReportPreviewPageContent() {
                           </td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">{row.riskId || "-"}</td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.riskDetails || "-"}</td>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden">{row.riskLevel ?? "-"}</td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">{row.apCode || "-"}</td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.substantiveTest || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden">{row.riskLevel ?? "-"}</td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.methodology || "-"}</td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.findingResult || "-"}</td>
                           <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.findingDescription || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                            {row.auditeeComment || "-"}
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">
+                            <textarea
+                              className="w-full border border-blue-200 rounded-sm px-1 py-0.5 text-[9px] resize-none leading-snug"
+                              rows={2}
+                              placeholder="Auditee comment"
+                              value={row.auditeeComment || ""}
+                              onChange={(e) =>
+                                updateAuditRowField(page.dept.deptKey, aIdx, "auditeeComment", e.target.value)
+                              }
+                            />
                           </td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                            {row.followUpDetail || "-"}
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">
+                            <textarea
+                              className="w-full border border-blue-200 rounded-sm px-1 py-0.5 text-[9px] resize-none leading-snug"
+                              rows={2}
+                              placeholder="Follow-up detail"
+                              value={row.followUpDetail || ""}
+                              onChange={(e) =>
+                                updateAuditRowField(page.dept.deptKey, aIdx, "followUpDetail", e.target.value)
+                              }
+                            />
                           </td>
                         </tr>
                       ))}
@@ -2742,9 +2893,9 @@ function ReportPreviewPageContent() {
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">No</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">RID</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Risk</th>
+                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">L</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Code</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Test</th>
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">L</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Method</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Result</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Desc</th>
@@ -2758,9 +2909,9 @@ function ReportPreviewPageContent() {
                             <td className="border border-blue-800 px-1.5 py-0.5 text-center align-top">{row.no}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top">{row.riskId || "-"}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words">{row.riskDetails || "-"}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top">{row.riskLevel ?? "-"}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top">{row.apCode || "-"}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words">{row.substantiveTest || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top">{row.riskLevel ?? "-"}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words">{row.methodology || "-"}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words">{row.findingResult || "-"}</td>
                             <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words">{row.findingDescription || "-"}</td>

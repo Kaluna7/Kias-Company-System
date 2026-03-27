@@ -362,12 +362,13 @@ export default function SOPHeader({
         const normalized = aiRes.steps.map((s, idx) => {
           const raw = (s.text || s.instruction || (typeof s === "string" ? s : "") || "").toString();
           const clean = sanitizeStepText(raw);
+          const aiComment = (s.comment || s.reviewer_comment || "").toString().trim();
           return {
             no: (typeof s.step === "number" ? s.step : idx + 1),
             sop_related: clean,
             // Default status for freshly parsed items: IN REVIEW
             status: "IN REVIEW",
-            comment: "",
+            comment: aiComment,
             reviewer: "",
           };
         }).filter(it => it.sop_related && it.sop_related.length > 3);
@@ -409,11 +410,12 @@ export default function SOPHeader({
     setModalLoading(false);
     setModalOpen(true);
 
-    // build items WITHOUT comments - user will generate them manually
+    // Keep parsed comments if AI extractor already returned them.
+    // User can still regenerate/overwrite via "Generate Comment".
     const items = parsedPreview.map((p, idx) => ({ 
       no: idx + 1, 
       sop_related: p.sop_related, 
-      comment: "" 
+      comment: (p.comment || "").toString().trim(),
     }));
     setModalItems(items);
     console.log("Modal opened with items (no comments yet):", items.length);

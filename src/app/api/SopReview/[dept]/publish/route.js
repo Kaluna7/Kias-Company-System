@@ -67,6 +67,7 @@ async function ensureReportTables(client, slug, departmentName) {
       sop_related TEXT,
       status VARCHAR(20) DEFAULT 'DRAFT',
       comment TEXT DEFAULT '',
+      reviewer_feedback TEXT DEFAULT '',
       reviewer VARCHAR(255) DEFAULT '',
       published_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -77,6 +78,10 @@ async function ensureReportTables(client, slug, departmentName) {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                      WHERE table_name = '${stepsTable}' AND column_name = 'report_meta_id') THEN
         ALTER TABLE ${stepsTable} ADD COLUMN report_meta_id INTEGER;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${stepsTable}' AND column_name = 'reviewer_feedback') THEN
+        ALTER TABLE ${stepsTable} ADD COLUMN reviewer_feedback TEXT DEFAULT '';
       END IF;
     END $$;
   `);
@@ -155,8 +160,13 @@ export async function POST(req, { params }) {
           sop_related TEXT,
           status VARCHAR(20) DEFAULT 'DRAFT',
           comment TEXT DEFAULT '',
+          reviewer_feedback TEXT DEFAULT '',
           reviewer VARCHAR(255) DEFAULT ''
         );
+      `);
+      await client.query(`
+        ALTER TABLE ${stepsTable}
+        ADD COLUMN IF NOT EXISTS reviewer_feedback TEXT DEFAULT '';
       `);
       await client.query(`
         CREATE TABLE IF NOT EXISTS ${metaTable} (
@@ -205,7 +215,7 @@ export async function POST(req, { params }) {
         await client.query(`LOCK TABLE ${stepsTable} IN EXCLUSIVE MODE`);
         await client.query(`LOCK TABLE ${metaTable} IN EXCLUSIVE MODE`);
         const stepsRes = await client.query(
-          `SELECT no, sop_related, status, comment, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
+          `SELECT no, sop_related, status, comment, reviewer_feedback, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
         );
         const rawSteps = stepsRes.rows || [];
         const seen = new Set();
@@ -262,12 +272,12 @@ export async function POST(req, { params }) {
         const params = [];
         let idx = 1;
         for (const s of steps) {
-          values.push(`($${idx},$${idx + 1},$${idx + 2},$${idx + 3},$${idx + 4},NOW(),$${idx + 5})`);
-          params.push(s.no ?? null, s.sop_related ?? "", s.status ?? "DRAFT", s.comment ?? "", s.reviewer ?? "", reportMetaId);
-          idx += 6;
+          values.push(`($${idx},$${idx + 1},$${idx + 2},$${idx + 3},$${idx + 4},$${idx + 5},NOW(),$${idx + 6})`);
+          params.push(s.no ?? null, s.sop_related ?? "", s.status ?? "DRAFT", s.comment ?? "", s.reviewer_feedback ?? "", s.reviewer ?? "", reportMetaId);
+          idx += 7;
         }
         await client.query(
-          `INSERT INTO ${reportSteps} (no, sop_related, status, comment, reviewer, published_at, report_meta_id) VALUES ${values.join(", ")}`,
+          `INSERT INTO ${reportSteps} (no, sop_related, status, comment, reviewer_feedback, reviewer, published_at, report_meta_id) VALUES ${values.join(", ")}`,
           params
         );
       }

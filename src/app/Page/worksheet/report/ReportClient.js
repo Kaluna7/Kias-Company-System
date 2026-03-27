@@ -5,6 +5,14 @@ export default function ReportClient({ initialData = [] }) {
   const [data, setData] = useState(initialData);
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
+  const handleBack = () => {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = "/Page/worksheet";
+  };
 
   const handleView = (row) => {
     setSelectedRow(row);
@@ -14,6 +22,18 @@ export default function ReportClient({ initialData = [] }) {
   return (
     <div className="flex flex-col">
       <div className="p-4">
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </button>
+        </div>
         <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm mt-4">
           <table className="min-w-full table-fixed border-collapse text-xs">
             {/* --- Column Widths --- */}

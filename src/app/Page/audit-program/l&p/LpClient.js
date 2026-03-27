@@ -198,6 +198,7 @@ export default function LpClient({ initialData, initialSortBy = "risk_id_no", in
       <div className="flex flex-col flex-1 w-full h-full">
         <SmallHeader
           label={`Loss & Prevention Audit Program - ${viewDraft ? "Draft Data" : "Published Data"}`}
+          backHref={`/Page/audit-program${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
           fileItems={fileItems}
           viewItems={viewItems}
           sortByItems={sortByItems}

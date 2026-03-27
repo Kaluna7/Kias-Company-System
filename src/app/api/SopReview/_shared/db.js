@@ -26,6 +26,7 @@ export function makeStepsHandlers({ stepsTable }) {
         sop_related TEXT,
         status VARCHAR(20) DEFAULT 'DRAFT',
         comment TEXT DEFAULT '',
+        reviewer_feedback TEXT DEFAULT '',
         reviewer VARCHAR(255) DEFAULT '',
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -33,6 +34,9 @@ export function makeStepsHandlers({ stepsTable }) {
     // Backfill column on existing tables if needed
     await client
       .query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`)
+      .catch(() => {});
+    await client
+      .query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS reviewer_feedback TEXT DEFAULT '';`)
       .catch(() => {});
   };
 
@@ -51,7 +55,7 @@ export function makeStepsHandlers({ stepsTable }) {
           const from = new Date(year, 0, 1);
           const to = new Date(year + 1, 0, 1);
           r = await client.query(
-            `SELECT id, no, sop_related, status, comment, reviewer
+            `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer
              FROM ${stepsTable}
              WHERE created_at >= $1 AND created_at < $2
              ORDER BY no ASC NULLS LAST, id ASC`,
@@ -59,7 +63,7 @@ export function makeStepsHandlers({ stepsTable }) {
           );
         } else {
           r = await client.query(
-            `SELECT id, no, sop_related, status, comment, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`,
+            `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`,
           );
         }
         return NextResponse.json({ success: true, rows: r.rows }, { status: 200 });
@@ -123,14 +127,15 @@ export function makeStepsHandlers({ stepsTable }) {
         
         const inserted = [];
         for (const item of sopsArray) {
-          const q = `INSERT INTO ${stepsTable} (no, sop_related, status, comment, reviewer)
-                     VALUES ($1,$2,$3,$4,$5)
-                     RETURNING id, no, sop_related, status, comment, reviewer`;
+          const q = `INSERT INTO ${stepsTable} (no, sop_related, status, comment, reviewer_feedback, reviewer)
+                     VALUES ($1,$2,$3,$4,$5,$6)
+                     RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`;
           const vals = [
             item.no ?? null,
             (item.sop_related ?? item.name ?? "").toString().trim(),
             item.status ?? "DRAFT",
             item.comment ?? "",
+            item.reviewer_feedback ?? "",
             item.reviewer ?? "",
           ];
           const r = await client.query(q, vals);

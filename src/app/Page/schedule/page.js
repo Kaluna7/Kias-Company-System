@@ -1586,6 +1586,26 @@ export default function SchedulePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              if (window.history.length > 1) {
+                window.history.back();
+                return;
+              }
+              window.location.href = "/Page/dashboard";
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </button>
+        </div>
+
         {/* Header */}
         <header className="mb-6 sm:mb-8" ref={headerRef}>
           <div className="bg-gradient-to-r from-[#141D38] via-[#1e2d4a] to-[#2D3A5A] rounded-2xl sm:rounded-3xl shadow-xl border border-slate-700/40 overflow-hidden">

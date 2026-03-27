@@ -198,6 +198,7 @@ export default function SdpClient({ initialData, initialSortBy = "risk_id_no", i
       <div className="flex flex-col flex-1 w-full h-full">
         <SmallHeader
           label={`SDP Audit Program - ${viewDraft ? "Draft Data" : "Published Data"}`}
+          backHref={`/Page/audit-program${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
           fileItems={fileItems}
           viewItems={viewItems}
           sortByItems={sortByItems}

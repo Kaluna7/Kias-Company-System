@@ -249,6 +249,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
             "SOP Related": step.sop_related || "",
             "Status": step.status || "DRAFT",
             "Comment": step.comment || "",
+            "Reviewer Feedback": step.reviewer_feedback || "",
             "Step Reviewer": step.reviewer || "",
             "Preparer Status": item.sop_preparer_status || "DRAFT",
             "Reviewer Status": item.sop_reviewer_status || "DRAFT",
@@ -271,6 +272,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       { header: "SOP Related", key: "SOP Related" },
       { header: "Status", key: "Status" },
       { header: "Comment", key: "Comment" },
+      { header: "Reviewer Feedback", key: "Reviewer Feedback" },
       { header: "Step Reviewer", key: "Step Reviewer" },
       { header: "Preparer Status", key: "Preparer Status" },
       { header: "Reviewer Status", key: "Reviewer Status" },
@@ -316,7 +318,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       if (item._detail?.steps?.length && stepCountDesktop < maxStepsDesktop) {
         item._detail.steps.forEach((step) => {
           if (stepCountDesktop >= maxStepsDesktop) return;
-          tableRowsDesktop += `<tr style="page-break-inside:avoid;"><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.no || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.sop_related || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.status || "DRAFT")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer || "")}</td></tr>`;
+          tableRowsDesktop += `<tr style="page-break-inside:avoid;"><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.no || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.sop_related || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.status || "DRAFT")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer_feedback || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer || "")}</td></tr>`;
           stepCountDesktop++;
         });
       }
@@ -360,9 +362,9 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
 <p><strong>Audit Period End:</strong> ${escapeHtml(formatDateForDisplay(group.audit_period_end))}</p>
 <p><strong>Preparer:</strong> ${escapeHtml(group.preparer || "-")}</p>
 <p><strong>Reviewer:</strong> ${escapeHtml(group.reviewer || "-")}</p>
-<table><thead><tr><th>No</th><th>SOP Related</th><th>Status</th><th>Comment</th><th>Reviewer</th></tr></thead><tbody>
+<table><thead><tr><th>No</th><th>SOP Related</th><th>Status</th><th>Comment</th><th>Reviewer Feedback</th><th>Reviewer</th></tr></thead><tbody>
 ${tableRowsDesktop}
-${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:center;color:#666;font-style:italic;">... (showing ${maxStepsDesktop} of total steps)</td></tr>` : ""}
+${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:center;color:#666;font-style:italic;">... (showing ${maxStepsDesktop} of total steps)</td></tr>` : ""}
 </tbody></table>
 </body></html>`;
 
@@ -422,6 +424,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
               String(step.sop_related ?? ""),
               String(step.status ?? "DRAFT"),
               String(step.comment ?? ""),
+              String(step.reviewer_feedback ?? ""),
               String(step.reviewer ?? ""),
             ]);
             stepCount++;
@@ -436,13 +439,14 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
       const maxY = pageH - margin;
 
       // Kolom total = 190mm supaya pas dengan margin 10mm kiri-kanan
-      const colW = [12, 55, 22, 61, 40];
+      const colW = [10, 45, 20, 45, 40, 30];
       const colX = [
         margin,
         margin + colW[0],
         margin + colW[0] + colW[1],
         margin + colW[0] + colW[1] + colW[2],
         margin + colW[0] + colW[1] + colW[2] + colW[3],
+        margin + colW[0] + colW[1] + colW[2] + colW[3] + colW[4],
       ];
       const tableW = colW.reduce((a, b) => a + b, 0);
       const padX = 1.2;
@@ -496,7 +500,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
         doc.setTextColor(0, 0, 0);
-        const labels = ["No", "SOP Related", "Status", "Comment", "Reviewer"];
+        const labels = ["No", "SOP Related", "Status", "Comment", "Reviewer Feedback", "Reviewer"];
         labels.forEach((label, idx) => {
           doc.text(label, colX[idx] + padX, y + 5.5);
         });
@@ -565,6 +569,26 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
   return (
     <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-slate-50">
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              if (window.history.length > 1) {
+                window.history.back();
+                return;
+              }
+              window.location.href = "/Page/sop-review";
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </button>
+        </div>
+
         <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
@@ -967,7 +991,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
                             SOP Steps ({item._detail.steps.length} items)
                           </h4>
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                            <table className="min-w-[640px] w-full text-xs border-collapse">
+                            <table className="min-w-[840px] w-full text-xs border-collapse">
                               <thead>
                                 <tr className="bg-slate-50 text-slate-700">
                                   <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
@@ -984,6 +1008,9 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
                                   </th>
                                   <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
                                     Comment
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                    Reviewer Feedback
                                   </th>
                                 </tr>
                               </thead>
@@ -1013,6 +1040,9 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:c
                                     </td>
                                     <td className="px-2.5 py-2 border border-slate-200 whitespace-pre-wrap break-words">
                                       {step.comment || "-"}
+                                    </td>
+                                    <td className="px-2.5 py-2 border border-slate-200 whitespace-pre-wrap break-words">
+                                      {step.reviewer_feedback || "-"}
                                     </td>
                                   </tr>
                                 ))}

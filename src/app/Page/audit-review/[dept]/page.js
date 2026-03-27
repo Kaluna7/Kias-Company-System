@@ -139,7 +139,14 @@ async function loadAuditReviewData(dept) {
 
 export default async function AuditReviewDeptPage({ params }) {
   const p = await Promise.resolve(params);
-  const dept = p?.dept;
+  const rawDept = String(p?.dept || "");
+  let dept = rawDept;
+  try {
+    dept = decodeURIComponent(rawDept);
+  } catch {
+    dept = rawDept;
+  }
+  dept = dept.toLowerCase();
   const deptInfo = deptMap[dept];
 
   if (!deptInfo) {
@@ -148,7 +155,7 @@ export default async function AuditReviewDeptPage({ params }) {
         <div className="max-w-4xl mx-auto">
           <div className="bg-white rounded-lg shadow p-6">
             <h1 className="text-2xl font-bold text-red-600">Department Not Found</h1>
-            <p className="mt-2 text-gray-600">The department &quot;{dept}&quot; is not recognized.</p>
+            <p className="mt-2 text-gray-600">The department &quot;{rawDept}&quot; is not recognized.</p>
           </div>
         </div>
       </div>
