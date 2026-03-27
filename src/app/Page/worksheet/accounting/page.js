@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 const API = "/api/worksheet/accounting";
 
-export default function AccountingWorksheet() {
+function AccountingWorksheetPageContent() {
   const [preparer, setPreparer] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [date1, setDate1] = useState("");
@@ -432,6 +434,14 @@ export default function AccountingWorksheet() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function AccountingWorksheet() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <AccountingWorksheetPageContent />
+    </Suspense>
   );
 }
 

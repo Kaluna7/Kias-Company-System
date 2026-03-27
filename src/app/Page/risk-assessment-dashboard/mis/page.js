@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import MisClient from "./MisClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function MisPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

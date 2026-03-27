@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import WhsClient from "./WhsClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function WhsPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import AccountingClient from "./AccountingClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadAccountingData(status = "published", year) {
   try {
     const headersList = await headers();

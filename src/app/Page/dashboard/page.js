@@ -2,7 +2,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import nextDynamic from "next/dynamic";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -34,7 +34,7 @@ function getCategoryColor(category) {
  * Stable Dashboard: all hooks declared unconditionally.
  * Optimized for mobile: lazy ChatSidebar, memoized data, reduced heavy CSS.
  */
-export default function DashboardPage() {
+function DashboardPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -701,5 +701,13 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <DashboardPageContent />
+    </Suspense>
   );
 }

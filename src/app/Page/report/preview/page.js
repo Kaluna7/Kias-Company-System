@@ -1,7 +1,9 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useSearchParams } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 
 const REPORT_DEPARTMENTS = [
   { key: "finance", label: "FINANCE", apiPath: "finance" },
@@ -63,7 +65,7 @@ const DEFAULT_APPENDICES = [
   },
 ];
 
-export default function ReportPreviewPage() {
+function ReportPreviewPageContent() {
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
@@ -3037,6 +3039,14 @@ export default function ReportPreviewPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function ReportPreviewPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <ReportPreviewPageContent />
+    </Suspense>
   );
 }
 

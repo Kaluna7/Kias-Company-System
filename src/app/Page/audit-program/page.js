@@ -2,6 +2,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { buttonAuditProgram } from "@/app/data/auditProgramConfig";
 
+export const dynamic = "force-dynamic";
+
 export default async function AuditProgram({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import OpsClient from "./OpsClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function OpsPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

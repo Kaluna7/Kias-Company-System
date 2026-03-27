@@ -1,8 +1,11 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+export const dynamic = "force-dynamic";
 
-export default function RiskAssessmentReportPage() {
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+function RiskAssessmentReportPageContent() {
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
@@ -68,6 +71,14 @@ export default function RiskAssessmentReportPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function RiskAssessmentReportPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <RiskAssessmentReportPageContent />
+    </Suspense>
   );
 }
 

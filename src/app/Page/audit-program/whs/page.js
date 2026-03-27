@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import WhsClient from "./WhsClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadWhsData(status = "published", year) {
   try {
     const headersList = await headers();

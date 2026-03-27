@@ -1,6 +1,8 @@
 import { loadRiskData } from "../loadRiskData";
 import LpClient from "./LpClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function LpPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;

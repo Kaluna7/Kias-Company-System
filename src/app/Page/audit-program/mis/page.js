@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import MisClient from "./MisClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadMisData(status = "published", year) {
   try {
     const headersList = await headers();

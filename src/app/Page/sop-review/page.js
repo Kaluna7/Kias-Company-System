@@ -6,6 +6,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
 
+export const dynamic = "force-dynamic";
+
 // Map department name to API endpoint
 function getDepartmentApiPath(name) {
   const deptMap = {

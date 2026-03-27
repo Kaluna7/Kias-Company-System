@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import LpClient from "./LpClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadLpData(status = "published", year) {
   try {
     const headersList = await headers();

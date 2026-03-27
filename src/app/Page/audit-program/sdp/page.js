@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import SdpClient from "./SdpClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadSdpData(status = "published", year) {
   try {
     const headersList = await headers();

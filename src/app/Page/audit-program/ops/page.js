@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import OpsClient from "./OpsClient";
 
+export const dynamic = "force-dynamic";
+
 async function loadOpsData(status = "published", year) {
   try {
     const headersList = await headers();

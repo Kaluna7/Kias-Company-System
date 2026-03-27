@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import FinanceClient from "./FinanceClient";
 
+export const dynamic = "force-dynamic";
+
 // Server-side function to load finance data
 async function loadFinanceData(status = "published", year) {
   try {
