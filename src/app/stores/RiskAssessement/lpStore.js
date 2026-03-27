@@ -10,9 +10,12 @@ export const useLossPreventionStore = create((set, get) => ({
 
   setLpAndMeta: (data, meta) => set({ lp: data, meta: meta ?? null }),
 
-  loadLossPrevention: async (status = "published", page = 1, pageSize = 50) => {
+  loadLossPrevention: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/l&p?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch loss prevention");
       const json = await res.json();

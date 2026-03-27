@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
 import { NewFinanceInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
@@ -16,6 +17,9 @@ export default function FinanceClient({ initialData = [], initialMeta = null }) 
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin";
+
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
 
   const [convertMode, setConvertMode] = useState(false);
   const [viewDraft, setViewDraft] = useState(false);
@@ -107,7 +111,7 @@ export default function FinanceClient({ initialData = [], initialMeta = null }) 
             setViewDraft(true);
             setConvertMode(false);
             setEditMode(false);
-            await loadFinance("draft");
+            await loadFinance("draft", 1, 50, yearParam || undefined);
           } finally {
             isLoadingRef.current = false;
           }
@@ -122,7 +126,7 @@ export default function FinanceClient({ initialData = [], initialMeta = null }) 
             setViewDraft(false);
             setConvertMode(false);
             setEditMode(false);
-            await loadFinance("published");
+            await loadFinance("published", 1, 50, yearParam || undefined);
           } finally {
             isLoadingRef.current = false;
           }
@@ -180,7 +184,12 @@ export default function FinanceClient({ initialData = [], initialMeta = null }) 
         isLoadingRef.current = true;
         setPaginationLoading(true);
         try {
-          await loadFinance(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+          await loadFinance(
+            viewDraft ? "draft" : "published",
+            page ?? meta?.page ?? 1,
+            meta?.pageSize ?? 50,
+            yearParam || undefined
+          );
         } finally {
           isLoadingRef.current = false;
           setPaginationLoading(false);
@@ -264,7 +273,7 @@ export default function FinanceClient({ initialData = [], initialMeta = null }) 
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadFinance(viewDraft ? "draft" : "published");
+                loadFinance(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />

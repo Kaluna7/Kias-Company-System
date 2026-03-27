@@ -2,10 +2,21 @@ import { PrismaClient } from "@/generated/prisma";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(req) {
   try {
+    const url = new URL(req?.url || "", "http://localhost");
+    const yearParam = url.searchParams.get("year");
+    const year = yearParam ? parseInt(yearParam, 10) : null;
+
+    const where = { department: "FINANCE" };
+    if (!Number.isNaN(year) && year) {
+      const from = new Date(year, 0, 1);
+      const to = new Date(year + 1, 0, 1);
+      where.created_at = { gte: from, lt: to };
+    }
+
     const rows = await prisma.worksheet_finance.findMany({
-      where: { department: "FINANCE" },
+      where,
       orderBy: { created_at: "desc" },
     });
     return new Response(JSON.stringify({ success: true, rows }), {

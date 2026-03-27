@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 const API = "/api/worksheet/accounting";
@@ -15,11 +16,18 @@ export default function AccountingWorksheet() {
   const [filePath, setFilePath] = useState("");
   const [auditArea, setAuditArea] = useState("");
 
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(API);
+        const url = new URL(API, window.location.origin);
+        if (yearParam) {
+          url.searchParams.set("year", yearParam);
+        }
+        const res = await fetch(url.toString());
         if (!res.ok || cancelled) return;
         const data = await res.json();
         const latest = data?.rows?.[0];
@@ -28,7 +36,7 @@ export default function AccountingWorksheet() {
       } catch (_) {}
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [yearParam]);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];

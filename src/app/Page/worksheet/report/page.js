@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import ReportClient from "./ReportClient";
 
-async function loadWorksheetReportData() {
+async function loadWorksheetReportData(year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -30,7 +30,12 @@ async function loadWorksheetReportData() {
     const fetchPromises = departments.map(async (dept) => {
       try {
         const endpoint = departmentMap[dept];
-        const res = await fetch(`${baseUrl}${endpoint}`, {
+        const url = new URL(`${baseUrl}${endpoint}`);
+        if (!Number.isNaN(year) && year) {
+          url.searchParams.set("year", String(year));
+        }
+
+        const res = await fetch(url.toString(), {
           next: { revalidate: 0 },
         });
         
@@ -80,8 +85,12 @@ async function loadWorksheetReportData() {
   }
 }
 
-export default async function WorksheetReportPage() {
-  const initialData = await loadWorksheetReportData();
+export default async function WorksheetReportPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+
+  const initialData = await loadWorksheetReportData(year);
   
   return <ReportClient initialData={initialData} />;
 }

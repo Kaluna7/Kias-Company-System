@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pool } from "./pool";
+import { requireReviewer } from "./auth";
 
 const API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyByg_otFYurK-Aw0KLtoknlw4x5usJDW10";
 const MODEL = process.env.GOOGLE_AI_MODEL || "gemini-2.5-flash";
@@ -72,6 +73,10 @@ function buildSinglePrompt(item) {
 export function makeGenerateCommentsHandler({ stepsTable }) {
   return async function POST(req) {
     try {
+      // Hanya reviewer yang boleh generate & menyimpan komentar ke DB
+      const authError = await requireReviewer();
+      if (authError) return authError;
+
       if (!API_KEY) return NextResponse.json({ success: false, error: "Server missing GOOGLE_API_KEY" }, { status: 500 });
 
       const body = await req.json().catch(() => ({}));

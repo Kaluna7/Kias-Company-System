@@ -127,8 +127,27 @@ function getApRiskIdField(dept) {
   return mapping[dept] || null;
 }
 
-// Publish only findings with completion_status = "COMPLETED" for a department
-// After publishing, delete related data from audit-program
+// Map audit-finding dept slug to Evidence department name (uppercase)
+const deptToEvidenceDept = {
+  accounting: "ACCOUNTING",
+  finance: "FINANCE",
+  hrd: "HRD",
+  "g&a": "G&A",
+  ga: "G&A",
+  sdp: "DESIGN STORE PLANNER",
+  tax: "TAX",
+  "l&p": "SECURITY L&P",
+  lp: "SECURITY L&P",
+  mis: "MIS",
+  merch: "MERCHANDISE",
+  ops: "OPERATIONAL",
+  whs: "WAREHOUSE",
+};
+
+// Publish findings for a department:
+// - "Ready" ditentukan dari Evidence: ada file + overall_status = COMPLETE untuk AP-code tsb.
+// - Semua finding dengan ap_code di set tersebut dan belum COMPLETED akan di-set ke COMPLETED.
+// - Setelah itu Audit Program terkait dihapus seperti sebelumnya.
 export async function PUT(req, { params }) {
   try {
     const p = await Promise.resolve(params);
@@ -139,48 +158,141 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: "Invalid department" }, { status: 400 });
     }
 
-    // Get all findings with completion_status = "COMPLETED" (case-insensitive)
-    const completedFindings = await delegate.findMany({
+    // Cari AP code yang sudah publish di Evidence (overall_status = COMPLETE + ada file)
+    const evidenceDept = deptToEvidenceDept[dept];
+    const readyApCodes = new Set();
+    if (evidenceDept) {
+      const evidenceRows = await prisma.evidence.findMany({
+        where: {
+          department: evidenceDept,
+          file_url: { not: null },
+          overall_status: {
+            equals: "COMPLETE",
+            mode: "insensitive",
+          },
+        },
+        select: { ap_code: true },
+      });
+      for (const ev of evidenceRows || []) {
+        if (!ev.ap_code) continue;
+        const code = String(ev.ap_code).trim();
+        if (code) readyApCodes.add(code);
+      }
+    }
+
+    if (readyApCodes.size === 0) {
+      return NextResponse.json(
+        {
+          success: true,
+          message: `No AP codes with published Evidence to publish for ${dept}`,
+          count: 0,
+        },
+        { status: 200 },
+      );
+    }
+
+    // Ambil semua finding yang punya ap_code di dalam set readyApCodes dan belum COMPLETED
+    const readyFindings = await delegate.findMany({
       where: {
-        completion_status: {
-          equals: "COMPLETED",
-          mode: "insensitive",
+        ap_code: {
+          in: Array.from(readyApCodes),
+        },
+        NOT: {
+          completion_status: {
+            equals: "COMPLETED",
+            mode: "insensitive",
+          },
         },
       },
     });
 
-    if (completedFindings.length === 0) {
+    if (readyFindings.length === 0) {
       return NextResponse.json({ 
         success: true, 
-        message: `No completed findings to publish for ${dept}`,
+        message: `No findings with published Evidence to publish for ${dept}`,
         count: 0 
       }, { status: 200 });
     }
 
-    // Update completed findings to mark them as published (update updated_at)
-    // Don't delete them - they need to remain in the table for the report page
+    // Update findings: set completion_status to COMPLETED dan updated_at supaya muncul di report
     const updated = await delegate.updateMany({
       where: {
-        completion_status: {
-          equals: "COMPLETED",
-          mode: "insensitive",
+        id: {
+          in: readyFindings.map((f) => f.id),
         },
       },
       data: {
+        completion_status: "COMPLETED",
         updated_at: new Date(),
       },
     });
 
-    // Get audit-program mapping for this department
+    // Tambahkan baris COMPLETED baru untuk AP code yang punya Evidence publish,
+    // tetapi belum pernah disimpan sebagai finding (tidak ada di readyFindings).
+    const existingApCodes = new Set(
+      readyFindings
+        .map((f) => (f.ap_code != null ? String(f.ap_code).trim() : ""))
+        .filter(Boolean),
+    );
+    const missingApCodes = Array.from(readyApCodes).filter((code) => !existingApCodes.has(code));
+
     const apMapping = deptToAuditProgram[dept];
-    if (apMapping) {
+    const apModel = apMapping ? getAuditProgramAp(dept) : null;
+    const parentModel = apMapping ? getAuditProgramParent(dept) : null;
+    const riskIdField = apMapping ? getApRiskIdField(dept) : null;
+
+    if (missingApCodes.length > 0 && apModel && parentModel && riskIdField) {
+      for (const apCode of missingApCodes) {
+        try {
+          const ap = await apModel.findFirst({
+            where: { ap_code: apCode },
+            include: {
+              [apMapping.relation]: true,
+            },
+          });
+
+          const parent = ap ? ap[apMapping.relation] : null;
+
+          await delegate.create({
+            data: {
+              risk_id:
+                (parent?.risk_id_no != null && String(parent.risk_id_no).trim() !== "")
+                  ? String(parent.risk_id_no).trim()
+                  : parent?.risk_id != null
+                    ? String(parent.risk_id)
+                    : null,
+              risk_description: parent?.risk_description ?? null,
+              risk_details: parent?.risk_details ?? null,
+              ap_code: apCode,
+              substantive_test: ap?.substantive_test ?? null,
+              risk: null,
+              check_yn: null,
+              method: ap?.method ?? null,
+              preparer: null,
+              finding_result: null,
+              finding_description: null,
+              recommendation: null,
+              auditee: null,
+              completion_status: "COMPLETED",
+              completion_date: new Date(),
+            },
+          });
+        } catch (createErr) {
+          console.error(`Failed to create COMPLETED finding for ${dept} ap_code=${apCode}:`, createErr);
+        }
+      }
+    }
+
+    // Get audit-program mapping for this department
+    const apMappingForCleanup = deptToAuditProgram[dept];
+    if (apMappingForCleanup) {
       const apModel = getAuditProgramAp(dept);
       const parentModel = getAuditProgramParent(dept);
       const riskIdField = getApRiskIdField(dept);
 
       if (apModel && parentModel && riskIdField) {
         // Delete related audit-program data for each published finding
-        for (const finding of completedFindings) {
+        for (const finding of readyFindings) {
           try {
             let deletedAp = false;
             let parentRiskId = null;
@@ -195,7 +307,7 @@ export async function PUT(req, { params }) {
                   ap_code: apCodeTrimmed,
                 },
                 include: {
-                  [apMapping.relation]: {
+                  [apMappingForCleanup.relation]: {
                     select: {
                       risk_id: true,
                     },
@@ -204,7 +316,7 @@ export async function PUT(req, { params }) {
               });
 
               if (ap) {
-                parentRiskId = ap[apMapping.relation]?.risk_id;
+                parentRiskId = ap[apMappingForCleanup.relation]?.risk_id;
                 
                 // Delete the AP
                 await apModel.delete({
@@ -315,11 +427,14 @@ export async function PUT(req, { params }) {
       }
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: `Published ${updated.count} completed findings for ${dept}`,
-      count: updated.count 
-    }, { status: 200 });
+    return NextResponse.json(
+      {
+        success: true,
+        message: `Published ${updated.count} finding(s) for ${dept} based on Evidence.`,
+        count: updated.count,
+      },
+      { status: 200 },
+    );
   } catch (err) {
     console.error(`PUT /api/audit-finding/[dept]/publish error:`, err);
     return NextResponse.json(

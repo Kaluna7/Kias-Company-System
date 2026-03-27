@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import ReportClient from "./ReportClient";
 
-async function loadAuditFindingReportData() {
+async function loadAuditFindingReportData(year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -62,8 +62,11 @@ async function loadAuditFindingReportData() {
     const fetchPromises = departments.map(async (dept) => {
       const deptInfo = departmentMap[dept];
       try {
-        const endpoint = `${baseUrl}/api/audit-finding/${deptInfo.apiPath}`;
-        const res = await fetch(endpoint, {
+        const url = new URL(`${baseUrl}/api/audit-finding/${deptInfo.apiPath}`);
+        // Report membutuhkan data COMPLETED dari semua tahun; filter tahun dilakukan di layer report,
+        // berbasis tanggal publish (updated_at) atau completion_date.
+        url.searchParams.set("include_completed", "1");
+        const res = await fetch(url.toString(), {
           cache: "no-store",
         });
         
@@ -77,20 +80,12 @@ async function loadAuditFindingReportData() {
         // Handle both formats: { success: true, data: [...] } and { data: [...] }
         const dataArray = json.success && Array.isArray(json.data) ? json.data : (Array.isArray(json.data) ? json.data : []);
         
-        console.log(`[Report] ${dept}: Fetched ${dataArray.length} findings from API`);
-        
         if (dataArray.length > 0) {
           // Filter hanya data dengan completion_status = "COMPLETED" (case-insensitive)
           const completedData = dataArray.filter(row => {
             const status = row.completion_status?.toUpperCase();
-            const isCompleted = status === "COMPLETED";
-            if (!isCompleted) {
-              console.log(`[Report] ${dept}: Filtered out finding with status: ${row.completion_status}`);
-            }
-            return isCompleted;
+            return status === "COMPLETED";
           });
-          
-          console.log(`[Report] ${dept}: ${completedData.length} findings with COMPLETED status`);
           
           // Tambahkan department name, schedule, dan audit period ke setiap row
           // Audit Fieldwork Start: dari start_date schedule module (audit period start)
@@ -135,23 +130,48 @@ async function loadAuditFindingReportData() {
       }
     });
 
-    // Sort by department and created_at
-    allData.sort((a, b) => {
+    // Jika ada filter tahun dari dashboard, terapkan di sini berbasis tanggal publish/completion
+    let filtered = allData;
+    if (!Number.isNaN(year) && year) {
+      filtered = allData.filter((row) => {
+        const baseDate =
+          (row.completion_date ? new Date(row.completion_date) : null) ||
+          (row.updated_at ? new Date(row.updated_at) : null);
+        if (!baseDate || Number.isNaN(baseDate.getTime())) return false;
+        return baseDate.getFullYear() === year;
+      });
+    }
+
+    // Sort by department and publish date (fallback created_at)
+    filtered.sort((a, b) => {
       if (a.department !== b.department) {
         return a.department.localeCompare(b.department);
       }
-      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      const da =
+        (a.updated_at ? new Date(a.updated_at) : null) ||
+        (a.completion_date ? new Date(a.completion_date) : null) ||
+        (a.created_at ? new Date(a.created_at) : null) ||
+        new Date(0);
+      const db =
+        (b.updated_at ? new Date(b.updated_at) : null) ||
+        (b.completion_date ? new Date(b.completion_date) : null) ||
+        (b.created_at ? new Date(b.created_at) : null) ||
+        new Date(0);
+      return db - da;
     });
 
-    return allData;
+    return filtered;
   } catch (err) {
     console.error("Error loading audit finding report data:", err);
     return [];
   }
 }
 
-export default async function AuditFindingReportPage() {
-  const initialData = await loadAuditFindingReportData();
+export default async function AuditFindingReportPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  const initialData = await loadAuditFindingReportData(year);
   return <ReportClient initialData={initialData} />;
 }
 

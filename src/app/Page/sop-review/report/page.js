@@ -75,7 +75,7 @@ async function loadScheduleModuleData() {
   }
 }
 
-async function loadReportData() {
+async function loadReportData(year) {
   const headersList = await headers();
   const host = headersList.get("host") || "localhost:3000";
   const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
@@ -88,9 +88,22 @@ async function loadReportData() {
       if (!map) return null;
       const apiPath = map.api;
       try {
-        const publishedRes = await fetch(`${baseUrl}/api/SopReview/${apiPath}/published?all=1`, { cache: "no-store" });
+        // Ambil SEMUA data publish dari SOP Review Report,
+        // filtering tahun akan dilakukan di layer aplikasi di bawah (berdasarkan audit_period_start/published_at)
+        const params = new URLSearchParams({ all: "1" });
+        const publishedRes = await fetch(
+          `${baseUrl}/api/SopReview/${apiPath}/published?${params.toString()}`,
+          { cache: "no-store" },
+        );
         const publishedJson = await publishedRes.json().catch(() => ({}));
         const publishes = publishedRes.ok && Array.isArray(publishedJson.publishes) ? publishedJson.publishes : [];
+        console.log("[SOP-REPORT] raw publishes", {
+          dept: map.dept,
+          apiPath,
+          publishesCount: publishes.length,
+          yearFilter: year,
+          sampleMeta: publishes[0]?.meta || null,
+        });
         const scheduleDeptId = DEPT_TO_SCHEDULE_ID[map.dept];
         const scheduleData = scheduleDeptId ? scheduleMap[scheduleDeptId] : null;
         let audit_period_start = "#####";
@@ -137,10 +150,37 @@ async function loadReportData() {
       }
     })
   );
-  return results
+  const allRows = results
     .filter((r) => r.status === "fulfilled")
     .flatMap((r) => (Array.isArray(r.value) ? r.value : r.value ? [r.value] : []))
+    // Hanya baris yang benar‑benar sudah dipublish (punya published_at di meta/row)
     .filter((row) => (row.meta?.published_at || row.published_at) != null);
+
+  console.log("[SOP-REPORT] allRows after publish filter", {
+    total: allRows.length,
+    yearFilter: year,
+    departments: Array.from(new Set(allRows.map((r) => r.department))),
+  });
+
+  if (!year || Number.isNaN(year)) {
+    return allRows;
+  }
+
+  // Filter tahun dengan logika yang toleran:
+  // 1) Jika audit_period_start valid date → pakai tahunnya
+  // 2) Jika audit_period_start kosong / placeholder ("#####"/"no-period") → pakai tahun published_at
+  return allRows.filter((row) => {
+    const aps = row.audit_period_start;
+    const pub = row.meta?.published_at || row.published_at || null;
+    if (aps && aps !== "#####" && aps !== "no-period") {
+      const d = new Date(aps);
+      if (!Number.isNaN(d.getTime()) && d.getFullYear() === year) return true;
+      // Jika tanggal period ada tapi tidak valid / beda tahun, jangan langsung buang;
+      // jatuhkan ke published_at sebagai fallback.
+    }
+    const d = pub ? new Date(pub) : new Date("invalid");
+    return !Number.isNaN(d.getTime()) && d.getFullYear() === year;
+  });
 }
 
 async function loadScheduleData() {
@@ -159,7 +199,10 @@ async function loadScheduleData() {
   }
 }
 
-export default async function ReportSOP() {
-  const [rows, scheduleData] = await Promise.all([loadReportData(), loadScheduleData()]);
-  return <ReportClient initialRows={rows} initialScheduleData={scheduleData} />;
+export default async function ReportSOP({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  const [rows, scheduleData] = await Promise.all([loadReportData(year), loadScheduleData()]);
+  return <ReportClient initialRows={rows} initialScheduleData={scheduleData} selectedYear={year || null} />;
 }

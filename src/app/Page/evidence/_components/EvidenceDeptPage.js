@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 
@@ -23,6 +24,9 @@ export default function EvidenceDeptPage({
   const [successMessage, setSuccessMessage] = useState("");
   const [evidenceMeta, setEvidenceMeta] = useState(null);
   const hasFetchedRef = useRef(false);
+  const searchParams = useSearchParams();
+  const yearParam = searchParams?.get("year");
+  const yearFilter = yearParam ? parseInt(yearParam, 10) : null;
 
   // Map department label to schedule department_id
   const getScheduleDeptId = (deptLabel) => {
@@ -91,6 +95,12 @@ export default function EvidenceDeptPage({
         page: String(page),
         pageSize: String(pageSize),
       });
+      if (yearFilter) {
+        params.set("year", String(yearFilter));
+      }
+      // Sembunyikan data yang sudah dipublish (COMPLETE + ada file) dari halaman departemen;
+      // data tersebut akan tampil di halaman Report.
+      params.set("exclude_published", "1");
       const res = await fetch(`/api/evidence/${evidenceApiSlug}?${params.toString()}`);
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result?.error || `API Error: ${res.status} ${res.statusText}`);
@@ -139,7 +149,7 @@ export default function EvidenceDeptPage({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPreparerFromSchedule stable, pageSize from meta
-  }, [departmentLabel, evidenceApiSlug, evidenceMeta?.pageSize]);
+  }, [departmentLabel, evidenceApiSlug, evidenceMeta?.pageSize, yearFilter]);
 
   useEffect(() => {
     if (hasFetchedRef.current) return;
@@ -289,9 +299,12 @@ export default function EvidenceDeptPage({
         throw new Error(data.error || "Failed to save");
       }
 
-      // Success
-      setSuccessMessage("Evidence data published successfully!");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      setSuccessMessage("Evidence data published successfully! Data is now available in Report.");
+      setTimeout(() => setSuccessMessage(""), 4000);
+      setOverallStatus("DRAFT");
+      hasFetchedRef.current = false;
+      await fetchApData(1);
+      hasFetchedRef.current = true;
     } catch (error) {
       console.error("Error saving data:", error);
       setError(error.message || "Failed to save evidence data");
@@ -302,7 +315,7 @@ export default function EvidenceDeptPage({
 
   return (
     <main className="min-h-screen w-full bg-[#E6F0FA]">
-      <div className="px-3 sm:px-4 pt-6 pb-4 flex flex-col h-full">
+      <div className="px-3 sm:px-4 pt-4 sm:pt-6 pb-4 flex flex-col h-full">
         <div className="mb-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
             <div className="text-xs font-semibold text-slate-500 tracking-wide">B3.1 EVIDENCE</div>
@@ -312,10 +325,10 @@ export default function EvidenceDeptPage({
         </div>
 
         {/* Top controls */}
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-sm">
-            <span className="font-semibold text-slate-700 min-w-[80px]">Preparer:</span>
-            <div className="relative flex-1 max-w-xs">
+        <div className="mb-3 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+          <div className="w-full lg:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm">
+            <span className="font-semibold text-slate-700 sm:min-w-[80px]">Preparer:</span>
+            <div className="relative flex-1 sm:max-w-xs">
               {preparer ? (
                 <input
                   type="text"
@@ -337,57 +350,57 @@ export default function EvidenceDeptPage({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="w-full lg:w-auto flex flex-col sm:flex-row sm:items-center gap-2">
             <select
               value={overallStatus}
               onChange={(e) => setOverallStatus(e.target.value)}
-              disabled={isReviewer}
-              className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              disabled={!isAdmin && !isReviewer}
+              className="w-full sm:w-auto bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
               <option value="DRAFT">DRAFT</option>
               <option value="INCOMPLETE">INCOMPLETE</option>
-              <option value="COMPLETE">COMPLETE</option>
+              {(isAdmin || isReviewer) && <option value="COMPLETE">COMPLETE</option>}
             </select>
             <button
               onClick={handleSave}
-              disabled={saving || loading || overallStatus !== "COMPLETE" || isReviewer}
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={saving || loading || overallStatus !== "COMPLETE"}
+              className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? "Publishing..." : "Publish"}
             </button>
-            {overallStatus !== "COMPLETE" && (
-              <span className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200 font-medium">
-                Status must be COMPLETE to publish
-              </span>
-            )}
           </div>
         </div>
+        {overallStatus !== "COMPLETE" && (
+          <div className="mb-3 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
+            {isReviewer ? "Status must be COMPLETE to publish" : "Hanya role Reviewer yang dapat mengubah status ke COMPLETE"}
+          </div>
+        )}
 
         {error && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
         {successMessage && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">{successMessage}</div>}
 
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 mb-4">
-          <div className="overflow-x-auto -mx-2 sm:mx-0">
-              <table className="w-full min-w-[560px] border-collapse text-sm">
+          <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">AP Code</th>
-                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">Substantive Test</th>
-                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">Attachment</th>
-                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">File Name</th>
-                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-sm">Action</th>
+                    <th className="border border-gray-200 px-2 sm:px-4 py-3 text-left font-semibold text-xs sm:text-sm">AP Code</th>
+                    <th className="border border-gray-200 px-2 sm:px-4 py-3 text-left font-semibold text-xs sm:text-sm">Substantive Test</th>
+                    <th className="border border-gray-200 px-2 sm:px-4 py-3 text-left font-semibold text-xs sm:text-sm">Attachment</th>
+                    <th className="border border-gray-200 px-2 sm:px-4 py-3 text-left font-semibold text-xs sm:text-sm">File Name</th>
+                    <th className="border border-gray-200 px-2 sm:px-4 py-3 text-left font-semibold text-xs sm:text-sm">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="5" className="border border-gray-200 px-4 py-8 text-center text-gray-500">
+                      <td colSpan="5" className="border border-gray-200 px-2 sm:px-4 py-8 text-center text-gray-500">
                         Loading...
                       </td>
                     </tr>
                   ) : apData.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="border border-gray-200 px-4 py-8 text-center text-gray-500">
+                      <td colSpan="5" className="border border-gray-200 px-2 sm:px-4 py-8 text-center text-gray-500">
                         <div className="space-y-3">
                           <p className="font-semibold text-lg">No Audit Program data found</p>
                           <p className="text-sm">
@@ -399,9 +412,9 @@ export default function EvidenceDeptPage({
                   ) : (
                     apData.map((row, index) => (
                       <tr key={`${row.ap_id}-${index}`} className={index % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-                        <td className="border border-gray-200 px-4 py-3 text-gray-800 font-medium">{row.ap_code || "-"}</td>
-                        <td className="border border-gray-200 px-4 py-3 text-gray-800">{row.substantive_test || "-"}</td>
-                        <td className="border border-gray-200 px-4 py-3 text-gray-800 text-sm">
+                        <td className="border border-gray-200 px-2 sm:px-4 py-3 text-gray-800 font-medium">{row.ap_code || "-"}</td>
+                        <td className="border border-gray-200 px-2 sm:px-4 py-3 text-gray-800">{row.substantive_test || "-"}</td>
+                        <td className="border border-gray-200 px-2 sm:px-4 py-3 text-gray-800 text-sm">
                           {row.attachments && row.attachments.length > 0 ? (
                             <div className="space-y-1">
                               {row.attachments.map((file, fileIdx) => (
@@ -413,7 +426,7 @@ export default function EvidenceDeptPage({
                                     href={file.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs truncate max-w-[180px]"
+                                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs truncate max-w-[150px] sm:max-w-[220px]"
                                     title={file.name}
                                   >
                                     {file.name || `Document ${fileIdx + 1}`}
@@ -434,12 +447,12 @@ export default function EvidenceDeptPage({
                             <span className="text-gray-400 text-xs">No document</span>
                           )}
                         </td>
-                        <td className="border border-gray-200 px-4 py-3 text-gray-800 text-sm">
+                        <td className="border border-gray-200 px-2 sm:px-4 py-3 text-gray-800 text-sm">
                           {row.file_name || "-"}
                         </td>
-                        <td className="border border-gray-200 px-4 py-3">
+                        <td className="border border-gray-200 px-2 sm:px-4 py-3">
                           <label
-                            className={`flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 shadow-md hover:shadow-lg ${
+                            className={`flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 shadow-md hover:shadow-lg whitespace-nowrap ${
                               isReviewer || (row.attachments && row.attachments.length >= 5)
                                 ? "opacity-50 cursor-not-allowed"
                                 : "cursor-pointer"

@@ -99,7 +99,7 @@ function SopReviewGridSkeleton() {
   );
 }
 
-async function SopReviewGrid() {
+async function SopReviewGrid({ yearParam }) {
   const sopStatuses = await loadSopStatuses();
   
   // Get user session and assignments
@@ -209,6 +209,8 @@ async function SopReviewGrid() {
     return enabled;
   };
 
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+
   return (
     <div className="mb-8">
       <h2 className="text-xl font-bold text-gray-800 mb-4">SOP Review by Department</h2>
@@ -264,7 +266,7 @@ async function SopReviewGrid() {
           ) : (
           <Link
             key={index}
-            href={item.href}
+            href={`${item.href}${yearQuery}`}
             className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-slate-200 hover:border-blue-400 hover:translate-y-[-4px] group"
           >
             <div className="flex justify-between items-start mb-3">
@@ -313,7 +315,9 @@ async function SopReviewGrid() {
   );
 }
 
-export default function SopReview() {
+export default async function SopReview({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -344,7 +348,7 @@ export default function SopReview() {
 
         {/* SOP Review Grid (streamed) */}
         <Suspense fallback={<SopReviewGridSkeleton />}>
-          <SopReviewGrid />
+          <SopReviewGrid yearParam={yearParam} />
         </Suspense>
 
       </div>

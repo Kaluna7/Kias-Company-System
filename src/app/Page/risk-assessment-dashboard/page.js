@@ -2,7 +2,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { buttonRiskAssessment } from "@/app/data/riskAssessmentConfig";
 
-export default function RiskAssessmentDashboard() {
+export default async function RiskAssessmentDashboard({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -38,7 +42,7 @@ export default function RiskAssessmentDashboard() {
             {buttonRiskAssessment.map((item, index) => (
               <Link 
                 key={index}
-                href={item.href}
+                href={`${item.href}${yearQuery}`}
                 prefetch={true}
                 className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-slate-200 hover:border-blue-400 hover:translate-y-[-4px] group"
               >

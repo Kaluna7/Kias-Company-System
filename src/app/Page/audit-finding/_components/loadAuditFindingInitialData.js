@@ -1,15 +1,24 @@
 import { headers } from "next/headers";
 
-export async function loadAuditFindingInitialData(apiPath) {
+export async function loadAuditFindingInitialData(apiPath, year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
     const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
     const baseUrl = `${protocol}://${host}`;
 
-    const res = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(apiPath)}?page=1&pageSize=50`, {
-      next: { revalidate: 30 },
-      cache: "force-cache",
+    const url = new URL(`${baseUrl}/api/audit-finding/${encodeURIComponent(apiPath)}`);
+    url.searchParams.set("page", "1");
+    url.searchParams.set("pageSize", "50");
+    if (!Number.isNaN(year) && year) {
+      url.searchParams.set("year", String(year));
+    }
+
+    // Selalu ambil data terbaru (tanpa cache) supaya status setelah Publish
+    // langsung tercermin baik di server render maupun client.
+    const res = await fetch(url.toString(), {
+      cache: "no-store",
+      next: { revalidate: 0 },
     });
 
     if (!res.ok) {

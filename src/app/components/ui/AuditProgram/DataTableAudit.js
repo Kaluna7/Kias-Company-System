@@ -88,7 +88,7 @@ export default function DataTableAudit({
   }, [sortedData]);
 
   return (
-    <div className="w-full h-full flex flex-col p-4 relative">
+    <div className="w-full h-full flex flex-col p-2 sm:p-4 relative">
       {/* Close button di pojok kanan atas */}
       {(isPlanningMode || isMoveToDraftMode || isDeleteMode) && (
         <button
@@ -97,16 +97,21 @@ export default function DataTableAudit({
               new CustomEvent("close-planning-mode")
             );
           }}
-          className="absolute top-4 right-4 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 shadow-lg transition-colors duration-150"
+          className="absolute top-2 sm:top-4 right-2 sm:right-4 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 shadow-lg transition-colors duration-150"
           title="Close Mode"
           aria-label="Close Mode"
         >
           <X size={16} />
         </button>
       )}
+      <div className="md:hidden mb-2 px-1">
+        <div className="text-[11px] text-slate-500 bg-slate-100 border border-slate-200 rounded-md px-2 py-1">
+          Geser tabel ke samping untuk melihat semua kolom.
+        </div>
+      </div>
       <div className="flex-1 overflow-auto rounded-2xl shadow-sm border border-gray-200 bg-white">
         <div className="overflow-x-auto min-h-0">
-          <table className="min-w-[900px] w-full border-collapse text-sm text-gray-700" style={{ tableLayout: "auto" }}>
+          <table className="min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700" style={{ tableLayout: "auto" }}>
           <thead>
             <tr className="bg-gray-50 text-gray-700 font-semibold">
               <th

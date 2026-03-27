@@ -75,7 +75,7 @@ function getDeptKeyFromDepartmentName(deptName) {
   return deptMap[deptName] || null;
 }
 
-async function WorksheetContent() {
+async function WorksheetContent({ yearParam }) {
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
@@ -142,12 +142,21 @@ async function WorksheetContent() {
   };
 
   // Ambil data terakhir per department dari database (order by created_at desc, ambil baris pertama per department = terbaru)
+  const year = yearParam ? parseInt(yearParam, 10) : null;
   const departments = baseWorksheets.map((w) => w.department);
 
   let latestByDept = {};
   try {
+    const where = { department: { in: departments } };
+    if (!Number.isNaN(year) && year) {
+      const from = new Date(year, 0, 1);
+      const to = new Date(year + 1, 0, 1);
+      // Filter berdasarkan created_at dalam tahun tersebut
+      where.created_at = { gte: from, lt: to };
+    }
+
     const rows = await prisma.worksheet_finance.findMany({
-      where: { department: { in: departments } },
+      where,
       orderBy: { created_at: "desc" },
       select: {
         department: true,
@@ -178,6 +187,8 @@ async function WorksheetContent() {
       statusWP,
     };
   });
+
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
 
   return (
     <>
@@ -277,7 +288,7 @@ async function WorksheetContent() {
               ) : (
               <Link 
                 key={worksheet.id}
-                href={`/Page/worksheet/${deptPath}`}
+                href={`/Page/worksheet/${deptPath}${yearQuery}`}
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
               >
                 <div className="flex justify-between items-start mb-3">
@@ -306,7 +317,7 @@ async function WorksheetContent() {
             })}
             {/* Report Card */}
             <Link
-              href="/Page/worksheet/report"
+              href={`/Page/worksheet/report${yearQuery}`}
               className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
             >
               <div className="flex justify-between items-start mb-3">
@@ -339,7 +350,9 @@ async function WorksheetContent() {
   );
 }
 
-export default function Worksheet() {
+export default async function Worksheet({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -368,7 +381,7 @@ export default function Worksheet() {
         </header>
 
         <Suspense fallback={<WorksheetContentSkeleton />}>
-          <WorksheetContent />
+          <WorksheetContent yearParam={yearParam} />
         </Suspense>
       </div>
     </div>

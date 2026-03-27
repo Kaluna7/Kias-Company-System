@@ -49,11 +49,41 @@ const LIMITATIONS_RESOURCE_OPTIONS = [
   "Staffing Constraints",
 ];
 
+function normalizeKeyFindingRow(finding, idx) {
+  return {
+    no: finding?.no ?? idx + 1,
+    riskId: finding?.riskId || finding?.risk_id || "",
+    riskDetails: finding?.riskDetails || finding?.risk_details || "",
+    apNo: finding?.apNo || finding?.ap_code || finding?.apCode || "",
+    substantiveTest: finding?.substantiveTest || finding?.substantive_test || "",
+    checkYn: finding?.checkYn || finding?.check_yn || "",
+    method: finding?.method || "",
+    risk: finding?.risk || "",
+    riskLevel: finding?.riskLevel || finding?.risk || "",
+    preparer: finding?.preparer || "",
+    findingResult: finding?.findingResult || finding?.finding_result || "",
+    findingDescription: finding?.findingDescription || finding?.finding_description || "",
+    recommendation: finding?.recommendation || "",
+    status: finding?.status || "",
+    reviewNote: finding?.reviewNote || "",
+    reviewStatus: finding?.reviewStatus || "",
+    preparerRespo: finding?.preparerRespo || "",
+    referenceLink: finding?.referenceLink || "",
+    followUpDueDate:
+      finding?.followUpDueDate ||
+      (finding?.completion_date ? new Date(finding.completion_date).toISOString().split("T")[0] : ""),
+    timeline: finding?.timeline || "",
+    followUpStatus: finding?.followUpStatus || finding?.completion_status || "",
+    auditee: finding?.auditee || "",
+  };
+}
+
 export default function AuditReviewDeptClient({
   apiPath,
   deptName,
   titleCode,
   initialFindings = [],
+  initialReviewedFindings = [],
   initialExecutiveSummary = null,
   initialSchedule = null,
 }) {
@@ -78,6 +108,9 @@ export default function AuditReviewDeptClient({
 
   // Key Findings state
   const [keyFindings, setKeyFindings] = useState([]);
+  const [hasSavedReviewFindings, setHasSavedReviewFindings] = useState(
+    Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0,
+  );
 
   // Modal state for SELECT fields
   const [selectModal, setSelectModal] = useState({
@@ -121,35 +154,20 @@ export default function AuditReviewDeptClient({
     }
   }, [apiPath, initialExecutiveSummary]);
 
-  // Initialize findings from audit-finding report (only if no date range is selected)
+  // Initialize findings from saved audit-review data first, fallback to audit-finding report.
   useEffect(() => {
+    if (Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0) {
+      setKeyFindings(initialReviewedFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+      setHasSavedReviewFindings(true);
+      return;
+    }
+
     if (!auditPeriodStart || !auditPeriodEnd) {
       if (initialFindings && initialFindings.length > 0) {
-        const mappedFindings = initialFindings.map((finding, idx) => ({
-          no: idx + 1,
-          apNo: finding.ap_code || "",
-          substantiveTest: finding.substantive_test || "",
-          checkYn: finding.check_yn || "",
-          method: finding.method || "",
-          risk: finding.risk || "",
-          preparer: finding.preparer || "",
-          findingResult: finding.finding_result || "",
-          findingDescription: finding.finding_description || "",
-          recommendation: finding.recommendation || "",
-          status: "",
-          reviewNote: "",
-          reviewStatus: "",
-          preparerRespo: "",
-          referenceLink: "",
-          followUpDueDate: finding.completion_date ? new Date(finding.completion_date).toISOString().split('T')[0] : "",
-          timeline: "",
-          followUpStatus: finding.completion_status || "",
-          auditee: finding.auditee || "",
-        }));
-        setKeyFindings(mappedFindings);
+        setKeyFindings(initialFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
       }
     }
-  }, [initialFindings, auditPeriodStart, auditPeriodEnd]);
+  }, [initialReviewedFindings, initialFindings, auditPeriodStart, auditPeriodEnd]);
 
   // Save executive summary to localStorage
   useEffect(() => {
@@ -247,11 +265,14 @@ export default function AuditReviewDeptClient({
       ...keyFindings,
       {
         no: keyFindings.length + 1,
+        riskId: "",
+        riskDetails: "",
         apNo: "",
         substantiveTest: "",
-        testingStatus: "",
-        samplingMethod: "",
+        checkYn: "",
+        method: "",
         risk: "",
+        riskLevel: "",
         preparer: "",
         findingResult: "",
         findingDescription: "",
@@ -289,6 +310,13 @@ export default function AuditReviewDeptClient({
       setLoading(true);
       setError(null);
 
+      const auditYear =
+        auditPeriodEnd && !Number.isNaN(new Date(auditPeriodEnd).getFullYear())
+          ? new Date(auditPeriodEnd).getFullYear()
+          : auditPeriodStart && !Number.isNaN(new Date(auditPeriodStart).getFullYear())
+            ? new Date(auditPeriodStart).getFullYear()
+            : new Date().getFullYear();
+
       // Save executive summary
       const summaryRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`, {
         method: "POST",
@@ -309,6 +337,25 @@ export default function AuditReviewDeptClient({
       if (!summaryRes.ok) {
         throw new Error("Failed to save executive summary");
       }
+
+      const findingsRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/findings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auditYear,
+          findings: keyFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)),
+        }),
+      });
+
+      if (!findingsRes.ok) {
+        throw new Error("Failed to save audit review findings");
+      }
+
+      const findingsJson = await findingsRes.json().catch(() => ({}));
+      if (Array.isArray(findingsJson.rows)) {
+        setKeyFindings(findingsJson.rows.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+      }
+      setHasSavedReviewFindings(true);
 
       toast.show("Data saved successfully!", "success");
     } catch (e) {
@@ -342,7 +389,8 @@ export default function AuditReviewDeptClient({
     
     try {
       setLoading(true);
-      const res = await fetch(`/api/audit-finding/${apiPath}`);
+      // Review butuh data COMPLETED, jadi sertakan semuanya
+      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}?include_completed=1`);
       if (res.ok) {
         const json = await res.json();
         const dataArray = json.success && Array.isArray(json.data) 
@@ -390,27 +438,9 @@ export default function AuditReviewDeptClient({
         });
         
         // Map findings
-        const mappedFindings = filteredFindings.map((finding, idx) => ({
-          no: idx + 1,
-          apNo: finding.ap_code || "",
-          substantiveTest: finding.substantive_test || "",
-          checkYn: finding.check_yn || "",
-          method: finding.method || "",
-          risk: finding.risk || "",
-          preparer: finding.preparer || "",
-          findingResult: finding.finding_result || "",
-          findingDescription: finding.finding_description || "",
-          recommendation: finding.recommendation || "",
-          status: "",
-          reviewNote: "",
-          reviewStatus: "",
-          preparerRespo: "",
-          referenceLink: "",
-          followUpDueDate: finding.completion_date ? new Date(finding.completion_date).toISOString().split('T')[0] : "",
-          timeline: "",
-          followUpStatus: finding.completion_status || "",
-          auditee: finding.auditee || "",
-        }));
+        const mappedFindings = filteredFindings.map((finding, idx) =>
+          normalizeKeyFindingRow(finding, idx),
+        );
         
         setKeyFindings(mappedFindings);
       }
@@ -424,6 +454,15 @@ export default function AuditReviewDeptClient({
 
   // Handle date range change - Hanya tampilkan data jika audit period dipilih
   useEffect(() => {
+    if (hasSavedReviewFindings) {
+      if (auditPeriodStart && auditPeriodEnd) {
+        const startFormatted = formatDate(auditPeriodStart);
+        const endFormatted = formatDate(auditPeriodEnd);
+        setScopeTimeframeAuditPeriod(`${startFormatted} - ${endFormatted}`);
+      }
+      return;
+    }
+
     if (auditPeriodStart && auditPeriodEnd) {
       fetchFindingsByDateRange(auditPeriodStart, auditPeriodEnd);
       // Update scopeTimeframeAuditPeriod display
@@ -436,7 +475,7 @@ export default function AuditReviewDeptClient({
       setScopeTimeframeAuditPeriod("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auditPeriodStart, auditPeriodEnd, apiPath]);
+  }, [auditPeriodStart, auditPeriodEnd, apiPath, hasSavedReviewFindings]);
 
   return (
     <>

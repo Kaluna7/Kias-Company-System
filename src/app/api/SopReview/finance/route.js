@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import pkg from "pg";
 const { Pool } = pkg;
+import { requireSopEditor } from "@/app/api/SopReview/_shared/auth";
 
 // global pool to avoid too many clients in serverless env
 if (!global._pgPool) {
@@ -17,18 +18,39 @@ if (!global._pgPool) {
 const pool = global._pgPool;
 
 /**
- * GET: return all sops
+ * GET: return all sops (optionally filtered by year via created_at)
  */
 export async function GET(req) {
   try {
     const client = await pool.connect();
     try {
-      // Only select columns that are likely present in your table.
-      // If your table has additional columns you want, add them here.
-      const q = `SELECT id, no, sop_related, status, comment, reviewer
-                 FROM sops_finance
-                 ORDER BY no ASC NULLS LAST, id ASC`;
-      const r = await client.query(q);
+      await client.query(`
+        ALTER TABLE sops_finance
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      `);
+
+      const url = new URL(req?.url || "", "http://localhost");
+      const yearParam = url.searchParams.get("year");
+      const year = yearParam ? parseInt(yearParam, 10) : null;
+
+      let r;
+      if (!Number.isNaN(year) && year) {
+        const from = new Date(year, 0, 1);
+        const to = new Date(year + 1, 0, 1);
+        r = await client.query(
+          `SELECT id, no, sop_related, status, comment, reviewer
+           FROM sops_finance
+           WHERE created_at >= $1 AND created_at < $2
+           ORDER BY no ASC NULLS LAST, id ASC`,
+          [from, to],
+        );
+      } else {
+        r = await client.query(
+          `SELECT id, no, sop_related, status, comment, reviewer
+           FROM sops_finance
+           ORDER BY no ASC NULLS LAST, id ASC`,
+        );
+      }
       return NextResponse.json({ success: true, rows: r.rows }, { status: 200 });
     } catch (dbErr) {
       console.error("DB error SELECT sops_finance:", dbErr);
@@ -48,6 +70,10 @@ export async function GET(req) {
  */
 export async function POST(req) {
   try {
+    // Hanya editor SOP (user/reviewer/admin) yang boleh menyimpan / mengubah SOP finance (legacy)
+    const authError = await requireSopEditor();
+    if (authError) return authError;
+
     const replaceMode = req.headers.get("X-Replace-Mode") === "true";
     const text = await req.text();
     let body;

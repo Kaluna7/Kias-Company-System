@@ -9,9 +9,12 @@ export const useStorePlanningStore = create((set, get) => ({
 
   setSdpAndMeta: (data, meta) => set({ sdp: data, meta: meta ?? null }),
 
-  loadStorePlanning: async (status = "published", page = 1, pageSize = 50) => {
+  loadStorePlanning: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/sdp?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch store planning");
       const json = await res.json();

@@ -75,16 +75,16 @@ export function GenericInputModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4">
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <div className="relative z-10 w-full max-w-5xl max-h-[85vh] bg-[#0F1730] rounded-2xl shadow-xl overflow-hidden ring-1 ring-white/10">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <h2 className="text-white text-xl md:text-2xl font-semibold">{title}</h2>
+      <div className="relative z-10 w-full max-w-5xl max-h-[92vh] sm:max-h-[85vh] bg-[#0F1730] rounded-2xl shadow-xl overflow-hidden ring-1 ring-white/10">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10">
+          <h2 className="text-white text-lg sm:text-xl md:text-2xl font-semibold leading-tight">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -94,10 +94,10 @@ export function GenericInputModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-6">
-          <div className="bg-gray-50 p-3 rounded-lg h-[62vh] max-h-[62vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="px-4 sm:px-6 py-4 sm:py-6">
+          <div className="bg-gray-50 p-2 sm:p-3 rounded-lg h-[64vh] sm:h-[62vh] max-h-[64vh] sm:max-h-[62vh] overflow-y-auto">
             <div className="pr-2" style={{ scrollbarGutter: "stable" }}>
-              <div className="grid grid-cols-4 gap-4 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 p-2 sm:p-4">
                 {Array.isArray(listForm) && listForm.length > 0 ? (
                   listForm.map((item, idx) => {
                     const label = item.label;
@@ -138,7 +138,7 @@ export function GenericInputModal({
                           </label>
                         </div>
 
-                        <div className="col-span-3">
+                        <div className="col-span-1 sm:col-span-3">
                           {hasSelect ? (
                             <select
                               value={form[key] ?? ""}
@@ -182,18 +182,18 @@ export function GenericInputModal({
             <div className="mt-3 text-sm text-red-600 bg-red-50 p-3 rounded">{error}</div>
           )}
 
-          <div className="mt-4 flex items-center justify-end gap-3">
+          <div className="mt-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className={`px-4 py-2 rounded-lg text-white ${loading ? "bg-green-300" : "bg-green-600 hover:bg-green-700"}`}
+              className={`w-full sm:w-auto px-4 py-2 rounded-lg text-white ${loading ? "bg-green-300" : "bg-green-600 hover:bg-green-700"}`}
             >
               {loading ? "Saving..." : (initialForm ? "Update" : "Save")}
             </button>

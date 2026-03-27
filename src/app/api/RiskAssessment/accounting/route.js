@@ -20,11 +20,22 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const includeAps = searchParams.get("includeAps") === "true";
+    const yearParam = searchParams.get("year");
     const page = Math.max(1, toIntSafe(searchParams.get("page"), 1));
     const pageSize = Math.max(1, Math.min(100, toIntSafe(searchParams.get("pageSize"), 50)));
     const skip = (page - 1) * pageSize;
 
-    const where = status ? { status } : undefined;
+    const where = {
+      ...(status ? { status } : {}),
+    };
+
+    const year = yearParam ? parseInt(yearParam, 10) : null;
+    if (!Number.isNaN(year) && year) {
+      where.created_at = {
+        gte: new Date(year, 0, 1),
+        lt: new Date(year + 1, 0, 1),
+      };
+    }
 
     const [accountings, total] = await Promise.all([
       prisma.accounting.findMany({
@@ -34,7 +45,7 @@ export async function GET(req) {
         skip,
         take: pageSize,
       }),
-      prisma.accounting.count({ where: where ?? {} }),
+      prisma.accounting.count({ where }),
     ]);
     const safeAccountings = await backfillRiskIdNoForRows(prisma.accounting, accountings);
 

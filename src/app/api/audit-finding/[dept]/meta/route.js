@@ -88,10 +88,27 @@ export async function GET(req, { params }) {
         );
       `);
 
-      // Get latest meta data (most recent)
-      const r = await client.query(
-        `SELECT ${SELECT_COLUMNS} FROM ${metaTable} ORDER BY id DESC LIMIT 1`
-      );
+      const url = new URL(req.url);
+      const yearParam = url.searchParams.get("year");
+      const year = yearParam ? parseInt(yearParam, 10) : null;
+
+      let r;
+      if (!Number.isNaN(year) && year) {
+        const from = new Date(year, 0, 1);
+        const to = new Date(year + 1, 0, 1);
+        r = await client.query(
+          `SELECT ${SELECT_COLUMNS} FROM ${metaTable}
+           WHERE created_at >= $1 AND created_at < $2
+           ORDER BY id DESC
+           LIMIT 1`,
+          [from, to],
+        );
+      } else {
+        // Get latest meta data (most recent)
+        r = await client.query(
+          `SELECT ${SELECT_COLUMNS} FROM ${metaTable} ORDER BY id DESC LIMIT 1`
+        );
+      }
 
       return NextResponse.json({ success: true, data: r.rows[0] || null }, { status: 200 });
     } catch (dbErr) {

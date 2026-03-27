@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { useMisStore } from "@/app/stores/AuditProgram/misStore";
 import DataTableAudit from "@/app/components/ui/AuditProgram/DataTableAudit";
 import SmallHeader from "@/app/components/layout/SmallHeader";
@@ -25,6 +26,9 @@ export default function MisClient({ initialData, initialSortBy = "risk_id_no", i
   const { data: session } = useSession();
   const role = session?.user?.role ?? null;
   const isAdmin = role === "admin";
+
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
 
   const [showModal, setShowModal] = useState({
     open: false,
@@ -98,14 +102,14 @@ export default function MisClient({ initialData, initialSortBy = "risk_id_no", i
         name: "View Draft",
         action: async () => {
           setViewDraft(true);
-          await fetchMisData({ q: "", page: 1, pageSize: 50, status: "draft" });
+          await fetchMisData({ q: "", page: 1, pageSize: 50, status: "draft", year: yearParam || undefined });
         },
       },
       {
         name: "View Published",
         action: async () => {
           setViewDraft(false);
-          await fetchMisData({ q: "", page: 1, pageSize: 50, status: "published" });
+          await fetchMisData({ q: "", page: 1, pageSize: 50, status: "published", year: yearParam || undefined });
         },
       },
     ];
@@ -163,6 +167,7 @@ export default function MisClient({ initialData, initialSortBy = "risk_id_no", i
       page: 1,
       pageSize: 50,
       status: viewDraft ? "draft" : "published",
+      year: yearParam || undefined,
     });
     setShowModal({ open: false, mode: null, selectedRow: null });
     setIsPlanningMode(false);
@@ -202,6 +207,7 @@ export default function MisClient({ initialData, initialSortBy = "risk_id_no", i
               page: 1,
               pageSize: 50,
               status: viewDraft ? "draft" : "published",
+              year: yearParam || undefined,
             })
           }
         />
@@ -214,6 +220,7 @@ export default function MisClient({ initialData, initialSortBy = "risk_id_no", i
                   page: 1,
                   pageSize: 50,
                   status: viewDraft ? "draft" : "published",
+                  year: yearParam || undefined,
                 })
               } 
             />

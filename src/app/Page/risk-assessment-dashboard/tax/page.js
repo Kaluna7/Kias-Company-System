@@ -1,7 +1,10 @@
 import { loadRiskData } from "../loadRiskData";
 import TaxClient from "./TaxClient";
 
-export default async function TaxPage() {
-  const { initialData, initialMeta } = await loadRiskData("tax", "published");
+export default async function TaxPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  const { initialData, initialMeta } = await loadRiskData("tax", "published", year);
   return <TaxClient initialData={initialData} initialMeta={initialMeta} />;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
@@ -22,12 +23,19 @@ export default function FinanceWorksheet() {
   const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error', message: string }
 
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
+
   // Load data terbaru (terutama status_wp) supaya tampil benar dan bisa di-update
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(API);
+        const url = new URL(API, window.location.origin);
+        if (yearParam) {
+          url.searchParams.set("year", yearParam);
+        }
+        const res = await fetch(url.toString());
         if (!res.ok || cancelled) return;
         const data = await res.json();
         const latest = data?.rows?.[0];
@@ -36,7 +44,7 @@ export default function FinanceWorksheet() {
       } catch (_) {}
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [yearParam]);
 
   const saveStatusWP = async (value) => {
     try {

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import GaClient from "./GaClient";
 
-async function loadGaData(status = "published") {
+async function loadGaData(status = "published", year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -13,6 +13,7 @@ async function loadGaData(status = "published") {
       pageSize: "50",
     });
     if (status) params.set("status", status);
+    if (year) params.set("year", String(year));
 
     const res = await fetch(`${baseUrl}/api/AuditProgram/ga?${params.toString()}`, {
       next: { revalidate: 0 },
@@ -34,8 +35,12 @@ async function loadGaData(status = "published") {
   }
 }
 
-export default async function GaPage() {
-  const { data: initialData } = await loadGaData("published");
+export default async function GaPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : undefined;
+
+  const { data: initialData } = await loadGaData("published", !Number.isNaN(year) ? year : undefined);
   
   return (
     <GaClient 

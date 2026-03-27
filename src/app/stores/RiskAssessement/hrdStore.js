@@ -10,9 +10,12 @@ export const useHrdStore = create((set, get) => ({
   setHrd: (data) => set({ hrd: data }),
   setHrdAndMeta: (data, meta) => set({ hrd: data, meta: meta ?? null }),
 
-  loadHrd: async (status = "published", page = 1, pageSize = 50) => {
+  loadHrd: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/hrd?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch Hrd");
       const json = await res.json();

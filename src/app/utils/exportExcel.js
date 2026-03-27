@@ -79,23 +79,13 @@ export function exportToStyledExcel(
     font: { sz: 20, bold: true, color: { rgb: "FFFFFF" }, name: "Calibri" },
     alignment: { horizontal: "center", vertical: "center", wrapText: true },
     fill: { fgColor: { rgb: "1E3A8A" } },
-    border: {
-      top: { style: "thick", color: { rgb: "0F172A" } },
-      bottom: { style: "thick", color: { rgb: "0F172A" } },
-      left: { style: "thick", color: { rgb: "0F172A" } },
-      right: { style: "thick", color: { rgb: "0F172A" } },
-    },
+    // No explicit border to avoid any darker blue line at the top/bottom of the title band
   };
   const subtitleStyle = {
     font: { sz: 14, bold: true, color: { rgb: "1E40AF" }, name: "Calibri" },
     alignment: { horizontal: "center", vertical: "center", wrapText: true },
     fill: { fgColor: { rgb: "EFF6FF" } },
-    border: {
-      top: { style: "thin", color: { rgb: "BFDBFE" } },
-      bottom: { style: "thin", color: { rgb: "BFDBFE" } },
-      left: { style: "thin", color: { rgb: "BFDBFE" } },
-      right: { style: "thin", color: { rgb: "BFDBFE" } },
-    },
+    // No explicit border to avoid dark lines between title/subtitle bands
   };
   const dateStyle = {
     font: { sz: 10, italic: true, color: { rgb: "64748B" }, name: "Calibri" },
@@ -106,33 +96,24 @@ export function exportToStyledExcel(
     font: { sz: 11, bold: true, color: { rgb: "FFFFFF" }, name: "Calibri" },
     alignment: { horizontal: "center", vertical: "center" },
     fill: { fgColor: { rgb: statusLabel.toLowerCase().includes("publish") ? "059669" : "D97706" } },
-    border: {
-      top: { style: "thin", color: { rgb: statusLabel.toLowerCase().includes("publish") ? "047857" : "B45309" } },
-      bottom: { style: "thin", color: { rgb: statusLabel.toLowerCase().includes("publish") ? "047857" : "B45309" } },
-      left: { style: "thin", color: { rgb: statusLabel.toLowerCase().includes("publish") ? "047857" : "B45309" } },
-      right: { style: "thin", color: { rgb: statusLabel.toLowerCase().includes("publish") ? "047857" : "B45309" } },
-    },
+    // No explicit border to keep status band visually flat (no dark separators)
   };
   const auditPeriodStyle = {
     font: { sz: 11, bold: true, color: { rgb: "1E40AF" }, name: "Calibri" },
     alignment: { horizontal: "center", vertical: "center" },
     fill: { fgColor: { rgb: "DBEAFE" } },
-    border: {
-      top: { style: "thin", color: { rgb: "93C5FD" } },
-      bottom: { style: "thin", color: { rgb: "93C5FD" } },
-      left: { style: "thin", color: { rgb: "93C5FD" } },
-      right: { style: "thin", color: { rgb: "93C5FD" } },
-    },
+    // No explicit border to avoid blue lines above/below audit period row
   };
   const headerStyle = {
     font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
     fill: { fgColor: { rgb: "2563EB" } },
     alignment: { horizontal: "center", vertical: "center", wrapText: true },
     border: {
-      top: { style: "medium", color: { rgb: "1E40AF" } },
-      bottom: { style: "medium", color: { rgb: "1E40AF" } },
-      left: { style: "medium", color: { rgb: "1E40AF" } },
-      right: { style: "medium", color: { rgb: "1E40AF" } },
+      // Softer header borders to avoid dark/black grid lines
+      top: { style: "thin", color: { rgb: "93C5FD" } },
+      bottom: { style: "thin", color: { rgb: "93C5FD" } },
+      left: { style: "thin", color: { rgb: "93C5FD" } },
+      right: { style: "thin", color: { rgb: "93C5FD" } },
     },
   };
   const cellStyle = {

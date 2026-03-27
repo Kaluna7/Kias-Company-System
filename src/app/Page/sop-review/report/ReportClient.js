@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { jsPDF } from "jspdf";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { useToast } from "@/app/contexts/ToastContext";
 
-export default function ReportClient({ initialRows = [], initialScheduleData = [] }) {
+export default function ReportClient({ initialRows = [], initialScheduleData = [], selectedYear = null }) {
   const [rows, setRows] = useState(initialRows);
   const [scheduleData] = useState(initialScheduleData);
   const toast = useToast();
@@ -123,8 +124,18 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
   const [currentPage, setCurrentPage] = useState(1);
 
   const groupedData = useMemo(() => {
+    // rows dari backend SUDAH difilter tahun di loadReportData.
+    // Di sini kita hanya grouping & tidak memfilter lagi, supaya tidak ada data yang hilang karena mismatch format tanggal.
+    const effectiveRows = rows || [];
+
+    console.log("[SOP-REPORT-CLIENT] initialRows", {
+      selectedYear,
+      totalRows: rows?.length ?? 0,
+      sampleRow: rows?.[0] || null,
+    });
+
     const groups = {};
-    (rows || []).forEach((r) => {
+    effectiveRows.forEach((r) => {
       const meta = r.meta || {};
       const schedule = getScheduleForDepartment(r.department);
       const hasSteps = Array.isArray(r.steps) && r.steps.length > 0;
@@ -298,15 +309,15 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
         .replace(/'/g, "&#039;");
     };
 
-    const maxSteps = 500;
-    let stepCount = 0;
-    let tableRows = "";
+    const maxStepsDesktop = 500;
+    let stepCountDesktop = 0;
+    let tableRowsDesktop = "";
     group.items.forEach((item) => {
-      if (item._detail?.steps?.length && stepCount < maxSteps) {
+      if (item._detail?.steps?.length && stepCountDesktop < maxStepsDesktop) {
         item._detail.steps.forEach((step) => {
-          if (stepCount >= maxSteps) return;
-          tableRows += `<tr><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.no || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.sop_related || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.status || "DRAFT")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer || "")}</td></tr>`;
-          stepCount++;
+          if (stepCountDesktop >= maxStepsDesktop) return;
+          tableRowsDesktop += `<tr style="page-break-inside:avoid;"><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.no || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.sop_related || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.status || "DRAFT")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer || "")}</td></tr>`;
+          stepCountDesktop++;
         });
       }
     });
@@ -350,8 +361,8 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
 <p><strong>Preparer:</strong> ${escapeHtml(group.preparer || "-")}</p>
 <p><strong>Reviewer:</strong> ${escapeHtml(group.reviewer || "-")}</p>
 <table><thead><tr><th>No</th><th>SOP Related</th><th>Status</th><th>Comment</th><th>Reviewer</th></tr></thead><tbody>
-${tableRows}
-${stepCount >= maxSteps ? `<tr><td colspan="5" style="text-align:center;color:#666;font-style:italic;">... (showing ${maxSteps} of total steps)</td></tr>` : ""}
+${tableRowsDesktop}
+${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="5" style="text-align:center;color:#666;font-style:italic;">... (showing ${maxStepsDesktop} of total steps)</td></tr>` : ""}
 </tbody></table>
 </body></html>`;
 
@@ -391,64 +402,157 @@ ${stepCount >= maxSteps ? `<tr><td colspan="5" style="text-align:center;color:#6
       return;
     }
 
-    // Mobile: generate PDF file dan download (agar tidak crash)
+    // Mobile: generate PDF langsung dengan jsPDF (lebih stabil di HP; html2canvas/html2pdf sering blank kalau tabel panjang)
     setIsExportingPDF(true);
     toast.show("Processing PDF...", "info");
     try {
-      if (!window.html2pdf) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Failed to load PDF library"));
-          document.head.appendChild(script);
+      const fileName = `SOP_Review_${group.department.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date()
+        .toISOString()
+        .slice(0, 10)}.pdf`;
+
+      const maxStepsPdf = 50000;
+      const tableData = [];
+      let stepCount = 0;
+      group.items.forEach((item) => {
+        if (item._detail?.steps?.length && stepCount < maxStepsPdf) {
+          item._detail.steps.forEach((step) => {
+            if (stepCount >= maxStepsPdf) return;
+            tableData.push([
+              String(step.no ?? ""),
+              String(step.sop_related ?? ""),
+              String(step.status ?? "DRAFT"),
+              String(step.comment ?? ""),
+              String(step.reviewer ?? ""),
+            ]);
+            stepCount++;
+          });
+        }
+      });
+
+      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const margin = 10;
+      const pageW = 210;
+      const pageH = 297;
+      const maxY = pageH - margin;
+
+      // Kolom total = 190mm supaya pas dengan margin 10mm kiri-kanan
+      const colW = [12, 55, 22, 61, 40];
+      const colX = [
+        margin,
+        margin + colW[0],
+        margin + colW[0] + colW[1],
+        margin + colW[0] + colW[1] + colW[2],
+        margin + colW[0] + colW[1] + colW[2] + colW[3],
+      ];
+      const tableW = colW.reduce((a, b) => a + b, 0);
+      const padX = 1.2;
+      const padY = 1.2;
+      const lineH = 4;
+
+      const wrap = (text, w) => doc.splitTextToSize(String(text ?? ""), Math.max(1, w));
+
+      const drawPageHeader = () => {
+        let y = margin;
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text("SOP Review Report", margin, y);
+        y += 8;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+
+        wrap(`Department: ${group.department || "-"}`, pageW - margin * 2).forEach((l) => {
+          doc.text(l, margin, y);
+          y += 5;
         });
-      }
+        doc.text(`Audit Period Start: ${formatDateForDisplay(group.audit_period_start)}`, margin, y);
+        y += 5;
+        doc.text(`Audit Period End: ${formatDateForDisplay(group.audit_period_end)}`, margin, y);
+        y += 5;
+        wrap(`Preparer: ${group.preparer || "-"}`, pageW - margin * 2).forEach((l) => {
+          doc.text(l, margin, y);
+          y += 5;
+        });
+        wrap(`Reviewer: ${group.reviewer || "-"}`, pageW - margin * 2).forEach((l) => {
+          doc.text(l, margin, y);
+          y += 5;
+        });
+        y += 4;
+        return y;
+      };
 
-      const tempDiv = document.createElement("div");
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
-      tempDiv.style.width = "210mm";
-      tempDiv.style.padding = "15mm";
-      tempDiv.style.fontFamily = "Arial, sans-serif";
-      tempDiv.style.fontSize = "11px";
-      tempDiv.style.lineHeight = "1.4";
-      tempDiv.style.color = "#000";
-      tempDiv.style.backgroundColor = "#fff";
-      tempDiv.innerHTML = `
-        <div style="margin-bottom: 15px;">
-          <h1 style="color: #1e293b; font-size: 20px; margin-bottom: 10px; margin-top: 0;">SOP Review Report</h1>
-          <p style="margin: 4px 0;"><strong>Department:</strong> ${escapeHtml(group.department)}</p>
-          <p style="margin: 4px 0;"><strong>Audit Period Start:</strong> ${escapeHtml(formatDateForDisplay(group.audit_period_start))}</p>
-          <p style="margin: 4px 0;"><strong>Audit Period End:</strong> ${escapeHtml(formatDateForDisplay(group.audit_period_end))}</p>
-          <p style="margin: 4px 0;"><strong>Preparer:</strong> ${escapeHtml(group.preparer || "-")}</p>
-          <p style="margin: 4px 0;"><strong>Reviewer:</strong> ${escapeHtml(group.reviewer || "-")}</p>
-        </div>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 10px;">
-          <thead>
-            <tr style="background: #f3f4f6; font-weight: bold;">
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">No</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">SOP Related</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Status</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Comment</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Reviewer</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}${stepCount >= maxSteps ? `<tr><td colspan="5" style="padding: 8px; text-align: center; color: #666; font-style: italic;">... (showing ${maxSteps} of total steps)</td></tr>` : ""}</tbody>
-        </table>
-      `;
-      document.body.appendChild(tempDiv);
+      const drawTableHeader = (y) => {
+        const h = 8;
+        doc.setDrawColor(220, 220, 220);
+        doc.setFillColor(243, 244, 246);
+        doc.rect(margin, y, tableW, h, "F");
+        doc.rect(margin, y, tableW, h, "S");
 
-      await window.html2pdf().set({
-        margin: [10, 10, 10, 10],
-        filename: `SOP_Review_${group.department.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait", compress: true },
-        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-      }).from(tempDiv).save();
+        // vertical lines
+        for (let i = 1; i < colW.length; i++) {
+          doc.line(colX[i], y, colX[i], y + h);
+        }
 
-      document.body.removeChild(tempDiv);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        const labels = ["No", "SOP Related", "Status", "Comment", "Reviewer"];
+        labels.forEach((label, idx) => {
+          doc.text(label, colX[idx] + padX, y + 5.5);
+        });
+        return y + h;
+      };
+
+      let y = drawPageHeader();
+      y = drawTableHeader(y);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setDrawColor(220, 220, 220);
+
+      const ensureSpace = (neededHeight) => {
+        if (y + neededHeight <= maxY) return;
+        doc.addPage();
+        y = drawPageHeader();
+        y = drawTableHeader(y);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setDrawColor(220, 220, 220);
+      };
+
+      tableData.forEach((row) => {
+        const cellLines = row.map((val, idx) => wrap(val, colW[idx] - padX * 2));
+        const rowLines = Math.max(1, ...cellLines.map((arr) => arr.length));
+        const rowH = padY * 2 + rowLines * lineH;
+        ensureSpace(rowH);
+
+        // Draw row border box + vertical lines
+        doc.rect(margin, y, tableW, rowH, "S");
+        for (let i = 1; i < colW.length; i++) {
+          doc.line(colX[i], y, colX[i], y + rowH);
+        }
+
+        // Draw text
+        cellLines.forEach((lines, col) => {
+          lines.forEach((line, lineIdx) => {
+            doc.text(String(line), colX[col] + padX, y + padY + (lineIdx + 1) * lineH - 1);
+          });
+        });
+
+        y += rowH;
+      });
+
+      // Output and download
+      const pdfBlob = doc.output("blob");
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
       toast.show("PDF downloaded successfully!", "success");
     } catch (error) {
       console.error("PDF export error:", error);

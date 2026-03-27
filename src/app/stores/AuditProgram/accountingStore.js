@@ -12,7 +12,7 @@ export const useAccountingStore = create((set, get) => ({
   sortBy: "risk_id_no",
   sortDir: "asc",
 
-  fetchAccountingData: async ({ page = 1, pageSize = 50, q = "", status } = {}) => {
+  fetchAccountingData: async ({ page = 1, pageSize = 50, q = "", status, year } = {}) => {
     set({ loading: true, error: null });
     try {
       const params = new URLSearchParams({
@@ -21,6 +21,7 @@ export const useAccountingStore = create((set, get) => ({
       });
       if (q) params.set("q", q);
       if (status) params.set("status", status);
+      if (year) params.set("year", String(year));
 
       const res = await fetch(`${API_BASE}?${params.toString()}`);
       if (!res.ok) {

@@ -1,10 +1,10 @@
 // src/app/Page/dashboard/page.js
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 
 const ChatSidebar = dynamic(() => import("./ChatSidebar"), { ssr: false });
@@ -15,10 +15,11 @@ const BASE_AUDIT_ITEMS = [
   { id: "C1", title: "Audit Review", category: "review", href: "/Page/audit-review/" },
   { id: "A2", title: "Risk Assessment", category: "planning", href: "/Page/risk-assessment-dashboard" },
   { id: "B2", title: "Finding", category: "execution", href: "/Page/audit-finding/" },
-  { id: "C2", title: "Report", category: "review", href: "/Page/risk-assessment-dashboard/report/" },
+  { id: "C2", title: "Report", category: "review", href: "/Page/report/" },
   { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
   { id: "B3", title: "Evidences", category: "execution", href: "/Page/evidence/" },
   { id: "C3", title: "Guidelines", category: "review", href: "/Page/guidelines/" },
+  { id: "L1", title: "Leaderboard", category: "review", href: "/Page/leaderboard/" },
 ];
 
 function getCategoryIcon(category) {
@@ -35,10 +36,26 @@ function getCategoryColor(category) {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
 
   const [activeCategory, setActiveCategory] = useState("all");
+  const currentYear = new Date().getFullYear();
+  const yearFromUrl = searchParams.get("year");
+  const initialYear = (() => {
+    if (!yearFromUrl) return currentYear;
+    const parsed = parseInt(yearFromUrl, 10);
+    return Number.isNaN(parsed) ? currentYear : parsed;
+  })();
+  const [selectedYear, setSelectedYear] = useState(initialYear);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editAvatarFile, setEditAvatarFile] = useState(null);
+  const [editAvatarPreview, setEditAvatarPreview] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [progress, setProgress] = useState({ loading: true, error: null, modules: [] });
   const [progressModuleKey, setProgressModuleKey] = useState("sop-review");
   const [expandedModuleKey, setExpandedModuleKey] = useState(null);
@@ -88,6 +105,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  const loadProgressRef = useRef(null);
   useEffect(() => {
     let mounted = true;
     async function loadProgress() {
@@ -96,9 +114,13 @@ export default function DashboardPage() {
         const isAdmin = role === "admin" || role === "reviewer";
         const userName = (session?.user?.name || "").trim();
         const effectiveUserName = isAdmin ? (progressUserName || "") : userName;
-        const qs = effectiveUserName ? `?userName=${encodeURIComponent(effectiveUserName)}` : "";
 
-        const res = await fetch(`/api/dashboard/progress${qs}`, { cache: "no-store" });
+        const params = new URLSearchParams();
+        if (effectiveUserName) params.set("userName", effectiveUserName);
+        if (selectedYear) params.set("year", String(selectedYear));
+        const qs = params.toString();
+
+        const res = await fetch(`/api/dashboard/progress${qs ? `?${qs}` : ""}`, { cache: "no-store" });
         const json = await res.json().catch(() => null);
         if (!mounted) return;
         if (!res.ok || !json?.success) {
@@ -115,12 +137,22 @@ export default function DashboardPage() {
         setProgress({ loading: false, error: e?.message || String(e), modules: [] });
       }
     }
+    loadProgressRef.current = loadProgress;
     loadProgress();
     return () => {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session?.user?.name, session?.user?.role, progressUserName]);
+  }, [status, session?.user?.name, session?.user?.role, progressUserName, selectedYear]);
+
+  // Refetch progress when user returns to this tab (e.g. after clicking Publish elsewhere)
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible" && loadProgressRef.current) loadProgressRef.current();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -155,7 +187,9 @@ export default function DashboardPage() {
   const userName = isSessionLoading ? "Loading..." : (session?.user?.name ?? "No name");
   const userRole = isSessionLoading ? "loading" : (session?.user?.role ?? "guest");
 
-  const initials = userName
+  const effectiveName = profileName || userName;
+
+  const initials = effectiveName
     .split(" ")
     .map((n) => n[0] || "")
     .slice(0, 2)
@@ -163,9 +197,17 @@ export default function DashboardPage() {
     .toUpperCase();
 
   const handleFilterClick = useCallback((filterId) => setActiveCategory(filterId), []);
-  const handleViewDetail = useCallback((item) => {
-    if (item?.href) window.location.href = item.href;
-  }, []);
+  const handleViewDetail = useCallback(
+    (item) => {
+      if (!item?.href) return;
+      const url = new URL(item.href, window.location.origin);
+      if (selectedYear) {
+        url.searchParams.set("year", String(selectedYear));
+      }
+      window.location.href = url.toString();
+    },
+    [selectedYear],
+  );
   const toggleExpanded = useCallback((key) => {
     setExpandedModuleKey((prev) => (prev === key ? null : key));
   }, []);
@@ -211,6 +253,80 @@ export default function DashboardPage() {
     [session?.user?.name, session?.user?.role, progressUserName, toast]
   );
 
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        const json = await res.json().catch(() => null);
+        if (!cancelled && res.ok && json?.success && json.user) {
+          setProfileName(json.user.name || "");
+          setProfileAvatarUrl(json.user.avatarUrl || "");
+        }
+      } catch {
+        // ignore profile load errors
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
+  const openEditProfile = useCallback(() => {
+    setIsProfileOpen(false);
+    setEditName(effectiveName || "");
+    setEditAvatarFile(null);
+    setEditAvatarPreview(profileAvatarUrl || "");
+    setIsEditProfileOpen(true);
+  }, [effectiveName, profileAvatarUrl]);
+
+  const closeEditProfile = useCallback(() => {
+    if (isSavingProfile) return;
+    setIsEditProfileOpen(false);
+  }, [isSavingProfile]);
+
+  const handleAvatarChange = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditAvatarFile(file);
+    const url = URL.createObjectURL(file);
+    setEditAvatarPreview(url);
+  }, []);
+
+  const handleSaveProfile = useCallback(async () => {
+    const nameToSave = (editName || "").trim();
+    if (!nameToSave) {
+      toast.show("Name cannot be empty.", "warning");
+      return;
+    }
+    try {
+      setIsSavingProfile(true);
+      const formData = new FormData();
+      formData.append("name", nameToSave);
+      if (editAvatarFile) {
+        formData.append("avatar", editAvatarFile);
+      }
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        toast.show(json?.error || `Failed to update profile (HTTP ${res.status})`, "error");
+        return;
+      }
+      setProfileName(json.user?.name || nameToSave);
+      setProfileAvatarUrl(json.user?.avatarUrl || "");
+      setIsEditProfileOpen(false);
+      toast.show("Profile updated successfully.", "success");
+    } catch (e) {
+      toast.show(e?.message || "Failed to update profile.", "error");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }, [editName, editAvatarFile, toast]);
+
   // ---- UI (responsive: top bar with profile top-right on all screens)
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#E6F0FA] via-white to-blue-50 relative">
@@ -241,13 +357,21 @@ export default function DashboardPage() {
                   aria-label="Profile menu"
                 >
                   <div className="relative flex-shrink-0">
-                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white font-bold text-sm sm:text-lg shadow-lg">
-                      {initials}
-                    </div>
+                    {profileAvatarUrl ? (
+                      <img
+                        src={profileAvatarUrl}
+                        alt={effectiveName}
+                        className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl object-cover border border-white/40 shadow-lg"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white font-bold text-sm sm:text-lg shadow-lg">
+                        {initials}
+                      </div>
+                    )}
                     <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-400 rounded-full border-2 border-[#2D3A5A]"></div>
                   </div>
                   <div className="text-left text-white hidden md:block">
-                    <p className="font-semibold text-sm xl:text-base truncate max-w-[120px] xl:max-w-none">{userName}</p>
+                    <p className="font-semibold text-sm xl:text-base truncate max-w-[120px] xl:max-w-none">{effectiveName}</p>
                     <p className="text-blue-200 text-xs capitalize">{userRole}</p>
                   </div>
                   <svg className={`w-4 h-4 text-white transition-transform duration-300 flex-shrink-0 hidden sm:block ${isProfileOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -259,12 +383,19 @@ export default function DashboardPage() {
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{initials}</div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-gray-800 text-sm truncate">{userName}</p>
+                        <p className="font-bold text-gray-800 text-sm truncate">{effectiveName}</p>
                         <p className="text-gray-600 text-xs capitalize">{userRole}</p>
                       </div>
                     </div>
                   </div>
-                  <div className="px-2 py-2">
+                  <div className="px-2 py-2 space-y-1">
+                    <button
+                      type="button"
+                      onClick={openEditProfile}
+                      className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
+                    >
+                      <span className="font-medium">Edit Profile</span>
+                    </button>
                     <a href="/help" className="block"><button className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"><span className="font-medium">Help & Support</span></button></a>
                   </div>
                   <div className="border-t border-gray-200/30 mt-1 pt-1 px-2">
@@ -274,14 +405,40 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Stats row: responsive grid */}
-            <div className="grid grid-cols-2 md:flex md:gap-6 lg:gap-8 gap-3">
-              {statsAndFilters.stats.map((stat) => (
-                <div key={stat.type} className="text-center py-2 md:py-0">
-                  <div className="text-2xl sm:text-3xl font-bold text-white">{stat.count}</div>
-                  <div className="text-xs sm:text-sm text-blue-200 font-medium">{stat.label}</div>
-                </div>
-              ))}
+            {/* Stats row + year filter */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="grid grid-cols-2 md:flex md:gap-6 lg:gap-8 gap-3 flex-1">
+                {statsAndFilters.stats.map((stat) => (
+                  <div key={stat.type} className="text-center py-2 md:py-0">
+                    <div className="text-2xl sm:text-3xl font-bold text-white">{stat.count}</div>
+                    <div className="text-xs sm:text-sm text-blue-200 font-medium">{stat.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 self-start md:self-auto">
+                <span className="text-xs sm:text-sm text-blue-100">Year:</span>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => {
+                    const nextYear = parseInt(e.target.value, 10);
+                    setSelectedYear(nextYear);
+                    try {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set("year", String(nextYear));
+                      router.replace(url.pathname + url.search);
+                    } catch {
+                      // ignore URL errors in unlikely environments
+                    }
+                  }}
+                  className="bg-white/10 border border-white/30 text-white text-xs sm:text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200/70"
+                >
+                  {[currentYear + 1, currentYear, currentYear - 1, currentYear - 2].map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </header>
@@ -463,6 +620,85 @@ export default function DashboardPage() {
         </footer>
         </div>
       </div>
+
+      {isEditProfileOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-3 p-6 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Edit Profile</h2>
+                <p className="text-xs text-slate-500 mt-1">Update your display name and profile photo.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditProfile}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                disabled={isSavingProfile}
+              >
+                <span className="sr-only">Close</span>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center space-y-3">
+              <div className="relative">
+                {editAvatarPreview || profileAvatarUrl ? (
+                  <img
+                    src={editAvatarPreview || profileAvatarUrl}
+                    alt={effectiveName}
+                    className="w-20 h-20 rounded-2xl object-cover border border-slate-200 shadow-md"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-md">
+                    {initials}
+                  </div>
+                )}
+                <label className="absolute -bottom-1 -right-1 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white shadow-md border border-slate-200 cursor-pointer hover:bg-slate-50">
+                  <svg className="w-4 h-4 text-slate-700" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h4l2-3h6l2 3h4v12H3V7z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11a3 3 0 100 6 3 3 0 000-6z" />
+                  </svg>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="Your name"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeEditProfile}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+                disabled={isSavingProfile}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#141D38] to-[#2D3A5A] hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={isSavingProfile}
+              >
+                {isSavingProfile ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

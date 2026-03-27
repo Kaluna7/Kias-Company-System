@@ -37,7 +37,7 @@ const deptToAuditProgram = {
   whs: { parent: "warehouse", ap: "WarehouseAp", relation: "warehouse" },
 };
 
-// Map audit-finding dept slug to worksheet_finance / evidence department name (uppercase)
+// Map audit-finding dept slug to Evidence/Worksheet department name (uppercase)
 const deptToWorksheetEvidenceName = {
   accounting: "ACCOUNTING",
   finance: "FINANCE",
@@ -54,7 +54,11 @@ const deptToWorksheetEvidenceName = {
   whs: "WAREHOUSE",
 };
 
-/** Returns { worksheetHasFile, evidenceApCodesWithFile }. Per-row status: Ready to Publish only when THIS row has evidence file + worksheet file. */
+/** 
+ * Returns { worksheetHasFile, evidenceApCodesWithFile }.
+ * - worksheetHasFile: apakah pernah ada file worksheet untuk department ini (dipakai hanya sebagai info tambahan).
+ * - evidenceApCodesWithFile: SET ap_code yang SUDAH PUBLISH di Evidence (overall_status = COMPLETE + ada file).
+ */
 async function getWorksheetAndEvidenceFileStatus(dept) {
   const deptName = deptToWorksheetEvidenceName[dept];
   if (!deptName) return { worksheetHasFile: false, evidenceApCodesWithFile: new Set() };
@@ -66,7 +70,14 @@ async function getWorksheetAndEvidenceFileStatus(dept) {
         select: { file_path: true },
       }),
       prisma.evidence.findMany({
-        where: { department: deptName, file_url: { not: null } },
+        where: {
+          department: deptName,
+          file_url: { not: null },
+          overall_status: {
+            equals: "COMPLETE",
+            mode: "insensitive",
+          },
+        },
         select: { ap_code: true },
       }),
     ]);
@@ -163,19 +174,53 @@ export async function GET(req, { params }) {
     const pageSize = Math.max(1, Math.min(100, toIntSafe(url.searchParams.get("pageSize"), 50)));
     const skip = (page - 1) * pageSize;
 
-    const whereFinding = {
-      NOT: {
+    const includeCompleted =
+      url.searchParams.get("include_completed") === "1" ||
+      url.searchParams.get("include_completed") === "true";
+
+    const yearParam = url.searchParams.get("year");
+    const year = yearParam ? parseInt(yearParam, 10) : null;
+    const hasValidYear = !Number.isNaN(year) && !!year;
+
+    const whereFinding = {};
+    if (!includeCompleted) {
+      // Default behaviour (untuk layar kerja): sembunyikan finding yang sudah COMPLETED.
+      whereFinding.NOT = {
         completion_status: {
           equals: "COMPLETED",
           mode: "insensitive",
         },
-      },
-    };
+      };
+    } else {
+      // Untuk report / review (include_completed=1), kembalikan HANYA finding yang sudah COMPLETED
+      whereFinding.completion_status = {
+        equals: "COMPLETED",
+        mode: "insensitive",
+      };
+    }
+
+    let from = null;
+    let to = null;
+    // Untuk layar kerja (tanpa include_completed), filter tahun berdasarkan created_at.
+    // Untuk include_completed (Report/Review), tahun difilter di layer pemanggil (berdasarkan updated_at/completion_date),
+    // jadi di sini tidak perlu membatasi created_at supaya semua finding COMPLETED bisa terbaca.
+    if (!includeCompleted && hasValidYear) {
+      from = new Date(year, 0, 1);
+      to = new Date(year + 1, 0, 1);
+      whereFinding.created_at = { gte: from, lt: to };
+    }
 
     const apMapping = deptToAuditProgram[dept];
-    if (!apMapping) {
+    // Jika include_completed=1, JANGAN lagi bergantung pada audit-program parents (karena setelah publish sudah dihapus).
+    // Cukup pakai tabel audit_finding_* sebagai sumber data utama untuk report/review.
+    if (includeCompleted || !apMapping) {
       const [findings, total] = await Promise.all([
-        delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
+        delegate.findMany({
+          where: whereFinding,
+          orderBy: { id: "desc" },
+          skip,
+          take: pageSize,
+        }),
         delegate.count({ where: whereFinding }),
       ]);
       return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
@@ -192,67 +237,130 @@ export async function GET(req, { params }) {
     }
 
     // Always use audit program (published) as source of truth — same as evidence. Load all findings (unpublished) to merge.
-    const [parents, allFindings] = await Promise.all([
+    const parentWhere = { status: "published" };
+    // Sama seperti di atas: hanya layar kerja yang dibatasi tahun di sini.
+    if (!includeCompleted && hasValidYear) {
+      const pFrom = new Date(year, 0, 1);
+      const pTo = new Date(year + 1, 0, 1);
+      parentWhere.created_at = { gte: pFrom, lt: pTo };
+    }
+
+    const [parents, allFindings, completedFindings] = await Promise.all([
       parentModel.findMany({
-        where: { status: "published" },
+        where: parentWhere,
         include: { aps: true },
         orderBy: { risk_id: "asc" },
       }),
       delegate.findMany({ where: whereFinding, orderBy: { id: "desc" } }),
+      // Temukan semua finding yang sudah COMPLETED untuk menyembunyikannya dari layar kerja (kecuali include_completed=true)
+      includeCompleted
+        ? Promise.resolve([])
+        : delegate.findMany({
+            where: {
+              completion_status: {
+                equals: "COMPLETED",
+                mode: "insensitive",
+              },
+            },
+            select: { risk_id: true, ap_code: true },
+          }),
     ]);
 
     const findingByKey = new Map();
+    const findingByApCode = new Map();
     for (const f of allFindings) {
       const rId = (f.risk_id != null && f.risk_id !== "") ? String(f.risk_id).trim() : "";
       const ap = (f.ap_code != null && f.ap_code !== "") ? String(f.ap_code).trim() : "";
       const key = `${rId}::${ap}`;
       if (!findingByKey.has(key)) findingByKey.set(key, f);
+      if (ap && !findingByApCode.has(ap)) findingByApCode.set(ap, f);
     }
+
+    // Kumpulan AP yang sudah COMPLETED (supaya tidak muncul lagi di halaman Finding utama)
+    const completedKeySet = new Set(
+      (completedFindings || []).map((f) => {
+        const rId = f.risk_id != null ? String(f.risk_id).trim() : "";
+        const ap = f.ap_code != null ? String(f.ap_code).trim() : "";
+        return `${rId}::${ap}`;
+      }),
+    );
+    const completedApCodeSet = new Set(
+      (completedFindings || [])
+        .map((f) => (f.ap_code != null ? String(f.ap_code).trim() : ""))
+        .filter(Boolean),
+    );
 
     const { worksheetHasFile, evidenceApCodesWithFile } = await getWorksheetAndEvidenceFileStatus(dept);
 
     const auditProgramData = parents.flatMap((p) =>
       p.aps && p.aps.length > 0
-        ? p.aps.map((ap) => {
-            const riskId = p.risk_id_no ?? String(p.risk_id) ?? "";
-            const apCode = ap.ap_code ?? "";
-            const apCodeTrimmed = String(apCode).trim();
-            const key = `${String(riskId).trim()}::${apCodeTrimmed}`;
-            const finding = findingByKey.get(key);
-            const hasEvidenceFileForRow = evidenceApCodesWithFile.has(apCodeTrimmed);
-            const completionStatus = !hasEvidenceFileForRow ? "Draft" : (worksheetHasFile ? "Ready to Publish" : "Draft");
-            return {
-              id: finding?.id ?? null,
-              risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
-              risk_description: p.risk_description ?? null,
-              risk_details: p.risk_details ?? null,
-              ap_code: ap.ap_code ?? null,
-              substantive_test: ap.substantive_test ?? null,
-              risk: finding?.risk ?? null,
-              check_yn: finding?.check_yn ?? null,
-              method: finding?.method ?? ap.method ?? null,
-              preparer: finding?.preparer ?? null,
-              finding_result: finding?.finding_result ?? null,
-              finding_description: finding?.finding_description ?? null,
-              recommendation: finding?.recommendation ?? null,
-              auditee: finding?.auditee ?? null,
-              completion_status: completionStatus,
-              completion_date: finding?.completion_date ?? null,
-              created_at: finding?.created_at ?? null,
-              updated_at: finding?.updated_at ?? null,
-              objective: ap.objective ?? null,
-              procedures: ap.procedures ?? null,
-              description: ap.description ?? null,
-              application: ap.application ?? null,
-              owners: p.owners ?? null,
-            };
-          })
+        ? p.aps
+            .map((ap) => {
+              const riskId = p.risk_id_no ?? String(p.risk_id) ?? "";
+              const apCode = ap.ap_code ?? "";
+              const apCodeTrimmed = String(apCode).trim();
+              const key = `${String(riskId).trim()}::${apCodeTrimmed}`;
+
+              // Jika sudah COMPLETED dan kita tidak sedang include_completed, sembunyikan dari halaman kerja
+              if (!includeCompleted && (completedKeySet.has(key) || completedApCodeSet.has(apCodeTrimmed))) {
+                return null;
+              }
+
+              // Fallback ke ap_code saja jika risk_id berubah / kosong saat save,
+              // supaya row yang sudah disimpan tetap ketemu lagi saat reload.
+              const finding = findingByKey.get(key) || findingByApCode.get(apCodeTrimmed);
+              const hasEvidenceFileForRow = evidenceApCodesWithFile.has(apCodeTrimmed);
+
+              // Completion status dikontrol sistem:
+              // - jika sudah publish => COMPLETED
+              // - jika Evidence sudah COMPLETE => Ready to Publish
+              // - selain itu => Draft
+              const existingStatusRaw = (finding?.completion_status || "").toString().trim();
+              const existingStatusUpper = existingStatusRaw.toUpperCase();
+              let completionStatus;
+              if (existingStatusUpper === "COMPLETED") {
+                completionStatus = "COMPLETED";
+              } else if (hasEvidenceFileForRow) {
+                completionStatus = "Ready to Publish";
+              } else {
+                completionStatus = "Draft";
+              }
+
+              return {
+                id: finding?.id ?? null,
+                risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
+                risk_description: finding?.risk_description ?? p.risk_description ?? null,
+                risk_details: finding?.risk_details ?? p.risk_details ?? null,
+                impact_description: p.impact_description ?? null,
+                ap_code: ap.ap_code ?? null,
+                substantive_test: ap.substantive_test ?? null,
+                risk: finding?.risk ?? null,
+                check_yn: finding?.check_yn ?? null,
+                method: finding?.method ?? ap.method ?? null,
+                preparer: finding?.preparer ?? null,
+                finding_result: finding?.finding_result ?? null,
+                finding_description: finding?.finding_description ?? null,
+                recommendation: finding?.recommendation ?? null,
+                auditee: finding?.auditee ?? null,
+                completion_status: completionStatus,
+                completion_date: finding?.completion_date ?? null,
+                created_at: finding?.created_at ?? null,
+                updated_at: finding?.updated_at ?? null,
+                objective: ap.objective ?? null,
+                procedures: ap.procedures ?? null,
+                description: ap.description ?? null,
+                application: ap.application ?? null,
+                owners: p.owners ?? null,
+              };
+            })
+            .filter(Boolean)
         : [
             {
               id: null,
               risk_id: p.risk_id_no ?? String(p.risk_id) ?? null,
               risk_description: p.risk_description ?? null,
               risk_details: p.risk_details ?? null,
+              impact_description: p.impact_description ?? null,
               ap_code: null,
               substantive_test: null,
               risk: null,

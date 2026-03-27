@@ -2,15 +2,18 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { buttonAuditProgram } from "@/app/data/auditProgramConfig";
 
-export default function AuditProgram() {
+export default async function AuditProgram({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 md:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header dengan Logo */}
         <header className="mb-8">
-          <div className="bg-gradient-to-r from-[#141D38] to-[#1a2747] rounded-2xl shadow-xl p-6 mb-6 border border-slate-700/50">
-            <div className="flex flex-row md:flex-row justify-between items-center">
-              <div className="flex items-center justify-center md:justify-start space-x-3">
+          <div className="bg-gradient-to-r from-[#141D38] to-[#1a2747] rounded-2xl shadow-xl p-4 sm:p-6 mb-6 border border-slate-700/50">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
+              <div className="flex items-center justify-center sm:justify-start space-x-3">
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-2">
                   <Image
                     src="/images/kias-logo.webp"
@@ -23,8 +26,8 @@ export default function AuditProgram() {
                   />
                 </div>
               </div>
-              <div className="text-center">
-                <h3 className="text-3xl font-bold text-white" style={{ fontFamily: "system-ui, sans-serif", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>AUDIT PROGRAM</h3>
+              <div className="text-center sm:text-right">
+                <h3 className="text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: "system-ui, sans-serif", textShadow: "0 1px 2px rgba(0,0,0,0.3)" }}>AUDIT PROGRAM</h3>
                 <p className="text-blue-200 mt-1 font-medium">Management Dashboard</p>
               </div>
             </div>
@@ -34,15 +37,15 @@ export default function AuditProgram() {
         {/* Audit Program Grid */}
         <div className="mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Audit Program by Department</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {buttonAuditProgram.map((item, index) => (
               <Link 
                 key={index}
-                href={item.href}
+                href={`${item.href}${yearQuery}`}
                 prefetch={true}
                 className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-slate-200 hover:border-blue-400 hover:translate-y-[-4px] group"
               >
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start gap-3 mb-3">
                   <div className="flex items-center space-x-3">
                     {item.logo && item.logo !== "/" && (
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg flex items-center justify-center p-1.5 shadow-sm">
@@ -55,7 +58,7 @@ export default function AuditProgram() {
                         />
                       </div>
                     )}
-                    <h3 className="text-lg font-bold text-slate-800">{item.name}</h3>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-800 break-words">{item.name}</h3>
                   </div>
                 </div>
                 

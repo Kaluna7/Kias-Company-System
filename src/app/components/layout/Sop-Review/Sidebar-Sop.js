@@ -328,7 +328,8 @@ export default function SOPSidebar({
           return {
             no: (typeof s.step === "number" ? s.step : idx + 1),
             sop_related: clean,
-            status: "DRAFT",
+            // Default status for freshly parsed items: IN REVIEW
+            status: "IN REVIEW",
             comment: "",
             reviewer: "",
           };
@@ -413,7 +414,8 @@ export default function SOPSidebar({
     const prepared = modalItems.map((it, idx) => ({
       no: idx + 1,
       sop_related: (it.sop_related || "").toString().trim(),
-      status: "DRAFT",
+      // Default status when appending from sidebar modal: IN REVIEW
+      status: "IN REVIEW",
       comment: (it.comment || "").toString().trim(),
       reviewer: ""
     }));
