@@ -3,12 +3,12 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 
-const ChatSidebar = dynamic(() => import("./ChatSidebar"), { ssr: false });
+const ChatSidebar = nextDynamic(() => import("./ChatSidebar"), { ssr: false });
 
 const BASE_AUDIT_ITEMS = [
   { id: "A1", title: "SOP Review", category: "planning", href: "/Page/sop-review/" },
