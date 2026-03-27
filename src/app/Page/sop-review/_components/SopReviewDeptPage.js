@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, memo, useDeferredValue } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import SOPHeader from "@/app/components/layout/Sop-Review/SOPHeader";
 
 
@@ -23,8 +24,8 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
           <textarea
             value={row.sop_related}
             onChange={(e) => onUpdate(idx, { sop_related: e.target.value })}
-            className="w-full bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-none leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            rows={2}
+            className="w-full bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            rows={3}
             placeholder="Enter SOP description..."
             disabled={isReviewer}
           />
@@ -34,7 +35,8 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
         <select
           value={row.status || ""}
           onChange={(e) => onUpdate(idx, { status: e.target.value })}
-          disabled={isReviewer}
+          // Reviewer and Admin can change row status; regular user cannot
+          disabled={!(isReviewer || isAdmin)}
           className={`w-full px-2 py-2 rounded-lg text-xs font-semibold border transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:cursor-not-allowed ${
             row.status === "APPROVED"
               ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-200"
@@ -54,12 +56,14 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
       </td>
       <td className="p-3 align-top border-r border-slate-200/40">
         <div className="relative">
-          <input
+          <textarea
             value={row.comment || ""}
             onChange={(e) => onUpdate(idx, { comment: e.target.value })}
-            className="w-full bg-transparent border border-transparent hover:border-green-200 focus:border-green-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            className="w-full bg-transparent border border-transparent hover:border-green-200 focus:border-green-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            rows={2}
             placeholder="Enter review comment..."
-            disabled={isReviewer}
+            // Reviewer and Admin can change review comment; regular user cannot
+            disabled={!(isReviewer || isAdmin)}
           />
         </div>
       </td>
@@ -70,7 +74,8 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
             onChange={(e) => onUpdate(idx, { reviewer: e.target.value })}
             className="w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-lg px-3 py-2 text-sm text-center transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
             placeholder="Reviewer..."
-            disabled={isAdmin || isUser}
+            // Allow admin and reviewer to adjust reviewer name; regular user sees read-only
+            disabled={isUser}
             readOnly={isUser}
           />
         </div>
@@ -78,12 +83,12 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
       <td className="p-3 text-center align-top">
         <button
           onClick={() => onRemove(idx)}
-          disabled={isReviewer}
-          className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-medium transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={false}
+          className="inline-flex items-center justify-center w-8 h-8 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-full text-xs font-medium transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed mx-auto"
           title="Delete this SOP item"
         >
-          <span className="text-sm">🗑️</span>
-          <span className="hidden sm:inline">Delete</span>
+          <span className="text-sm leading-none">🗑️</span>
+          <span className="sr-only">Delete</span>
         </button>
       </td>
     </tr>
@@ -114,6 +119,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [preparerStatus, setPreparerStatus] = useState("DRAFT");
   const [reviewerStatus, setReviewerStatus] = useState("DRAFT");
   const [sopData, setSopData] = useState([]);
+  const deferredSopData = useDeferredValue(sopData);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
@@ -130,6 +136,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [loadError, setLoadError] = useState(null);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [deleteConfirmIndex, setDeleteConfirmIndex] = useState(null);
+
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
 
   useEffect(() => {
     const check = () => setIsMobileView(window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || ""));
@@ -264,9 +274,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       setIsLoading(true);
       setLoadError(null);
       try {
+        const qs = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
         const [res, metaRes] = await Promise.all([
-          fetch(`/api/SopReview/${apiPath}`, { method: "GET" }),
-          fetch(`/api/SopReview/${apiPath}/meta`, { method: "GET" }),
+          fetch(`/api/SopReview/${apiPath}${qs}`, { method: "GET" }),
+          fetch(`/api/SopReview/${apiPath}/meta${qs}`, { method: "GET" }),
         ]);
         const [{ data: json, raw: rawSteps }, { data: metaJson, raw: rawMeta }] = await Promise.all([
           safeJson(res),
@@ -423,40 +434,69 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const handleSopParsed = (parsedSops) => {
     if (!Array.isArray(parsedSops) || parsedSops.length === 0) return;
     setSopData((prev) => {
-      const existingTitles = new Set(prev.map((p) => (p.sop_related || "").trim().toLowerCase()));
+      // Keep append behavior additive across uploads.
+      // Only de-duplicate items inside the current parsed batch.
+      const batchTitles = new Set();
       const newItems = parsedSops
         .map((it) => ({
           id: it.id ?? null,
           sop_related: (it.sop_related || it.name || "").trim(),
-          status: it.status || "DRAFT",
+          // Default status after append: IN REVIEW
+          status: it.status || "IN REVIEW",
           comment: it.comment || "",
           reviewer: it.reviewer || "",
         }))
-        .filter((it) => it.sop_related && !existingTitles.has(it.sop_related.toLowerCase()));
+        .filter((it) => {
+          const key = (it.sop_related || "").toLowerCase();
+          if (!key) return false;
+          if (batchTitles.has(key)) return false;
+          batchTitles.add(key);
+          return true;
+        });
       return reindex([...prev, ...newItems]);
     });
   };
 
   const updateRow = useCallback((index, changes) => {
     setSopData((prev) => {
-      const copy = prev.map((r) => ({ ...r }));
-      copy[index] = { ...copy[index], ...changes };
-      return reindex(copy);
+      const target = prev[index];
+      if (!target) return prev;
+
+      // Skip state update when nothing actually changes
+      const nextRow = { ...target, ...changes };
+      let changed = false;
+      for (const key of Object.keys(changes || {})) {
+        if (target[key] !== nextRow[key]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return prev;
+
+      // Keep other row references intact so memoized rows do not re-render.
+      const next = [...prev];
+      next[index] = nextRow;
+      return next;
     });
   }, []);
 
   const addRow = useCallback(() => {
-    setSopData((prev) => reindex([...prev, {
-      id: null,
-      sop_related: "",
-      status: "DRAFT",
-      comment: "",
-      reviewer: "",
-    }]));
+    setSopData((prev) =>
+      reindex([
+        ...prev,
+        {
+          id: null,
+          sop_related: "",
+          // Default status for new manual row: IN REVIEW
+          status: "IN REVIEW",
+          comment: "",
+          reviewer: "",
+        },
+      ])
+    );
   }, []);
 
   const removeRow = useCallback((index) => {
-    if (!confirm("Remove this SOP item from the list?")) return;
     setSopData((prev) => reindex(prev.filter((_, i) => i !== index)));
   }, []);
 
@@ -532,7 +572,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     }
   }, [apiPath, preparerStatus, preparerName, preparerDate, reviewerComment, reviewerStatus, reviewerName, reviewerDate, preparePayload]);
 
-  // Auto-save when sopData or reviewer fields change (with debounce)
+  // Auto-save when data stabilizes (with debounce)
   useEffect(() => {
     // Clear existing timeout
     if (saveDraftTimeoutRef.current) {
@@ -542,18 +582,18 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     // Don't auto-save on initial load
     if (isLoading) return;
 
-    // Debounce auto-save by 1 second
+    // Debounce auto-save by 1.2 seconds to reduce save churn while typing
     saveDraftTimeoutRef.current = setTimeout(() => {
       // Save even if sopData is empty (to save reviewer fields)
-      saveDraft(sopData);
-    }, 1000);
+      saveDraft(deferredSopData);
+    }, 1200);
 
     return () => {
       if (saveDraftTimeoutRef.current) {
         clearTimeout(saveDraftTimeoutRef.current);
       }
     };
-  }, [sopData, isLoading, saveDraft, reviewerStatus, reviewerName, reviewerDate, reviewerComment]);
+  }, [deferredSopData, isLoading, saveDraft, reviewerStatus, reviewerName, reviewerDate, reviewerComment]);
 
   const handleSidebarSaveDraft = (sidebarData) => {
     try {
@@ -751,16 +791,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     <span className="text-[11px] font-semibold text-blue-700">{sopData.length}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {sopData.length > 0 && (
-                      <button
-                        onClick={addRow}
-                        className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md flex items-center gap-1"
-                        title="Add new SOP item"
-                      >
-                        <span>➕</span>
-                        <span className="hidden sm:inline">Add SOP Item</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={addRow}
+                      className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md flex items-center gap-1"
+                      title="Add new SOP item"
+                    >
+                      <span>➕</span>
+                      <span className="hidden sm:inline">Add SOP Item</span>
+                    </button>
                     <button
                       onClick={openPublishModal}
                       disabled={sopData.length === 0 || isSaving}
@@ -831,7 +869,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                         row={row}
                         idx={idx}
                         onUpdate={updateRow}
-                        onRemove={removeRow}
+                        // Open confirmation modal instead of deleting immediately
+                        onRemove={setDeleteConfirmIndex}
                         isReviewer={isReviewer}
                         isAdmin={isAdmin}
                         isUser={isUser}
@@ -975,9 +1014,49 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           </div>
         </div>
       )}
+      
+      {deleteConfirmIndex !== null && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setDeleteConfirmIndex(null)}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-200 flex items-center gap-4">
+              <div className="w-11 h-11 rounded-full bg-red-100 flex items-center justify-center">
+                <span className="text-red-600 text-xl">🗑️</span>
+              </div>
+              <div>
+                <div className="text-base font-bold text-slate-900">Delete SOP item</div>
+                <div className="text-sm text-slate-600">Are you sure you want to delete this SOP item?</div>
+              </div>
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-5 py-2 rounded-full text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                onClick={() => setDeleteConfirmIndex(null)}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                className="px-5 py-2 rounded-full text-sm font-semibold bg-red-600 text-white hover:bg-red-700 shadow-sm hover:shadow-md transition-colors"
+                onClick={() => {
+                  if (deleteConfirmIndex !== null) {
+                    removeRow(deleteConfirmIndex);
+                  }
+                  setDeleteConfirmIndex(null);
+                }}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
-
-
 

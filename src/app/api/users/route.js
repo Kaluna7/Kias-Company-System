@@ -22,7 +22,7 @@ export async function GET(req) {
     const total = countRes.rows?.[0]?.total ?? 0;
 
     const r = await pool.query(
-      `SELECT id, name, email, role
+      `SELECT id, name, email, role, COALESCE(avatar_url, '') AS avatar_url
        FROM public.users
        WHERE role IS NULL OR LOWER(role) <> 'admin'
        ORDER BY name ASC

@@ -9,9 +9,12 @@ export const useMisStore = create((set, get) => ({
 
   setMisAndMeta: (data, meta) => set({ mis: data, meta: meta ?? null }),
 
-  loadMis: async (status = "published", page = 1, pageSize = 50) => {
+  loadMis: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/mis?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch mis");
       const json = await res.json();

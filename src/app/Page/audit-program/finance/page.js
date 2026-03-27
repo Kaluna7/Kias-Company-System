@@ -4,7 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import FinanceClient from "./FinanceClient";
 
 // Server-side function to load finance data
-async function loadFinanceData(status = "published") {
+async function loadFinanceData(status = "published", year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -16,6 +16,7 @@ async function loadFinanceData(status = "published") {
       pageSize: "50",
     });
     if (status) params.set("status", status);
+    if (year) params.set("year", String(year));
 
     const res = await fetch(`${baseUrl}/api/AuditProgram/finance?${params.toString()}`, {
       next: { revalidate: 0 }, // Always fetch fresh but allow Next.js to optimize
@@ -37,9 +38,13 @@ async function loadFinanceData(status = "published") {
   }
 }
 
-export default async function FinancePage() {
+export default async function FinancePage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : undefined;
+
   // Load initial data on server
-  const { data: initialData } = await loadFinanceData("published");
+  const { data: initialData } = await loadFinanceData("published", !Number.isNaN(year) ? year : undefined);
   
   // Get session on server (optional, for future use)
   // const session = await getServerSession(authOptions);

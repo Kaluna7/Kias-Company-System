@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pool } from "./pool";
+import { requireSopEditor } from "./auth";
 
 function qIdent(name) {
   // very small allow-list style: only lower/underscore names
@@ -17,23 +18,50 @@ export function makeSopReviewTables({ slug, departmentName }) {
 }
 
 export function makeStepsHandlers({ stepsTable }) {
-  const GET = async () => {
+  const ensureStepsTable = async (client) => {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ${stepsTable} (
+        id SERIAL PRIMARY KEY,
+        no INTEGER,
+        sop_related TEXT,
+        status VARCHAR(20) DEFAULT 'DRAFT',
+        comment TEXT DEFAULT '',
+        reviewer VARCHAR(255) DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    // Backfill column on existing tables if needed
+    await client
+      .query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`)
+      .catch(() => {});
+  };
+
+  const GET = async (req) => {
     try {
       const client = await pool.connect();
       try {
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS ${stepsTable} (
-            id SERIAL PRIMARY KEY,
-            no INTEGER,
-            sop_related TEXT,
-            status VARCHAR(20) DEFAULT 'DRAFT',
-            comment TEXT DEFAULT '',
-            reviewer VARCHAR(255) DEFAULT ''
+        await ensureStepsTable(client);
+
+        const url = new URL(req?.url || "", "http://localhost");
+        const yearParam = url.searchParams.get("year");
+        const year = yearParam ? parseInt(yearParam, 10) : null;
+
+        let r;
+        if (!Number.isNaN(year) && year) {
+          const from = new Date(year, 0, 1);
+          const to = new Date(year + 1, 0, 1);
+          r = await client.query(
+            `SELECT id, no, sop_related, status, comment, reviewer
+             FROM ${stepsTable}
+             WHERE created_at >= $1 AND created_at < $2
+             ORDER BY no ASC NULLS LAST, id ASC`,
+            [from, to],
           );
-        `);
-        const r = await client.query(
-          `SELECT id, no, sop_related, status, comment, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
-        );
+        } else {
+          r = await client.query(
+            `SELECT id, no, sop_related, status, comment, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`,
+          );
+        }
         return NextResponse.json({ success: true, rows: r.rows }, { status: 200 });
       } catch (dbErr) {
         console.error(`DB error SELECT ${stepsTable}:`, dbErr);
@@ -49,6 +77,10 @@ export function makeStepsHandlers({ stepsTable }) {
 
   const POST = async (req) => {
     try {
+      // Hanya editor SOP (user/reviewer/admin) yang boleh menyimpan / mengubah langkah SOP
+      const authError = await requireSopEditor();
+      if (authError) return authError;
+
       // Read header first (before consuming body)
       const replaceMode = req.headers.get("X-Replace-Mode") === "true";
       
@@ -81,16 +113,7 @@ export function makeStepsHandlers({ stepsTable }) {
 
       const client = await pool.connect();
       try {
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS ${stepsTable} (
-            id SERIAL PRIMARY KEY,
-            no INTEGER,
-            sop_related TEXT,
-            status VARCHAR(20) DEFAULT 'DRAFT',
-            comment TEXT DEFAULT '',
-            reviewer VARCHAR(255) DEFAULT ''
-          );
-        `);
+        await ensureStepsTable(client);
         await client.query("BEGIN");
         
         // If replace mode, delete all existing data first
@@ -166,12 +189,29 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
     `);
   };
 
-  const GET = async () => {
+  const GET = async (req) => {
     try {
       const client = await pool.connect();
       try {
         await ensureTable(client);
-        const r = await client.query(`SELECT ${SELECT_COLUMNS} FROM ${metaTable} ORDER BY id DESC LIMIT 10`);
+
+        const url = new URL(req?.url || "", "http://localhost");
+        const yearParam = url.searchParams.get("year");
+        const year = yearParam ? parseInt(yearParam, 10) : null;
+
+        let r;
+        if (!Number.isNaN(year) && year) {
+          const from = new Date(year, 0, 1);
+          const to = new Date(year + 1, 0, 1);
+          r = await client.query(
+            `SELECT ${SELECT_COLUMNS} FROM ${metaTable}
+             WHERE created_at >= $1 AND created_at < $2
+             ORDER BY id DESC LIMIT 10`,
+            [from, to],
+          );
+        } else {
+          r = await client.query(`SELECT ${SELECT_COLUMNS} FROM ${metaTable} ORDER BY id DESC LIMIT 10`);
+        }
         return NextResponse.json({ success: true, rows: r.rows }, { status: 200 });
       } catch (dbErr) {
         console.error(`DB error SELECT ${metaTable}:`, dbErr);
@@ -187,6 +227,10 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
 
   const POST = async (req) => {
     try {
+      // Hanya editor SOP (user/reviewer/admin) yang boleh mengubah meta SOP (preparer/reviewer)
+      const authError = await requireSopEditor();
+      if (authError) return authError;
+
       const body = await req.json().catch(() => ({}));
       const {
         sop_status,
@@ -284,6 +328,10 @@ export function makeAuditPeriodHandlers({ auditPeriodTable, departmentName }) {
 
   const POST = async (req) => {
     try {
+      // Hanya editor SOP (user/reviewer/admin) yang boleh mengubah periode audit SOP
+      const authError = await requireSopEditor();
+      if (authError) return authError;
+
       const body = await req.json().catch(() => ({}));
       const { audit_period_start, audit_period_end } = body || {};
 

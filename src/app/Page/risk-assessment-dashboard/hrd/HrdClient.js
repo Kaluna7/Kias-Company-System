@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
 import { NewHrdInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
@@ -16,6 +17,9 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin";
+
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
 
   const [convertMode, setConvertMode] = useState(false);
   const [viewDraft, setViewDraft] = useState(false);
@@ -100,7 +104,7 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
             setViewDraft(true);
             setConvertMode(false);
             setEditMode(false);
-            await loadHrd("draft");
+            await loadHrd("draft", 1, 50, yearParam || undefined);
           } finally {
             isLoadingRef.current = false;
           }
@@ -115,7 +119,7 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
             setViewDraft(false);
             setConvertMode(false);
             setEditMode(false);
-            await loadHrd("published");
+            await loadHrd("published", 1, 50, yearParam || undefined);
           } finally {
             isLoadingRef.current = false;
           }
@@ -173,7 +177,12 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
         isLoadingRef.current = true;
         setPaginationLoading(true);
         try {
-          await loadHrd(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+          await loadHrd(
+            viewDraft ? "draft" : "published",
+            page ?? meta?.page ?? 1,
+            meta?.pageSize ?? 50,
+            yearParam || undefined
+          );
         } finally {
           isLoadingRef.current = false;
           setPaginationLoading(false);
@@ -252,7 +261,7 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadHrd(viewDraft ? "draft" : "published");
+                loadHrd(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />

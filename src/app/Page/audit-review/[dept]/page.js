@@ -33,7 +33,7 @@ async function loadAuditReviewData(dept) {
     // Fetch audit finding report data (completed findings only)
     let findings = [];
     try {
-      const findingsRes = await fetch(`${baseUrl}/api/audit-finding/${deptInfo.apiPath}`, {
+      const findingsRes = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(deptInfo.apiPath)}?include_completed=1`, {
         next: { revalidate: 30 },
       });
       if (findingsRes.ok) {
@@ -106,10 +106,34 @@ async function loadAuditReviewData(dept) {
       console.warn(`Error fetching schedule for ${dept}:`, err);
     }
 
-    return { findings, executiveSummary, schedule };
+    const scheduleYear =
+      schedule?.end_date
+        ? new Date(schedule.end_date).getFullYear()
+        : schedule?.start_date
+          ? new Date(schedule.start_date).getFullYear()
+          : new Date().getFullYear();
+
+    // Fetch saved audit-review findings first, because report preview must follow reviewed data.
+    let reviewedFindings = [];
+    try {
+      const reviewedFindingsRes = await fetch(
+        `${baseUrl}/api/audit-review/${encodeURIComponent(deptInfo.apiPath)}/findings?year=${encodeURIComponent(String(scheduleYear))}`,
+        {
+          next: { revalidate: 30 },
+        },
+      );
+      if (reviewedFindingsRes.ok) {
+        const reviewedJson = await reviewedFindingsRes.json();
+        reviewedFindings = Array.isArray(reviewedJson.rows) ? reviewedJson.rows : [];
+      }
+    } catch (err) {
+      console.warn(`Error fetching reviewed findings for ${dept}:`, err);
+    }
+
+    return { findings, reviewedFindings, executiveSummary, schedule };
   } catch (err) {
     console.error(`Error loading audit review data for ${dept}:`, err);
-    return { findings: [], executiveSummary: null, schedule: null };
+    return { findings: [], reviewedFindings: [], executiveSummary: null, schedule: null };
   }
 }
 
@@ -131,7 +155,7 @@ export default async function AuditReviewDeptPage({ params }) {
     );
   }
 
-  const { findings, executiveSummary, schedule } = await loadAuditReviewData(dept);
+  const { findings, reviewedFindings, executiveSummary, schedule } = await loadAuditReviewData(dept);
 
   return (
     <AuditReviewDeptClient
@@ -139,6 +163,7 @@ export default async function AuditReviewDeptPage({ params }) {
       deptName={deptInfo.deptName}
       titleCode={deptInfo.titleCode}
       initialFindings={findings}
+      initialReviewedFindings={reviewedFindings}
       initialExecutiveSummary={executiveSummary}
       initialSchedule={schedule}
     />

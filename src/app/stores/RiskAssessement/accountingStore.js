@@ -10,9 +10,12 @@ export const useAccountingStore = create((set, get) => ({
   setAccounting: (data) => set({ accounting: data }),
   setAccountingAndMeta: (data, meta) => set({ accounting: data, meta: meta ?? null }),
 
-  loadAccounting: async (status = "published", page = 1, pageSize = 50) => {
+  loadAccounting: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/accounting?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch accounting");
       const json = await res.json();

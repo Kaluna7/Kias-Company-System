@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { Search } from "@/app/components/features/Button";
 import { NewWarehouseInput } from "@/app/components/ui/PopUpRiskAssessmentInput";
@@ -16,6 +17,9 @@ export default function WhsClient({ initialData = [], initialMeta = null }) {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin";
+
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
 
   const [convertMode, setConvertMode] = useState(false);
   const [viewDraft, setViewDraft] = useState(false);
@@ -100,7 +104,7 @@ export default function WhsClient({ initialData = [], initialMeta = null }) {
             setViewDraft(true);
             setConvertMode(false);
             setEditMode(false);
-            await loadWarehouse("draft");
+            await loadWarehouse("draft", 1, 50, yearParam || undefined);
           } finally {
             isLoadingRef.current = false;
           }
@@ -115,7 +119,7 @@ export default function WhsClient({ initialData = [], initialMeta = null }) {
             setViewDraft(false);
             setConvertMode(false);
             setEditMode(false);
-            await loadWarehouse("published");
+            await loadWarehouse("published", 1, 50, yearParam || undefined);
           } finally {
             isLoadingRef.current = false;
           }
@@ -173,7 +177,12 @@ export default function WhsClient({ initialData = [], initialMeta = null }) {
         isLoadingRef.current = true;
         setPaginationLoading(true);
         try {
-          await loadWarehouse(viewDraft ? "draft" : "published", page ?? meta?.page ?? 1, meta?.pageSize ?? 50);
+          await loadWarehouse(
+            viewDraft ? "draft" : "published",
+            page ?? meta?.page ?? 1,
+            meta?.pageSize ?? 50,
+            yearParam || undefined
+          );
         } finally {
           isLoadingRef.current = false;
           setPaginationLoading(false);
@@ -252,7 +261,7 @@ export default function WhsClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadWarehouse(viewDraft ? "draft" : "published");
+                loadWarehouse(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />

@@ -23,7 +23,9 @@ function getDeptKeyFromDepartmentName(deptName) {
   return deptMap[deptName] || null;
 }
 
-export default async function B2AuditFinding() {
+export default async function B2AuditFinding({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
@@ -103,7 +105,11 @@ export default async function B2AuditFinding() {
     baseFindings.map(async (base) => {
       if (!baseUrl) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
       try {
-        const res = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`, { cache: 'no-store' });
+        const url = new URL(`${baseUrl}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`);
+        if (yearParam) {
+          url.searchParams.set("year", String(yearParam));
+        }
+        const res = await fetch(url.toString(), { cache: 'no-store' });
         if (!res.ok) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
         const json = await res.json().catch(() => null);
         const meta = json?.success ? json.data : null;
@@ -123,6 +129,8 @@ export default async function B2AuditFinding() {
   );
 
   const auditFindings = metaResults;
+
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
@@ -276,7 +284,7 @@ export default async function B2AuditFinding() {
               ) : (
               <Link 
                 key={finding.id}
-                href={`/Page/audit-finding/${deptPath}`}
+                href={`/Page/audit-finding/${deptPath}${yearQuery}`}
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px] block"
               >
                 <div className="flex justify-between items-start mb-3">
@@ -318,7 +326,7 @@ export default async function B2AuditFinding() {
             
             {/* Report Card - Added after all department cards */}
             <Link 
-              href="/Page/audit-finding/report"
+              href={`/Page/audit-finding/report${yearQuery}`}
               className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px] block"
             >
               <div className="flex justify-between items-start mb-3">

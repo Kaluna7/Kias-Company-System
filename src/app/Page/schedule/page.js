@@ -70,6 +70,7 @@ export default function SchedulePage() {
   const [tempMaxDate, setTempMaxDate] = useState("");
   const [rangeMonth, setRangeMonth] = useState(() => new Date());
   const [userPickerContext, setUserPickerContext] = useState(null); // { moduleKey, department_id } when popup open
+  const [tempSelectedUserIds, setTempSelectedUserIds] = useState([]); // multiple user ids for picker
   const [inlineSavingKey, setInlineSavingKey] = useState(""); // `${moduleKey}:${department_id}`
   const [archive, setArchive] = useState({ archivedModules: new Set(), archivedByModule: new Map() });
   const todayIso = new Date().toISOString().split("T")[0];
@@ -1824,9 +1825,17 @@ export default function SchedulePage() {
                         <td className="px-2 py-3 sm:px-6 sm:py-4 text-center">
                           <button
                             type="button"
-                            className="inline-flex items-center justify-center gap-1.5 w-full min-w-0 sm:w-44 sm:min-w-[11rem] h-9 sm:h-10 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 px-3 transition-colors text-left"
-                            onClick={() => setUserPickerContext({ moduleKey: section.key, department_id: row.department_id })}
-                            title="Pilih user"
+                            className="inline-flex items-center justify-center gap-1.5 w-full min-w-0 sm:w-48 sm:min-w-[12rem] h-9 sm:h-10 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 px-3 transition-colors text-left"
+                            onClick={() => {
+                              // Init multi-selection state from existing row.user_id (comma separated)
+                              const existingIds = String(row.user_id || "")
+                                .split(",")
+                                .map((v) => v.trim())
+                                .filter(Boolean);
+                              setTempSelectedUserIds(existingIds);
+                              setUserPickerContext({ moduleKey: section.key, department_id: row.department_id });
+                            }}
+                            title="Pilih user (multiple)"
                           >
                             <span className={`text-xs truncate flex-1 min-w-0 ${row.user ? "text-white/95" : "text-white/50"}`}>
                               {row.user || "Select user"}
@@ -1871,18 +1880,56 @@ export default function SchedulePage() {
         if (!row) return null;
         const pickerKey = buildPickerKey(moduleKey, row);
         const saving = inlineSavingKey === pickerKey;
+
+        const toggleUserInTemp = (id) => {
+          setTempSelectedUserIds((prev) => {
+            const s = new Set(prev);
+            if (s.has(id)) {
+              s.delete(id);
+            } else {
+              s.add(id);
+            }
+            return Array.from(s);
+          });
+        };
+
+        const handleSaveUsers = async () => {
+          const selectedIds = tempSelectedUserIds;
+          const selectedUsers = users.filter((u) => selectedIds.includes(String(u.id)));
+          const userIdValue = selectedIds.join(",");
+          const userNameValue = selectedUsers.map((u) => u.name).join(", ");
+
+          setInlineSavingKey(pickerKey);
+          updateModuleRowState(moduleKey, row.department_id, {
+            user: userNameValue,
+            user_id: userIdValue,
+          });
+          const r = await saveModuleRow(moduleKey, row, {
+            user_id: userIdValue || null,
+            user_name: userNameValue || null,
+          });
+          setInlineSavingKey("");
+          if (!r.ok) {
+            toast.show("Gagal update user: " + (r.error || "Unknown error"), "error");
+          } else {
+            setUserPickerContext(null);
+          }
+        };
+
+        const isUnassigned = !tempSelectedUserIds || tempSelectedUserIds.length === 0;
+
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
             onClick={() => !saving && setUserPickerContext(null)}
           >
             <div
-              className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-[min(380px,95vw)] max-h-[85vh] overflow-hidden flex flex-col"
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-[min(420px,95vw)] max-h-[85vh] overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50/30 flex items-center justify-between">
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-slate-800">Select user</div>
+                  <div className="text-sm font-bold text-slate-800">Select users</div>
                   <div className="text-xs text-slate-500 truncate mt-0.5">
                     {moduleLabel(moduleKey)} — {row.department}
                   </div>
@@ -1895,61 +1942,70 @@ export default function SchedulePage() {
                   ✕
                 </button>
               </div>
-              <div className="max-h-72 overflow-auto p-3">
+              <div className="max-h-72 overflow-auto p-3 space-y-1.5">
                 <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-100">
                   <input
-                    type="radio"
-                    name="user-picker"
-                    checked={!row.user_id}
+                    type="checkbox"
+                    checked={isUnassigned}
                     disabled={saving}
                     className="text-blue-600"
-                    onChange={async () => {
-                      setInlineSavingKey(pickerKey);
-                      updateModuleRowState(moduleKey, row.department_id, { user: "", user_id: "" });
-                      const r = await saveModuleRow(moduleKey, row, { user_id: null, user_name: null });
-                      setInlineSavingKey("");
-                      if (!r.ok) {
-                        toast.show("Gagal update user: " + (r.error || "Unknown error"), "error");
-                      } else {
-                        setUserPickerContext(null);
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setTempSelectedUserIds([]);
                       }
                     }}
                   />
-                  <div className="text-sm font-semibold text-slate-800">Unassign</div>
+                  <div className="text-sm font-semibold text-slate-800">Unassign all</div>
                 </label>
                 <div className="my-2 border-t border-slate-100" />
-                {users.map((u) => (
-                  <label key={u.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-100">
-                    <input
-                      type="radio"
-                      name="user-picker"
-                      checked={String(row.user_id || "") === String(u.id)}
-                      disabled={saving}
-                      className="text-blue-600"
-                      onChange={async () => {
-                        setInlineSavingKey(pickerKey);
-                        updateModuleRowState(moduleKey, row.department_id, { user: u.name, user_id: u.id });
-                        const r = await saveModuleRow(moduleKey, row, { user_id: u.id, user_name: u.name });
-                        setInlineSavingKey("");
-                        if (!r.ok) {
-                          toast.show("Gagal update user: " + (r.error || "Unknown error"), "error");
-                        } else {
-                          setUserPickerContext(null);
-                        }
-                      }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-slate-800 truncate">{u.name}</div>
-                      <div className="text-xs text-slate-500 truncate">{u.email}</div>
-                    </div>
-                  </label>
-                ))}
+                {users.map((u) => {
+                  const idStr = String(u.id);
+                  const checked = tempSelectedUserIds.includes(idStr);
+                  return (
+                    <label
+                      key={u.id}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-100"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={saving}
+                        className="text-blue-600"
+                        onChange={() => toggleUserInTemp(idStr)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-slate-800 truncate">{u.name}</div>
+                        <div className="text-xs text-slate-500 truncate">{u.email}</div>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
-              {saving && (
-                <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/80 text-center text-xs text-slate-500 font-medium">
-                  Saving…
+              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-slate-500">
+                  {isUnassigned
+                    ? "No user selected"
+                    : `${tempSelectedUserIds.length} user(s) selected`}
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-medium hover:bg-slate-200 transition-colors"
+                    onClick={() => !saving && setUserPickerContext(null)}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-60"
+                    onClick={handleSaveUsers}
+                    disabled={saving}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         );

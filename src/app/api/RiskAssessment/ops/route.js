@@ -24,7 +24,9 @@ export async function GET(req) {
     const pageSize = Math.max(1, Math.min(100, toIntSafe(searchParams.get("pageSize"), 50)));
     const skip = (page - 1) * pageSize;
 
-    const where = status ? { status } : undefined;
+    const where = {
+      ...(status ? { status } : {}),
+    };
 
     const [operationals, total] = await Promise.all([
       prisma.operational.findMany({
@@ -34,7 +36,7 @@ export async function GET(req) {
         skip,
         take: pageSize,
       }),
-      prisma.operational.count({ where: where ?? {} }),
+      prisma.operational.count({ where }),
     ]);
     const safeOperationals = await backfillRiskIdNoForRows(prisma.operational, operationals);
 

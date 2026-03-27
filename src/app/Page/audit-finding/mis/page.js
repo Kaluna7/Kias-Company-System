@@ -1,8 +1,11 @@
 import AuditFindingDeptClient from "@/app/Page/audit-finding/_components/AuditFindingDeptClient";
 import { loadAuditFindingInitialData } from "../_components/loadAuditFindingInitialData";
 
-export default async function MISAuditFindingPage() {
-  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("mis");
+export default async function MISAuditFindingPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  const { data: initialData, meta: initialMeta } = await loadAuditFindingInitialData("mis", year);
   return (
     <AuditFindingDeptClient
       apiPath="mis"

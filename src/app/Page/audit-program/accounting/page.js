@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import AccountingClient from "./AccountingClient";
 
-async function loadAccountingData(status = "published") {
+async function loadAccountingData(status = "published", year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -13,6 +13,7 @@ async function loadAccountingData(status = "published") {
       pageSize: "50",
     });
     if (status) params.set("status", status);
+    if (year) params.set("year", String(year));
 
     const res = await fetch(`${baseUrl}/api/AuditProgram/accounting?${params.toString()}`, {
       next: { revalidate: 0 }, // Always fetch fresh but allow Next.js to optimize
@@ -34,8 +35,12 @@ async function loadAccountingData(status = "published") {
   }
 }
 
-export default async function AccountingPage() {
-  const { data: initialData } = await loadAccountingData("published");
+export default async function AccountingPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : undefined;
+
+  const { data: initialData } = await loadAccountingData("published", !Number.isNaN(year) ? year : undefined);
   
   return (
     <AccountingClient 

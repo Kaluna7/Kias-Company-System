@@ -63,6 +63,12 @@ export default function AuditReviewHomePage() {
                   <br />
                   GUIDELINES
                 </Link>
+                <Link
+                  href="/Page/report/"
+                  className="rounded-2xl bg-white/90 border border-white shadow-sm hover:shadow-md transition px-4 py-3 text-center font-extrabold text-[#141D38] text-sm"
+                >
+                  REPORT
+                </Link>
               </div>
             </div>
           </div>
@@ -135,6 +141,35 @@ export default function AuditReviewHomePage() {
                     </div>
                   </Link>
                 ))}
+                {/* Report: buat report setelah data Audit Finding di-publish ke Audit Review dan di-cek */}
+                <Link
+                  href="/Page/report/"
+                  className="group bg-gradient-to-br from-white to-emerald-50 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-gray-200 hover:border-emerald-300 hover:translate-y-[-4px]"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg mb-2 inline-block">
+                        REPORT
+                      </span>
+                      <h3 className="text-lg font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">
+                        Report
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">KIAS Consolidated Report (data dari Audit Review)</p>
+                    </div>
+                    <div className="text-emerald-600 flex items-center group-hover:translate-x-1 transition-transform">
+                      <span className="text-sm font-semibold mr-1">Open</span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </div>
+                  </div>
+                </Link>
               </div>
             </div>
           </div>

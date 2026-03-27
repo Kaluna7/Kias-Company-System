@@ -1,23 +1,20 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 
 export default function EvidenceReportClient({ initialData }) {
-  const [data, setData] = useState(initialData);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // Data sudah difilter di server berdasarkan year & status COMPLETE.
+  const data = initialData || [];
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
 
-  // Group data by department and created_date (same date)
+  // Group data by department and created_date; one item = one AP (evidence row), bisa punya banyak file
   const groupedData = useMemo(() => {
     const groups = {};
     
     data.forEach(row => {
-      // Get date string (YYYY-MM-DD) for grouping
       const dateKey = row.created_at 
         ? new Date(row.created_at).toISOString().split('T')[0]
         : 'no-date';
-      
       const groupKey = `${row.department}|||${dateKey}`;
       
       if (!groups[groupKey]) {
@@ -31,14 +28,42 @@ export default function EvidenceReportClient({ initialData }) {
         };
       }
       
-      groups[groupKey].items.push(row);
+      let attachments = [];
+      if (Array.isArray(row.attachments) && row.attachments.length > 0) {
+        attachments = row.attachments;
+      } else if (row.file_url || row.attachment) {
+        // file_url bisa berisi JSON string array attachments, atau 1 URL biasa
+        const raw = row.file_url || row.attachment;
+        if (typeof raw === "string" && raw.trim().startsWith("[")) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              attachments = parsed
+                .filter((item) => item && typeof item.url === "string")
+                .map((item) => ({
+                  url: item.url,
+                  name: item.name || row.file_name || "",
+                  uploaded_at: item.uploaded_at || null,
+                }));
+            }
+          } catch {
+            // fallback ke single URL
+            attachments = [{ url: raw, name: row.file_name || "", uploaded_at: null }];
+          }
+        } else {
+          attachments = [{ url: raw, name: row.file_name || "", uploaded_at: null }];
+        }
+      }
       
-      // Update preparer and overall_status from latest item
+      groups[groupKey].items.push({
+        ...row,
+        attachments,
+      });
+      
       if (row.preparer) groups[groupKey].preparer = row.preparer;
       if (row.overall_status) groups[groupKey].overallStatus = row.overall_status;
     });
     
-    // Convert to array and sort
     return Object.values(groups).sort((a, b) => {
       if (a.department !== b.department) {
         return a.department.localeCompare(b.department);
@@ -50,78 +75,6 @@ export default function EvidenceReportClient({ initialData }) {
     });
   }, [data]);
 
-  const loadData = async () => {
-    // Map department untuk API endpoint
-    const departmentMap = {
-      'FINANCE': '/api/evidence/finance',
-      'ACCOUNTING': '/api/evidence/accounting',
-      'OPERATIONAL': '/api/evidence/ops',
-      'HRD': '/api/evidence/hrd',
-      'G&A': '/api/evidence/g&a',
-      'SDP': '/api/evidence/sdp',
-      'TAX': '/api/evidence/tax',
-      'L&P': '/api/evidence/l&p',
-      'MIS': '/api/evidence/mis',
-      'MERCHANDISE': '/api/evidence/merch',
-      'WAREHOUSE': '/api/evidence/whs',
-    };
-    setLoading(true);
-    setError(null);
-    try {
-      // Load data dari semua department yang tersedia
-      const allData = [];
-      const departments = Object.keys(departmentMap);
-      
-      for (const dept of departments) {
-        try {
-          const endpoint = departmentMap[dept];
-          const res = await fetch(`${endpoint}?department=${dept}`);
-          const json = await res.json();
-          
-          if (res.ok && json.success && Array.isArray(json.data)) {
-            // Tambahkan department name ke setiap row
-            // Only include rows that have been saved as evidence (have id from evidence table)
-            // The 'id' field indicates that this record exists in the evidence table
-            json.data.forEach(row => {
-              // Only include if it has been saved as evidence (has id from evidence table)
-              // This means the user has clicked Save at least once
-              if (row.id != null && row.ap_id && row.ap_code) {
-                allData.push({
-                  ...row,
-                  // normalize: new API returns `attachment`, old one had `file_url`
-                  file_url: row.file_url || row.attachment || "",
-                  // meta is returned per department
-                  preparer: row.preparer || json?.meta?.preparer || "",
-                  overall_status: row.overall_status || json?.meta?.overall_status || "",
-                  department: dept,
-                });
-              }
-            });
-          }
-        } catch (err) {
-          // Skip jika API tidak tersedia untuk department tertentu
-          console.log(`API not available for ${dept}:`, err);
-        }
-      }
-
-      // Sort by department and created_at
-      allData.sort((a, b) => {
-        if (a.department !== b.department) {
-          return a.department.localeCompare(b.department);
-        }
-        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-      });
-
-      setData(allData);
-    } catch (err) {
-      console.error("Load report error:", err);
-      setError(String(err));
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleView = (group) => {
     setSelectedGroup(group);
     setViewOpen(true);
@@ -132,21 +85,11 @@ export default function EvidenceReportClient({ initialData }) {
       <div className="px-3 sm:px-4 pt-6 pb-4 flex flex-col h-full">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm text-slate-700 font-semibold">B3.1 EVIDENCE REPORT</div>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
         </div>
         <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-          {loading && <div className="text-sm text-gray-600 mb-4">Loading...</div>}
-          {error && <div className="text-sm text-red-600 mb-4">Failed to load data: {error}</div>}
-
           {/* Grouped Data Display */}
           <div className="mt-4 space-y-4">
-            {groupedData.length === 0 && !loading && (
+            {groupedData.length === 0 && (
               <div className="p-8 text-center text-sm text-gray-600">
                 Belum ada data evidence yang disimpan. Silakan save data di evidence department terlebih dahulu.
               </div>
@@ -200,7 +143,7 @@ export default function EvidenceReportClient({ initialData }) {
                   </div>
                 </div>
 
-                {/* Group Summary Table */}
+                {/* Group Summary Table (tanpa kolom Status) */}
                 <div className="overflow-x-auto -mx-2 sm:mx-0">
                   <table className="min-w-[480px] w-full text-xs">
                     <thead className="bg-gray-100">
@@ -208,41 +151,31 @@ export default function EvidenceReportClient({ initialData }) {
                         <th className="p-2 text-left font-semibold border border-gray-200">AP Code</th>
                         <th className="p-2 text-left font-semibold border border-gray-200">Substantive Test</th>
                         <th className="p-2 text-left font-semibold border border-gray-200">File Name</th>
-                        <th className="p-2 text-center font-semibold border border-gray-200">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {group.items.slice(0, 5).map((item, idx) => (
-                        <tr
-                          key={`${item.ap_id}-${idx}`}
-                          className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                        >
-                          <td className="p-2 border border-gray-200 font-medium">{item.ap_code || "-"}</td>
-                          <td className="p-2 border border-gray-200">
-                            <div className="max-w-xs truncate" title={item.substantive_test || "-"}>
-                              {item.substantive_test || "-"}
-                            </div>
-                          </td>
-                          <td className="p-2 border border-gray-200">
-                            {item.file_name ? (
-                              <span className="text-blue-600 font-medium">{item.file_name}</span>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="p-2 border border-gray-200 text-center">
-                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                              item.status === "COMPLETE"
-                                ? "bg-green-200 text-green-900"
-                                : item.status === "IN PROGRESS"
-                                ? "bg-yellow-200 text-yellow-900"
-                                : "bg-gray-200 text-gray-800"
-                            }`}>
-                              {item.status || "-"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {group.items.slice(0, 5).map((item, idx) => {
+                        const files = item.attachments || [];
+                        const fileNames = files.length > 0 ? files.map(f => f.name || "").filter(Boolean).join(", ") : (item.file_name || "-");
+                        return (
+                          <tr
+                            key={`${item.ap_id}-${item.id}-${idx}`}
+                            className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                          >
+                            <td className="p-2 border border-gray-200 font-medium">{item.ap_code || "-"}</td>
+                            <td className="p-2 border border-gray-200">
+                              <div className="max-w-xs truncate" title={item.substantive_test || "-"}>
+                                {item.substantive_test || "-"}
+                              </div>
+                            </td>
+                            <td className="p-2 border border-gray-200">
+                              <div className="max-w-xs text-xs text-gray-700" title={fileNames}>
+                                {files.length > 1 ? `${files.length} files: ${fileNames.slice(0, 40)}${fileNames.length > 40 ? "…" : ""}` : (fileNames || "-")}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {group.items.length > 5 && (
                         <tr>
                           <td colSpan={4} className="p-2 text-center text-gray-500 italic border border-gray-200">
@@ -276,7 +209,7 @@ export default function EvidenceReportClient({ initialData }) {
                           month: "short", 
                           year: "numeric" 
                         })
-                      : "No Date"} | Total Items: {selectedGroup.items.length}
+                      : "No Date"} | AP Items: {selectedGroup.items.length} | Total Files: {selectedGroup.items.reduce((n, it) => n + (it.attachments?.length || 0), 0)}
                   </p>
                 </div>
                 <button
@@ -319,12 +252,12 @@ export default function EvidenceReportClient({ initialData }) {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Total Evidence Items</div>
-                    <div className="text-sm mt-1 font-bold text-blue-600">{selectedGroup.items.length}</div>
+                    <div className="text-sm mt-1 font-bold text-blue-600">{selectedGroup.items.length} AP(s), {selectedGroup.items.reduce((n, it) => n + (it.attachments?.length || 0), 0)} file(s)</div>
                   </div>
                 </div>
               </div>
 
-              {/* All Items Table */}
+              {/* All Items Table (tanpa kolom Status) */}
               <div className="overflow-x-auto -mx-2 sm:mx-0">
                 <table className="min-w-[520px] w-full border-collapse text-xs">
                   <thead>
@@ -332,100 +265,86 @@ export default function EvidenceReportClient({ initialData }) {
                       <th className="p-2 text-left font-semibold border border-gray-300">AP Code</th>
                       <th className="p-2 text-left font-semibold border border-gray-300">Substantive Test</th>
                       <th className="p-2 text-left font-semibold border border-gray-300">File Name</th>
-                      <th className="p-2 text-center font-semibold border border-gray-300">Status</th>
                       <th className="p-2 text-center font-semibold border border-gray-300">Updated Date</th>
                       <th className="p-2 text-center font-semibold border border-gray-300">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedGroup.items.map((item, idx) => (
-                      <tr
-                        key={`${item.ap_id}-${item.id}-${idx}`}
-                        className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                      >
-                        <td className="p-2 border border-gray-200 font-medium">{item.ap_code || "-"}</td>
-                        <td className="p-2 border border-gray-200">
-                          <div className="max-w-md break-words">{item.substantive_test || "-"}</div>
-                        </td>
-                        <td className="p-2 border border-gray-200">
-                          {item.file_name ? (
-                            <span className="text-blue-600 font-medium">{item.file_name}</span>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                        <td className="p-2 border border-gray-200 text-center">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            item.status === "COMPLETE"
-                              ? "bg-green-200 text-green-900"
-                              : item.status === "IN PROGRESS"
-                              ? "bg-yellow-200 text-yellow-900"
-                              : "bg-gray-200 text-gray-800"
-                          }`}>
-                            {item.status || "-"}
-                          </span>
-                        </td>
-                        <td className="p-2 border border-gray-200 text-center whitespace-nowrap">
-                          {item.updated_at 
-                            ? new Date(item.updated_at).toLocaleDateString("en-GB", { 
-                                day: "2-digit", 
-                                month: "short", 
-                                year: "numeric" 
-                              })
-                            : "-"}
-                        </td>
-                        <td className="p-2 border border-gray-200 text-center">
-                          {item.file_url && (
-                            <a
-                              href={item.file_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs"
-                            >
-                              Open
-                            </a>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedGroup.items.map((item, idx) => {
+                      const files = item.attachments || [];
+                      const fileNames = files.length > 0 ? files.map(f => f.name || "").filter(Boolean) : [];
+                      return (
+                        <tr
+                          key={`${item.ap_id}-${item.id}-${idx}`}
+                          className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                        >
+                          <td className="p-2 border border-gray-200 font-medium align-top">{item.ap_code || "-"}</td>
+                          <td className="p-2 border border-gray-200 align-top">
+                            <div className="max-w-md break-words">{item.substantive_test || "-"}</div>
+                          </td>
+                          <td className="p-2 border border-gray-200 align-top">
+                            <div className="text-xs space-y-0.5">
+                              {fileNames.length > 0 ? fileNames.map((name, i) => (
+                                <div key={i} className="text-gray-700">{name}</div>
+                              )) : (item.file_name ? <span className="text-blue-600 font-medium">{item.file_name}</span> : "-")}
+                            </div>
+                          </td>
+                          <td className="p-2 border border-gray-200 text-center whitespace-nowrap align-top">
+                            {item.updated_at 
+                              ? new Date(item.updated_at).toLocaleDateString("en-GB", { 
+                                  day: "2-digit", 
+                                  month: "short", 
+                                  year: "numeric" 
+                                })
+                              : "-"}
+                          </td>
+                          <td className="p-2 border border-gray-200 align-top">
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {(files.length > 0 ? files : (item.file_url ? [{ url: item.file_url, name: item.file_name }] : [])).map((f, i) => (
+                                f.url && (
+                                  <a
+                                    key={i}
+                                    href={f.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs whitespace-nowrap"
+                                  >
+                                    Open{files.length > 1 ? ` ${i + 1}` : ""}
+                                  </a>
+                                )
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* Files Section */}
-              {selectedGroup.items.some(item => item.file_url || item.file_name) && (
+              {/* Uploaded Files - satu card per file */}
+              {selectedGroup.items.some(item => (item.attachments?.length || 0) > 0) && (
                 <div>
                   <h4 className="font-semibold text-gray-700 mb-3">Uploaded Files</h4>
                   <div className="space-y-2">
-                    {selectedGroup.items
-                      .filter(item => item.file_url || item.file_name)
-                      .map((item, idx) => (
-                        <div key={`file-${item.ap_id}-${idx}`} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    {selectedGroup.items.flatMap((item, itemIdx) =>
+                      (item.attachments || []).map((att, attIdx) => (
+                        <div key={`file-${item.ap_id}-${itemIdx}-${attIdx}`} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                           <div className="flex items-center gap-3">
                             <svg className="w-6 h-6 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <div className="font-medium text-blue-900 text-xs">AP Code: {item.ap_code || "-"}</div>
-                              <div className="text-sm text-gray-700">{item.file_name || "N/A"}</div>
-                              {item.file_url && (
-                                <a
-                                  href={item.file_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 hover:underline break-all text-xs"
-                                >
-                                  {item.file_url}
+                              <div className="text-sm text-gray-700 truncate" title={att.name || ""}>{att.name || "N/A"}</div>
+                              {att.url && (
+                                <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all text-xs block truncate">
+                                  {att.url}
                                 </a>
                               )}
                             </div>
-                            {item.file_url && (
-                              <a
-                                href={item.file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1"
-                              >
+                            {att.url && (
+                              <a href={att.url} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1 flex-shrink-0">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
@@ -434,7 +353,8 @@ export default function EvidenceReportClient({ initialData }) {
                             )}
                           </div>
                         </div>
-                      ))}
+                      ))
+                    )}
                   </div>
                 </div>
               )}

@@ -23,7 +23,7 @@ function getDeptKeyFromDepartmentName(deptName) {
   return deptMap[deptName] || null;
 }
 
-export default async function Evidence() {
+export default async function Evidence({ searchParams }) {
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
@@ -89,14 +89,18 @@ export default async function Evidence() {
     { id: 'E1.11', department: 'WAREHOUSE' }
   ];
 
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header dengan Logo */}
         <header className="mb-8">
-          <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">
-            <div className="flex flex-row md:flex-row justify-between items-center">
-                <div className="flex items-center justify-center md:justify-start space-x-3">
+          <div className="bg-[#141D38] rounded-xl shadow-lg p-4 sm:p-6 mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
+                <div className="flex items-center justify-center sm:justify-start space-x-3">
                   <div>
                     <Image
                     src="/images/kias-logo.webp"
@@ -106,8 +110,8 @@ export default async function Evidence() {
                     />
                   </div>
                 </div>
-                <div className="text-center">
-                    <h3 className="text-2xl font-bold text-white">E.1 EVIDENCE</h3>
+                <div className="text-center sm:text-right">
+                    <h3 className="text-xl sm:text-2xl font-bold text-white">E.1 EVIDENCE</h3>
                     <p className="text-blue-100 mt-1">Management Dashboard</p>
                 </div>
             </div>
@@ -115,7 +119,7 @@ export default async function Evidence() {
         </header>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-8">
           <div className="bg-white rounded-xl shadow p-5">
             <div className="flex items-center">
               <div className="bg-blue-100 p-3 rounded-lg mr-4">
@@ -162,7 +166,7 @@ export default async function Evidence() {
         {/* Evidence Grid */}
         <div className="mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Evidence by Department</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {evidences.map((evidence) => {
               // Map evidence ID to department folder
               const deptMap = {
@@ -187,8 +191,8 @@ export default async function Evidence() {
                   key={evidence.id}
                   className="bg-gray-100 rounded-xl shadow-sm p-5 border border-gray-200 opacity-60 cursor-not-allowed"
                 >
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-gray-600">{evidence.department}</h3>
+                  <div className="flex justify-between items-center gap-3">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-600 break-words">{evidence.department}</h3>
                     <div className="text-gray-400 flex items-center">
                       <span className="text-sm font-medium">Locked</span>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -200,11 +204,11 @@ export default async function Evidence() {
               ) : (
               <Link 
                 key={evidence.id}
-                href={`/Page/evidence/${deptPath}`}
+                href={`/Page/evidence/${deptPath}${yearQuery}`}
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
               >
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-800">{evidence.department}</h3>
+                <div className="flex justify-between items-center gap-3">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-800 break-words">{evidence.department}</h3>
                   <div className="text-blue-600 flex items-center">
                     <span className="text-sm font-medium">Open</span>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -218,11 +222,11 @@ export default async function Evidence() {
             
             {/* Report Card */}
             <Link 
-              href="/Page/evidence/report"
+              href={`/Page/evidence/report${yearQuery}`}
               className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 p-5 border border-gray-200 hover:border-blue-300 hover:translate-y-[-2px]"
             >
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-gray-800">REPORT</h3>
+              <div className="flex justify-between items-center gap-3">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">REPORT</h3>
                 <div className="text-blue-600 flex items-center">
                   <span className="text-sm font-medium">Open</span>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

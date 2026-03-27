@@ -10,9 +10,12 @@ export const useOperationalStore = create((set, get) => ({
 
   setOpsAndMeta: (data, meta) => set({ operational: data, meta: meta ?? null }),
 
-  loadOperational: async (status = "published", page = 1, pageSize = 50) => {
+  loadOperational: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/ops?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch operational");
       const json = await res.json();

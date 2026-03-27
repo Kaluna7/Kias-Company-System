@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback, useDeferredValue } from "react";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 import { useToast } from "@/app/contexts/ToastContext";
@@ -33,6 +33,10 @@ function normalizeRows(rows) {
   }));
 }
 
+function isValidFindingRowPayload(item) {
+  return item && typeof item === "object" && !Array.isArray(item);
+}
+
 export default function AuditFindingDeptClient({
   apiPath,
   titleCode,
@@ -56,8 +60,6 @@ export default function AuditFindingDeptClient({
   const [preparerStatus, setPreparerStatus] = useState("");
   const [finalStatus, setFinalStatus] = useState("");
   const [findingResult, setFindingResult] = useState("");
-  const [findingResultFileName, setFindingResultFileName] = useState("");
-  const [reportAs, setReportAs] = useState("");
   const [prepare, setPrepare] = useState("");
   const [prepareDate, setPrepareDate] = useState("");
   const [review, setReview] = useState("");
@@ -66,6 +68,7 @@ export default function AuditFindingDeptClient({
   const [schedulePreparerDate, setSchedulePreparerDate] = useState(""); // From schedule
 
   const [tableData, setTableData] = useState(() => normalizeRows(initialData));
+  const deferredTableData = useDeferredValue(tableData);
   const [findingMeta, setFindingMeta] = useState(initialMeta);
   const [isEditMode, setIsEditMode] = useState(false); // Global edit mode for all rows
   const [isScheduleConfigured, setIsScheduleConfigured] = useState(false); // Schedule configuration status
@@ -79,6 +82,7 @@ export default function AuditFindingDeptClient({
   const saveTableDataTimeoutRef = useRef(null);
   const isSavingTableDataRef = useRef(false);
   const lastSavedTableDataRef = useRef(null);
+  const isTableDirtyRef = useRef(false);
 
   const statusOptions = useMemo(
     () => [
@@ -135,8 +139,6 @@ export default function AuditFindingDeptClient({
           setPreparerStatus(meta.preparer_status || "");
           setFinalStatus(meta.final_status || "");
           setFindingResult(meta.finding_result || "");
-          setFindingResultFileName(meta.finding_result_file_name || "");
-          setReportAs(meta.report_as || "");
           // Use schedule data if available, otherwise use meta data
           setPrepare(meta.prepare || "");
           // Set prepareDate from meta (schedule date will override via separate useEffect)
@@ -149,8 +151,6 @@ export default function AuditFindingDeptClient({
             preparerStatus: meta.preparer_status || "",
             finalStatus: meta.final_status || "",
             findingResult: meta.finding_result || "",
-            findingResultFileName: meta.finding_result_file_name || "",
-            reportAs: meta.report_as || "",
             prepare: meta.prepare || "",
             prepareDate: meta.prepare_date ? String(meta.prepare_date).slice(0, 10) : "",
             review: meta.review || "",
@@ -162,8 +162,6 @@ export default function AuditFindingDeptClient({
             preparerStatus: "",
             finalStatus: "",
             findingResult: "",
-            findingResultFileName: "",
-            reportAs: "",
             prepare: "",
             prepareDate: "",
             review: "",
@@ -177,8 +175,6 @@ export default function AuditFindingDeptClient({
               setPreparerStatus(parsed.preparerStatus ?? "");
               setFinalStatus(parsed.finalStatus ?? "");
               setFindingResult(parsed.findingResult ?? "");
-              setFindingResultFileName(parsed.findingResultFileName ?? "");
-              setReportAs(parsed.reportAs ?? "");
               setPrepare(parsed.prepare ?? "");
               // Set prepareDate from localStorage (schedule date will override via separate useEffect)
               setPrepareDate(parsed.prepareDate ?? "");
@@ -189,8 +185,6 @@ export default function AuditFindingDeptClient({
                 preparerStatus: parsed.preparerStatus ?? "",
                 finalStatus: parsed.finalStatus ?? "",
                 findingResult: parsed.findingResult ?? "",
-                findingResultFileName: parsed.findingResultFileName ?? "",
-                reportAs: parsed.reportAs ?? "",
                 prepare: parsed.prepare ?? "",
                 prepareDate: parsed.prepareDate ?? "",
                 review: parsed.review ?? "",
@@ -208,8 +202,6 @@ export default function AuditFindingDeptClient({
           preparerStatus: "",
           finalStatus: "",
           findingResult: "",
-          findingResultFileName: "",
-          reportAs: "",
           prepare: "",
           prepareDate: "",
           review: "",
@@ -223,8 +215,6 @@ export default function AuditFindingDeptClient({
             setPreparerStatus(parsed.preparerStatus ?? "");
             setFinalStatus(parsed.finalStatus ?? "");
             setFindingResult(parsed.findingResult ?? "");
-            setFindingResultFileName(parsed.findingResultFileName ?? "");
-            setReportAs(parsed.reportAs ?? "");
             setPrepare(parsed.prepare ?? "");
             // Set prepareDate from localStorage (schedule date will override via separate useEffect)
             setPrepareDate(parsed.prepareDate ?? "");
@@ -235,8 +225,6 @@ export default function AuditFindingDeptClient({
               preparerStatus: parsed.preparerStatus ?? "",
               finalStatus: parsed.finalStatus ?? "",
               findingResult: parsed.findingResult ?? "",
-              findingResultFileName: parsed.findingResultFileName ?? "",
-              reportAs: parsed.reportAs ?? "",
               prepare: parsed.prepare ?? "",
               prepareDate: parsed.prepareDate ?? "",
               review: parsed.review ?? "",
@@ -255,6 +243,78 @@ export default function AuditFindingDeptClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiPath]);
 
+  // Sync completionStatus from Evidence REPORT-style data:
+  // Hanya AP yang sudah punya file DAN is_published=true (overall_status=COMPLETE) yang di-set ke "Ready to Publish".
+  useEffect(() => {
+    async function syncCompletionStatusFromEvidence() {
+      try {
+        const deptLabelMap = {
+          finance: "FINANCE",
+          accounting: "ACCOUNTING",
+          hrd: "HRD",
+          "g&a": "G&A",
+          ga: "G&A",
+          sdp: "SDP",
+          tax: "TAX",
+          "l&p": "L&P",
+          lp: "L&P",
+          mis: "MIS",
+          merch: "MERCHANDISE",
+          ops: "OPERATIONAL",
+          whs: "WAREHOUSE",
+        };
+        const deptLabel = deptLabelMap[apiPath];
+        if (!deptLabel) return;
+
+        const params = new URLSearchParams({
+          department: deptLabel,
+          page: "1",
+          pageSize: "1000",
+        });
+        const res = await fetch(`/api/evidence/${encodeURIComponent(apiPath)}?${params.toString()}`);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.data || !Array.isArray(json.data)) return;
+
+        // ambil ap_code yang sudah published (punya file & is_published=true)
+        const publishedCodes = new Set(
+          json.data
+            .filter(
+              (row) =>
+                row.is_published === true &&
+                (row.file_url || row.attachment || (Array.isArray(row.attachments) && row.attachments.length > 0)) &&
+                row.ap_code,
+            )
+            .map((row) => String(row.ap_code).trim()),
+        );
+        if (publishedCodes.size === 0) return;
+
+        // update completionStatus di Finding: hanya untuk AP yang published & belum COMPLETED
+        setTableData((prev) => {
+          let changed = false;
+          const updated = prev.map((row) => {
+            const code = (row.apCode || "").toString().trim();
+            if (
+              code &&
+              publishedCodes.has(code) &&
+              row.completionStatus !== "Ready to Publish" &&
+              row.completionStatus !== "COMPLETED"
+            ) {
+              changed = true;
+              return { ...row, completionStatus: "Ready to Publish" };
+            }
+            return row;
+          });
+          if (changed) isTableDirtyRef.current = true;
+          return changed ? updated : prev;
+        });
+      } catch {
+        // abaikan error agar halaman tetap jalan
+      }
+    }
+
+    syncCompletionStatusFromEvidence();
+  }, [apiPath]);
+
   // Auto-save meta data to API
   const saveMetaData = useCallback(async () => {
     if (isSavingMetaRef.current) return;
@@ -263,8 +323,6 @@ export default function AuditFindingDeptClient({
       preparerStatus,
       finalStatus,
       findingResult,
-      findingResultFileName,
-      reportAs,
       prepare,
       prepareDate,
       review,
@@ -291,8 +349,6 @@ export default function AuditFindingDeptClient({
           preparer_status: preparerStatus,
           final_status: finalStatus,
           finding_result: findingResult,
-          finding_result_file_name: findingResultFileName,
-          report_as: reportAs,
           prepare: prepare,
           prepare_date: prepareDate,
           review: review,
@@ -309,8 +365,6 @@ export default function AuditFindingDeptClient({
             preparerStatus: saved.preparer_status || "",
             finalStatus: saved.final_status || "",
             findingResult: saved.finding_result || "",
-            findingResultFileName: saved.finding_result_file_name || "",
-            reportAs: saved.report_as || "",
             prepare: saved.prepare || "",
             prepareDate: saved.prepare_date ? String(saved.prepare_date).slice(0, 10) : "",
             review: saved.review || "",
@@ -334,8 +388,6 @@ export default function AuditFindingDeptClient({
     preparerStatus,
     finalStatus,
     findingResult,
-    findingResultFileName,
-    reportAs,
     prepare,
     prepareDate,
     review,
@@ -370,8 +422,6 @@ export default function AuditFindingDeptClient({
     preparerStatus,
     finalStatus,
     findingResult,
-    findingResultFileName,
-    reportAs,
     prepare,
     prepareDate,
     review,
@@ -387,8 +437,6 @@ export default function AuditFindingDeptClient({
           preparerStatus,
           finalStatus,
           findingResult,
-          findingResultFileName,
-          reportAs,
           prepare,
           prepareDate,
           review,
@@ -403,8 +451,6 @@ export default function AuditFindingDeptClient({
     preparerStatus,
     finalStatus,
     findingResult,
-    findingResultFileName,
-    reportAs,
     prepare,
     prepareDate,
     review,
@@ -421,7 +467,20 @@ export default function AuditFindingDeptClient({
       const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}?${params.toString()}`, { method: "GET" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to fetch data");
-      setTableData(normalizeRows(json.data ?? []));
+      const rawRows = Array.isArray(json?.data) ? json.data : [];
+      const sanitizedRows = rawRows.filter(isValidFindingRowPayload);
+      if (rawRows.length !== sanitizedRows.length) {
+        console.warn(
+          `[Audit Finding] Ignored ${rawRows.length - sanitizedRows.length} invalid row(s) from API ${apiPath}.`,
+        );
+      }
+      const normalized = normalizeRows(sanitizedRows);
+      setTableData(normalized);
+      // Sinkronkan snapshot terakhir yang tersimpan supaya:
+      // - tombol Cancel mengembalikan ke state ini
+      // - auto-save tidak menimpa perubahan yang baru saja di-load
+      lastSavedTableDataRef.current = JSON.parse(JSON.stringify(normalized));
+      isTableDirtyRef.current = false;
       if (json.meta) setFindingMeta(json.meta);
     } catch (e) {
       setError(e?.message || String(e));
@@ -565,19 +624,14 @@ export default function AuditFindingDeptClient({
     if (initialMeta) setFindingMeta(initialMeta);
     // Initialize lastSavedTableDataRef to prevent immediate auto-save on initial load
     lastSavedTableDataRef.current = normalized;
+    isTableDirtyRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiPath, initialData, initialMeta]);
 
   // Auto-save table data to API
   const saveTableData = useCallback(async () => {
     if (isSavingTableDataRef.current) return;
-
-    // Skip if no changes
-    if (lastSavedTableDataRef.current) {
-      const currentDataStr = JSON.stringify(tableData);
-      const lastSavedDataStr = JSON.stringify(lastSavedTableDataRef.current);
-      if (currentDataStr === lastSavedDataStr) return;
-    }
+    if (!isTableDirtyRef.current) return;
 
     isSavingTableDataRef.current = true;
     try {
@@ -586,9 +640,11 @@ export default function AuditFindingDeptClient({
       
       for (let i = 0; i < updatedTableData.length; i++) {
         const row = updatedTableData[i];
-        if (row.id != null) {
+        const numericId = row.id != null ? Number(row.id) : null;
+        const hasValidId = Number.isFinite(numericId) && numericId > 0;
+        if (hasValidId) {
           // Update existing row
-          const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}`, {
+          const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -623,8 +679,20 @@ export default function AuditFindingDeptClient({
             });
           savePromises.push(promise);
         } else {
-          // Create new row (only if row has some meaningful data)
-          if (row.riskId || row.apCode || row.findingResult || row.preparer) {
+          // Create new row only if user actually entered meaningful editable content.
+          // Jangan buat row hanya karena completionStatus default dari sistem.
+          if (
+            row.riskId ||
+            row.apCode ||
+            row.findingResult ||
+            row.preparer ||
+            row.risk !== "" ||
+            row.checkYN ||
+            row.method ||
+            row.findingDescription ||
+            row.recommendation ||
+            row.auditee
+          ) {
             const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -677,6 +745,7 @@ export default function AuditFindingDeptClient({
       
       // Update lastSavedTableDataRef after successful save
       lastSavedTableDataRef.current = JSON.parse(JSON.stringify(updatedTableData));
+      isTableDirtyRef.current = false;
     } catch (err) {
       console.warn("Error saving table data:", err);
     } finally {
@@ -684,19 +753,21 @@ export default function AuditFindingDeptClient({
     }
   }, [apiPath, tableData]);
 
-  // Auto-save table data with debounce
+  // Auto-save table data with debounce.
+  // Penting: JANGAN auto-save ketika user sedang edit (isEditMode=true),
+  // supaya tidak terasa seperti halaman "auto refresh" saat mengetik.
   useEffect(() => {
+    // Kalau masih initial load atau user sedang edit, jangan auto-save.
+    if (lastSavedTableDataRef.current === null || isEditMode) {
+      return;
+    }
+
     // Clear existing timeout
     if (saveTableDataTimeoutRef.current) {
       clearTimeout(saveTableDataTimeoutRef.current);
     }
 
-    // Skip initial load (when lastSavedTableDataRef is null)
-    if (lastSavedTableDataRef.current === null) {
-      return;
-    }
-
-    // Debounce save by 1 second
+    // Debounce save by 1 detik
     saveTableDataTimeoutRef.current = setTimeout(() => {
       saveTableData();
     }, 1000);
@@ -706,14 +777,19 @@ export default function AuditFindingDeptClient({
         clearTimeout(saveTableDataTimeoutRef.current);
       }
     };
-  }, [saveTableData, tableData]);
+  }, [saveTableData, tableData, isEditMode]);
 
   // Handle cell edit
-  const handleCellEdit = (rowIndex, field, value) => {
-    const updated = [...tableData];
-    updated[rowIndex] = { ...updated[rowIndex], [field]: value };
-    setTableData(updated);
-  };
+  const handleCellEdit = useCallback((rowIndex, field, value) => {
+    setTableData((prev) => {
+      const row = prev[rowIndex];
+      if (!row || row[field] === value) return prev;
+      const updated = [...prev];
+      updated[rowIndex] = { ...row, [field]: value };
+      isTableDirtyRef.current = true;
+      return updated;
+    });
+  }, []);
 
   // Handle toggle edit mode
   const handleToggleEditMode = () => {
@@ -722,16 +798,27 @@ export default function AuditFindingDeptClient({
   };
 
   // Handle cancel edit mode
-  const handleCancelEdit = async () => {
+  const handleCancelEdit = () => {
     setIsEditMode(false);
-    await fetchData(); // Reload data to discard changes
+    // Kembalikan data tabel ke snapshot terakhir yang tersimpan (bukan hitung ulang dari server),
+    // supaya completion_status yang sudah benar (mis. Ready to Publish) tidak ikut di-reset ke Draft.
+    if (lastSavedTableDataRef.current) {
+      // Clone deep supaya tidak share reference
+      const cloned = JSON.parse(JSON.stringify(lastSavedTableDataRef.current));
+      isTableDirtyRef.current = false;
+      setTableData(cloned);
+    } else {
+      // Fallback: kalau belum ada snapshot, reload dari server
+      fetchData();
+    }
   };
 
   // Handle publish (user will click manually, not auto publish)
-  // When published, data will automatically appear in report
+  // Only rows with COMPLETION STATUS = "Ready to Publish" will be published to audit review.
+  // Save all current edits first so data is persisted before publish.
   const handlePublish = async () => {
-    // Check if schedule is configured
-    if (!isScheduleConfigured) {
+    // Check if schedule is configured (non-admin only)
+    if (!isScheduleConfigured && !isAdmin) {
       toast.show("Sorry, no schedule", "error");
       return;
     }
@@ -739,38 +826,47 @@ export default function AuditFindingDeptClient({
     try {
       setLoading(true);
       setError(null);
-      
-      // Double-check schedule before publishing
-      const apiPathToDeptId = {
-        'finance': 'A1.1',
-        'accounting': 'A1.2',
-        'hrd': 'A1.3',
-        'g&a': 'A1.4',
-        'ga': 'A1.4',
-        'sdp': 'A1.5',
-        'tax': 'A1.6',
-        'l&p': 'A1.7',
-        'lp': 'A1.7',
-        'mis': 'A1.8',
-        'merch': 'A1.9',
-        'ops': 'A1.10',
-        'whs': 'A1.11',
-      };
-      
-      const deptId = apiPathToDeptId[apiPath];
-      if (deptId) {
-        const scheduleRes = await fetch(`/api/schedule/module?module=audit-finding`, {
-          next: { revalidate: 0 },
-        });
-        
-        if (scheduleRes.ok) {
-          const scheduleJson = await scheduleRes.json();
-          if (scheduleJson.success && Array.isArray(scheduleJson.rows)) {
-            const scheduleRow = scheduleJson.rows.find(row => 
-              row.department_id === deptId && row.is_configured === true
-            );
-            
-            if (!scheduleRow) {
+
+      // Save all current edits so data is persisted before publish (edited but not yet published will be saved)
+      await saveTableData();
+
+      // Double-check schedule before publishing (non-admin only)
+      if (!isAdmin) {
+        const apiPathToDeptId = {
+          finance: "A1.1",
+          accounting: "A1.2",
+          hrd: "A1.3",
+          "g&a": "A1.4",
+          ga: "A1.4",
+          sdp: "A1.5",
+          tax: "A1.6",
+          "l&p": "A1.7",
+          lp: "A1.7",
+          mis: "A1.8",
+          merch: "A1.9",
+          ops: "A1.10",
+          whs: "A1.11",
+        };
+
+        const deptId = apiPathToDeptId[apiPath];
+        if (deptId) {
+          const scheduleRes = await fetch(`/api/schedule/module?module=audit-finding`, {
+            next: { revalidate: 0 },
+          });
+
+          if (scheduleRes.ok) {
+            const scheduleJson = await scheduleRes.json();
+            if (scheduleJson.success && Array.isArray(scheduleJson.rows)) {
+              const scheduleRow = scheduleJson.rows.find(
+                (row) => row.department_id === deptId && row.is_configured === true,
+              );
+
+              if (!scheduleRow) {
+                toast.show("Sorry, no schedule", "error");
+                setLoading(false);
+                return;
+              }
+            } else {
               toast.show("Sorry, no schedule", "error");
               setLoading(false);
               return;
@@ -780,14 +876,10 @@ export default function AuditFindingDeptClient({
             setLoading(false);
             return;
           }
-        } else {
-          toast.show("Sorry, no schedule", "error");
-          setLoading(false);
-          return;
         }
       }
       
-      // Publish all findings for this department
+      // Publish only findings with COMPLETION STATUS = "Ready to Publish"
       const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/publish`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -796,11 +888,16 @@ export default function AuditFindingDeptClient({
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to publish findings");
       
-      // Show success message and redirect to report
-      toast.show("Successfully published! Data is now available in Report.", "success");
+      const count = json?.count ?? 0;
+      if (count === 0) {
+        toast.show(json?.message || "No findings with status \"Ready to Publish\" to publish. Set COMPLETION STATUS to \"Ready to Publish\" for rows you want to publish.", "info");
+        return;
+      }
       
-      // Redirect to report page
-      window.location.href = "/Page/audit-finding/report";
+      toast.show("Successfully published! Data is now available in Audit Review and Report.", "success");
+      
+      // Refresh data on this page instead of redirecting away
+      await fetchData();
     } catch (e) {
       setError(e?.message || String(e));
       toast.show("Error: " + (e?.message || String(e)), "error");
@@ -879,32 +976,6 @@ export default function AuditFindingDeptClient({
     }
   };
 
-  const handleFindingResultFileSelect = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/upload`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.fileUrl) {
-        setFindingResult(data.fileUrl);
-        setFindingResultFileName(data.fileName || file.name);
-        toast.show("File uploaded. It will be saved automatically.", "success");
-      } else {
-        toast.show("Failed to upload file: " + (data?.error || "Unknown error"), "error");
-      }
-    } catch (err) {
-      toast.show("Error uploading file: " + (err?.message || err), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRemoveRow = async (index) => {
     const row = tableData[index];
     // If no ID, this is data from audit-program (not yet saved as finding), so can't delete
@@ -932,11 +1003,15 @@ export default function AuditFindingDeptClient({
       setLoading(true);
       setError(null);
 
-      // Save all rows that have been modified or are new
+      // Save all rows that have been modified atau baru
       for (const row of tableData) {
-        if (row.id) {
+        const numericId = row.id != null ? Number(row.id) : null;
+        const hasValidId = Number.isFinite(numericId) && numericId > 0;
+        if (hasValidId) {
           // Update existing
-          const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}`, {
+          const res = await fetch(
+            `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}`,
+            {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -961,8 +1036,19 @@ export default function AuditFindingDeptClient({
             const json = await res.json().catch(() => ({}));
             throw new Error(json?.error || "Failed to update data");
           }
-        } else if (row.riskId || row.riskDescription || row.apCode || row.risk || row.checkYN || row.preparer || row.findingResult || row.findingDescription || row.recommendation || row.auditee || row.completionStatus || row.completionDate) {
-          // Create new if has some data (including editable columns)
+        } else if (
+          row.riskId ||
+          row.riskDescription ||
+          row.apCode ||
+          row.risk !== "" ||
+          row.checkYN ||
+          row.preparer ||
+          row.findingResult ||
+          row.findingDescription ||
+          row.recommendation ||
+          row.auditee
+        ) {
+          // Create new only if user has entered meaningful editable data.
           const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1006,7 +1092,7 @@ export default function AuditFindingDeptClient({
       <div className="fixed z-40 top-3 right-4">
         <button
           onClick={() => setIsHeaderCollapsed((v) => !v)}
-          className="w-11 h-9 flex items-center justify-center rounded-full shadow-md hover:shadow-lg border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700 transition-all duration-300 transform hover:scale-110 active:scale-95"
+          className="w-11 h-9 flex items-center justify-center rounded-full shadow-md border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700"
           title={isHeaderCollapsed ? "Show header" : "Hide header"}
         >
           {isHeaderCollapsed ? "▼" : "▲"}
@@ -1015,16 +1101,12 @@ export default function AuditFindingDeptClient({
 
       {/* Fixed Header */}
       <header
-        className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl transition-all duration-700 ease-out ${
-          isHeaderCollapsed ? "transform -translate-y-full opacity-0 scale-95" : "transform translate-y-0 opacity-100 scale-100"
+        className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl ${
+          isHeaderCollapsed ? "hidden" : ""
         }`}
       >
         <div className="max-w-7xl mx-auto">
-          <div
-            className={`px-6 py-4 transition-all duration-500 delay-200 ${
-              isHeaderCollapsed ? "opacity-0 transform translate-y-2" : "opacity-100 transform translate-y-0"
-            }`}
-          >
+          <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg flex items-center justify-center">
@@ -1130,79 +1212,14 @@ export default function AuditFindingDeptClient({
                 <div className="space-y-3 text-sm">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-2">FINDING RESULT</label>
-                    {reportAs === "attachment file" ? (
-                      <div className="space-y-2">
-                        <label className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${isReviewer ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                            />
-                          </svg>
-                          Choose File
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={handleFindingResultFileSelect}
-                            accept=".xlsx,.xls,.pdf,.doc,.docx"
-                            disabled={isReviewer}
-                          />
-                        </label>
-                        {(findingResultFileName || findingResult) && (
-                          <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm space-y-1">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                />
-                              </svg>
-                              <span className="text-xs font-medium text-blue-700 truncate">{findingResultFileName || "File"}</span>
-                            </div>
-                            {findingResult && (findingResult.startsWith("/") || findingResult.startsWith("http")) && (
-                              <a
-                                href={findingResult}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
-                              >
-                                View file
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <input
-                        type="text"
-                        value={findingResult}
-                        onChange={(e) => setFindingResult(e.target.value)}
-                        disabled={isReviewer}
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Enter finding result"
-                      />
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2">REPORT AS</label>
-                    <select
-                      value={reportAs}
-                      onChange={(e) => setReportAs(e.target.value)}
+                    <input
+                      type="text"
+                      value={findingResult}
+                      onChange={(e) => setFindingResult(e.target.value)}
                       disabled={isReviewer}
                       className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">- Select -</option>
-                      <option value="on this sheet">On This Sheet</option>
-                      <option value="attachment file">Attachment File</option>
-                    </select>
+                      placeholder="Enter finding result"
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1327,18 +1344,24 @@ export default function AuditFindingDeptClient({
                 >
                   Edit
                 </button>
-            <button
-              onClick={handlePublish}
-              disabled={loading || !isScheduleConfigured || isReviewer}
-              className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                loading || !isScheduleConfigured || isReviewer
-                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700 text-white"
-              }`}
-              title={!isScheduleConfigured ? "Schedule not configured" : isReviewer ? "Reviewer cannot publish" : "Publish"}
-            >
-              {loading ? "Publishing..." : "Publish"}
-            </button>
+                <button
+                  onClick={handlePublish}
+                  disabled={loading || (!isScheduleConfigured && !isAdmin) || isReviewer}
+                  className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
+                    loading || (!isScheduleConfigured && !isAdmin) || isReviewer
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-purple-600 hover:bg-purple-700 text-white"
+                  }`}
+                  title={
+                    !isScheduleConfigured && !isAdmin
+                      ? "Schedule not configured"
+                      : isReviewer
+                      ? "Reviewer cannot publish"
+                      : "Publish"
+                  }
+                >
+                  {loading ? "Publishing..." : "Publish"}
+                </button>
               </>
             )}
           </div>
@@ -1380,7 +1403,7 @@ export default function AuditFindingDeptClient({
                 </tr>
               </thead>
               <tbody>
-                {tableData.length === 0 ? (
+                {deferredTableData.length === 0 ? (
                   <tr>
                     <td colSpan={21} className="p-8 text-center text-gray-500">
                       <div className="flex flex-col items-center justify-center">
@@ -1390,7 +1413,7 @@ export default function AuditFindingDeptClient({
                     </td>
                   </tr>
                 ) : (
-                  tableData.map((row, index) => {
+                  deferredTableData.map((row, index) => {
                     const isFromAuditProgram = !row.id && !isEditMode; // Data from audit-program doesn't have id, but can be edited if in edit mode
                     const isEditing = isEditMode; // All rows can be edited when edit mode is on
                     return (
@@ -1535,24 +1558,10 @@ export default function AuditFindingDeptClient({
                       ) : (
                         <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.auditee || "-"}</td>
                       )}
-                      {/* COMPLETION STATUS - Editable when in edit mode */}
-                      {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
-                          <select
-                            value={row.completionStatus || ""}
-                            onChange={(e) => handleCellEdit(index, "completionStatus", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          >
-                            {statusOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.completionStatus || "-"}</td>
-                      )}
+                      {/* COMPLETION STATUS - System managed, never editable */}
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {row.completionStatus || "-"}
+                      </td>
                       {/* COMPLETION DATE - Editable when in edit mode */}
                       {isEditing ? (
                         <td className="p-1 border border-gray-200 align-top">

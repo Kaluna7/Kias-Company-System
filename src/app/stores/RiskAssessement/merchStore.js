@@ -9,9 +9,12 @@ export const useMerchandiseStore = create((set, get) => ({
 
   setMerchAndMeta: (data, meta) => set({ merchandise: data, meta: meta ?? null }),
 
-  loadMerchandise: async (status = "published", page = 1, pageSize = 50) => {
+  loadMerchandise: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/merch?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch merchandise");
       const json = await res.json();

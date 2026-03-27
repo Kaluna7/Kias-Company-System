@@ -33,6 +33,7 @@ model finance {
   risk_id_no          String?     @db.VarChar(20)
   status              String?     @default("published") @db.VarChar(20)
   aps                 FinanceAp[]
+  created_at          DateTime?   @default(now()) @db.Timestamptz(6)
 }
 
 model accounting {
@@ -53,7 +54,9 @@ model accounting {
   onset_timeframe     String?        @db.VarChar(35)
   status              String?        @default("published") @db.VarChar(20)
   aps                 AccountingAp[]
+  created_at          DateTime?      @default(now()) @db.Timestamptz(6)
 }
+
 
 model general_affair {
   risk_id             Int               @id @default(autoincrement())
@@ -73,6 +76,7 @@ model general_affair {
   onset_timeframe     String?           @db.VarChar(35)
   status              String?           @default("published") @db.VarChar(20)
   aps                 GeneralAffairAp[]
+  created_at          DateTime?        @default(now()) @db.Timestamptz(6)
 }
 
 model hrd {
@@ -93,6 +97,7 @@ model hrd {
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
   aps                 HrdAp[]
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model lp {
@@ -113,6 +118,7 @@ model lp {
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
   aps                 LpAp[]
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model merchandise {
@@ -133,6 +139,7 @@ model merchandise {
   onset_timeframe     String?         @db.VarChar(35)
   status              String?         @default("published") @db.VarChar(20)
   aps                 MerchandiseAp[]
+  created_at          DateTime?       @default(now()) @db.Timestamptz(6)
 }
 
 model mis {
@@ -153,6 +160,7 @@ model mis {
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
   aps                 MisAp[]
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model operational {
@@ -173,6 +181,7 @@ model operational {
   onset_timeframe     String?         @db.VarChar(35)
   status              String?         @default("published") @db.VarChar(20)
   aps                 OperationalAp[]
+  created_at          DateTime?       @default(now()) @db.Timestamptz(6)
 }
 
 model sdp {
@@ -193,6 +202,7 @@ model sdp {
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
   aps                 SdpAp[]
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model tax {
@@ -213,6 +223,7 @@ model tax {
   onset_timeframe     String? @db.VarChar(35)
   status              String? @default("published") @db.VarChar(20)
   aps                 TaxAp[]
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model warehouse {
@@ -233,6 +244,7 @@ model warehouse {
   onset_timeframe     String?       @db.VarChar(35)
   status              String?       @default("published") @db.VarChar(20)
   aps                 WarehouseAp[]
+  created_at          DateTime?     @default(now()) @db.Timestamptz(6)
 }
 
 model FinanceAp {
@@ -444,7 +456,7 @@ model audit_finding_accounting {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?  
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -468,7 +480,7 @@ model audit_finding_finance {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?  
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -491,7 +503,7 @@ model audit_finding_hrd {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -514,7 +526,7 @@ model audit_finding_ga {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -537,7 +549,7 @@ model audit_finding_sdp {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?  
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -560,7 +572,7 @@ model audit_finding_tax {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?  
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -583,7 +595,7 @@ model audit_finding_lp {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -606,7 +618,7 @@ model audit_finding_mis {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -629,7 +641,7 @@ model audit_finding_merch {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -652,7 +664,7 @@ model audit_finding_ops {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -675,7 +687,7 @@ model audit_finding_whs {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -702,7 +714,7 @@ model worksheet_finance {
   created_at       DateTime? @default(now()) @db.Timestamptz(6)
   updated_at       DateTime? @updatedAt @db.Timestamptz(6)
 
-  @@map("worksheet_finance")
+  @@map("worksheet")
 }
 
 model evidence {

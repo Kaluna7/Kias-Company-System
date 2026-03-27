@@ -84,7 +84,7 @@ export default function SmallHeader({
 
   return (
     <div className="w-full z-[200]">
-      <header className="w-full bg-[#141D38]/85 backdrop-blur-xl backdrop-saturate-150 border-b border-white/20 min-h-[56px] md:h-14 flex items-center justify-between fixed px-4 md:px-6 py-2 md:py-0 shadow-lg shadow-black/10">
+      <header className="w-full bg-[#141D38]/85 backdrop-blur-xl backdrop-saturate-150 border-b border-white/20 min-h-[56px] md:h-14 flex items-center justify-between fixed px-3 sm:px-4 md:px-6 py-2 md:py-0 shadow-lg shadow-black/10">
         {/* Left Section: Logo + Hamburger (Mobile) / Menu (Desktop) */}
         <div className="flex items-center gap-4 md:gap-6">
           {/* Logo */}
@@ -173,15 +173,15 @@ export default function SmallHeader({
         )}
 
         {/* Right Section: Label */}
-        <div className="flex-shrink-0">
-          <h1 className="text-white rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 text-xs md:text-sm font-semibold px-3 md:px-6 py-1.5 md:py-2 shadow-sm whitespace-nowrap">
+        <div className="flex-shrink min-w-0 max-w-[60vw] sm:max-w-none">
+          <h1 className="text-white rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 text-[11px] sm:text-xs md:text-sm font-semibold px-2.5 sm:px-3 md:px-6 py-1.5 md:py-2 shadow-sm whitespace-nowrap overflow-hidden text-ellipsis">
             {label}
           </h1>
         </div>
 
         {/* Mobile Menu Overlay */}
         {isMobileMenuOpen && (
-          <div className="absolute top-full left-0 right-0 bg-[#141D38]/95 backdrop-blur-xl border-b border-white/20 shadow-xl md:hidden">
+          <div className="absolute top-full left-0 right-0 bg-[#141D38]/95 backdrop-blur-xl border-b border-white/20 shadow-xl md:hidden max-h-[70vh] overflow-y-auto">
             <div className="px-4 py-4 space-y-2">
               {/* File hanya untuk admin */}
               {role === "admin" && fileItems.length > 0 && (

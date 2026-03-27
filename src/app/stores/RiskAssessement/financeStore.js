@@ -11,9 +11,12 @@ export const useFinanceStore = create((set , get) => ({
   setFinance: (data) => set({ finance: data }),
   setFinanceAndMeta: (data, meta) => set({ finance: data, meta: meta ?? null }),
 
-  loadFinance: async (status = "published", page = 1, pageSize = 50) => {
+  loadFinance: async (status = "published", page = 1, pageSize = 50, year) => {
     try {
       const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+      if (year) {
+        params.set("year", String(year));
+      }
       const res = await fetch(`/api/RiskAssessment/finance?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch finances");
       const json = await res.json();

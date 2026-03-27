@@ -114,28 +114,75 @@ const SCHEDULE_ID_BY_DEPT_KEY = Object.fromEntries(
   Object.entries(DEPT_KEY_BY_SCHEDULE_ID).map(([scheduleId, deptKey]) => [deptKey, scheduleId])
 );
 
-async function getSopReviewDoneSet() {
-  // "Finish" = already published into report tables; use one connection and parallel checks
+/**
+ * Load schedule window (start_date, end_date) per department for sop-review.
+ * Returns Map(deptKey -> { start_date, end_date }) for rows where is_configured = true.
+ */
+async function loadSopReviewScheduleByDept() {
+  const byDept = new Map();
+  const check = await schedulePool.query(
+    `SELECT EXISTS (
+       SELECT FROM information_schema.tables
+       WHERE table_schema='public' AND table_name='schedule_module_feedback'
+     ) AS exists`
+  );
+  if (!check?.rows?.[0]?.exists) return byDept;
+
+  const r = await schedulePool.query(
+    `SELECT department_id, start_date, end_date
+     FROM public.schedule_module_feedback
+     WHERE module_key = 'sop-review' AND is_configured = true
+     ORDER BY department_id`
+  );
+  for (const row of r.rows || []) {
+    const deptKey = DEPT_KEY_BY_SCHEDULE_ID[String(row.department_id || "").trim()];
+    if (!deptKey || !row.start_date || !row.end_date) continue;
+    byDept.set(deptKey, {
+      start_date: row.start_date,
+      end_date: row.end_date,
+    });
+  }
+  return byDept;
+}
+
+/**
+ * SOP Review "Done" = user clicked Publish in that department FOR THE CURRENT SCHEDULE only.
+ * We require a publish whose published_at falls within the department's schedule window (start_date..end_date).
+ * So: hanya setelah user click Publish di module/department yang dipilih di schedule, baru dianggap Done.
+ */
+async function getSopReviewDoneSet(scheduleByDept) {
   const client = await pool.connect();
   try {
     const promises = [];
     const deptByIndex = [];
     for (const d of DEPARTMENTS) {
-      const stepsTable = `sops_report_${d.sopSlug}`;
       const metaTable = `sop_report_${d.sopSlug}`;
       deptByIndex.push(d.key);
+      const schedule = scheduleByDept?.get(d.key);
+      if (!schedule?.start_date || !schedule?.end_date) {
+        promises.push(Promise.resolve(false));
+        continue;
+      }
+      const startDate = schedule.start_date instanceof Date ? schedule.start_date : new Date(schedule.start_date);
+      const endDate = schedule.end_date instanceof Date ? schedule.end_date : new Date(schedule.end_date);
       promises.push(
-        client.query(`SELECT 1 FROM public.${metaTable} LIMIT 1`).then((r) => (r?.rowCount ?? 0) > 0).catch(() => false)
-      );
-      promises.push(
-        client.query(`SELECT 1 FROM public.${stepsTable} LIMIT 1`).then((r) => (r?.rowCount ?? 0) > 0).catch(() => false)
+        client
+          .query(
+            `SELECT 1 FROM public.${metaTable}
+             WHERE published_at IS NOT NULL
+               AND published_at::date >= $1::date
+               AND published_at::date <= $2::date
+             LIMIT 1`,
+            [startDate, endDate]
+          )
+          .then((r) => (r?.rowCount ?? 0) > 0)
+          .catch(() => false)
       );
     }
     const results = await Promise.all(promises);
     const done = new Set();
     for (let i = 0; i < DEPARTMENTS.length; i++) {
-      const has = results[i * 2] || results[i * 2 + 1];
-      if (has) done.add(deptByIndex[i]);
+      if (results[i]) done.add(deptByIndex[i]);
     }
     return done;
   } finally {
@@ -176,12 +223,23 @@ const auditFindingModelByDept = {
 };
 
 async function getAuditFindingDoneSet() {
+  // "Done" = has at least 1 finding that has been published.
+  // Data publish finding disimpan sebagai COMPLETED.
   const counts = await Promise.all(
     DEPARTMENTS.map((d) => {
       const model = auditFindingModelByDept[d.auditFindingDept];
       const delegate = model ? prisma[model] : null;
       if (!delegate) return Promise.resolve({ key: d.key, count: 0 });
-      return delegate.count().then((count) => ({ key: d.key, count }));
+      return delegate
+        .count({
+          where: {
+            completion_status: {
+              in: ["COMPLETED", "COMPLETE"],
+              mode: "insensitive",
+            },
+          },
+        })
+        .then((count) => ({ key: d.key, count }));
     })
   );
   const done = new Set();
@@ -191,10 +249,21 @@ async function getAuditFindingDoneSet() {
   return done;
 }
 
-async function getEvidenceDoneSet() {
-  // "Finish" = has at least 1 uploaded evidence file
+async function getEvidenceDoneSet(year) {
+  // "Done" = has at least 1 evidence row with file AND overall_status = COMPLETE (published)
+  const where = {
+    file_url: { not: null },
+    overall_status: { equals: "COMPLETE", mode: "insensitive" },
+  };
+  if (year) {
+    const from = new Date(year, 0, 1);
+    const to = new Date(year + 1, 0, 1);
+    // Gunakan updated_at sebagai tahun publish (bukan created_at),
+    // supaya progress mengikuti tahun ketika evidence dipublish.
+    where.updated_at = { gte: from, lt: to };
+  }
   const rows = await prisma.evidence.findMany({
-    where: { file_url: { not: null } },
+    where,
     distinct: ["department"],
     select: { department: true },
   });
@@ -254,19 +323,33 @@ async function loadAssignmentsByUser(userName) {
   );
   if (!check?.rows?.[0]?.exists) return { allowedDeptKeys: null, allowedByModule: null };
 
-  // schedule_module_feedback stores: module_key, department_id, user_name
-  // Only get assignments that are configured (is_configured = true)
+  // schedule_module_feedback menyimpan user_name sebagai satu string,
+  // tetapi sekarang bisa berisi beberapa user (dipisah koma).
+  // Kita ambil SEMUA baris is_configured=true lalu filter di kode.
   const r = await schedulePool.query(
-    `SELECT module_key, department_id
+    `SELECT module_key, department_id, user_name
      FROM public.schedule_module_feedback
-     WHERE user_name = $1 AND is_configured = true`,
-    [userName]
+     WHERE is_configured = true`
   );
 
   const allowedDeptKeys = new Set();
   const allowedByModule = new Map(); // moduleKey -> Set(deptKey)
 
+  const target = String(userName || "").trim().toLowerCase();
+
   for (const row of r.rows || []) {
+    const rawName = String(row.user_name || "").trim();
+    if (!rawName) continue;
+
+    // Pecah user_name menjadi list nama, trim, bandingkan case-insensitive
+    const names = rawName
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean)
+      .map((n) => n.toLowerCase());
+
+    if (!names.includes(target)) continue;
+
     const deptKey = DEPT_KEY_BY_SCHEDULE_ID[String(row.department_id || "").trim()];
     if (!deptKey) continue;
     allowedDeptKeys.add(deptKey);
@@ -370,16 +453,19 @@ export async function GET(req) {
   try {
     const url = new URL(req.url);
     const userName = (url.searchParams.get("userName") || "").trim();
+    const yearParam = url.searchParams.get("year");
+    const year = yearParam ? parseInt(yearParam, 10) : null;
 
-    const [assignments, archive, configuredByModule, sopDone, worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
+    const [assignments, archive, configuredByModule, sopScheduleByDept, worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
       loadAssignmentsByUser(userName || null),
       loadArchive(),
       loadConfiguredModules(),
-      getSopReviewDoneSet(),
+      loadSopReviewScheduleByDept(),
       getWorksheetDoneSet(),
       getAuditFindingDoneSet(),
-      getEvidenceDoneSet(),
+      getEvidenceDoneSet(year),
     ]);
+    const sopDone = await getSopReviewDoneSet(sopScheduleByDept);
 
     const sopAllowed = buildAllowedForModule({ moduleKey: "sop-review", ...assignments, configuredByModule });
     const wsAllowed = buildAllowedForModule({ moduleKey: "worksheet", ...assignments, configuredByModule });

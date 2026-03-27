@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import HrdClient from "./HrdClient";
 
-async function loadHrdData(status = "published") {
+async function loadHrdData(status = "published", year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -13,6 +13,7 @@ async function loadHrdData(status = "published") {
       pageSize: "50",
     });
     if (status) params.set("status", status);
+    if (year) params.set("year", String(year));
 
     const res = await fetch(`${baseUrl}/api/AuditProgram/hrd?${params.toString()}`, {
       next: { revalidate: 0 },
@@ -34,8 +35,12 @@ async function loadHrdData(status = "published") {
   }
 }
 
-export default async function HrdPage() {
-  const { data: initialData } = await loadHrdData("published");
+export default async function HrdPage({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  const year = yearParam ? parseInt(yearParam, 10) : undefined;
+
+  const { data: initialData } = await loadHrdData("published", !Number.isNaN(year) ? year : undefined);
   
   return (
     <HrdClient 

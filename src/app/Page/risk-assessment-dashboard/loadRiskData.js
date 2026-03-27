@@ -4,7 +4,7 @@ import { headers } from "next/headers";
  * Server-side fetch for risk assessment data. Used for SSR.
  * @param {string} apiPath - e.g. "finance", "sdp", "mis", "ops", "merch", "l&p", "g&a", "hrd", "tax", "whs"
  */
-export async function loadRiskData(apiPath, status = "published") {
+export async function loadRiskData(apiPath, status = "published", year) {
   try {
     const headersList = await headers();
     const host = headersList.get("host") || "localhost:3000";
@@ -16,6 +16,9 @@ export async function loadRiskData(apiPath, status = "published") {
       page: "1",
       pageSize: "50",
     });
+    if (year) {
+      params.set("year", String(year));
+    }
 
     const res = await fetch(`${baseUrl}/api/RiskAssessment/${apiPath}?${params.toString()}`, {
       next: { revalidate: 30 },

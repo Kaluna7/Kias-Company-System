@@ -365,7 +365,8 @@ export default function SOPHeader({
           return {
             no: (typeof s.step === "number" ? s.step : idx + 1),
             sop_related: clean,
-            status: "DRAFT",
+            // Default status for freshly parsed items: IN REVIEW
+            status: "IN REVIEW",
             comment: "",
             reviewer: "",
           };
@@ -530,7 +531,8 @@ export default function SOPHeader({
     const prepared = modalItems.map((it, idx) => ({
       no: idx + 1,
       sop_related: (it.sop_related || "").toString().trim(),
-      status: "DRAFT",
+      // Default status for appended items from header modal: IN REVIEW
+      status: "IN REVIEW",
       comment: (it.comment || "").toString().trim(),
       reviewer: ""
     }));
@@ -640,7 +642,8 @@ export default function SOPHeader({
                       className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={preparerStatus}
                       onChange={(e) => onPreparerStatusChange?.(e.target.value)}
-                      disabled={isReviewer}
+                      // Admin and reviewer cannot change header; only preparer/user may
+                      disabled={isReviewer || isAdmin}
                       suppressHydrationWarning
                     >
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -654,7 +657,8 @@ export default function SOPHeader({
                       placeholder="Name"
                       value={preparerName}
                       onChange={(e) => onPreparerNameChange?.(e.target.value)}
-                      disabled={isReviewer || (isUser && schedulePreparerName)}
+                      // Admin and reviewer cannot change header; user can, respecting schedule lock
+                      disabled={isReviewer || isAdmin || (isUser && schedulePreparerName)}
                       readOnly={isUser && schedulePreparerName}
                       suppressHydrationWarning
                     />
@@ -672,7 +676,8 @@ export default function SOPHeader({
                         }
                         onPreparerDateChange?.(e.target.value);
                       }}
-                      disabled={isReviewer || schedulePreparerDate}
+                      // Admin and reviewer cannot change preparer date; user only, and not if schedule locked
+                      disabled={isReviewer || isAdmin || schedulePreparerDate}
                       readOnly={schedulePreparerDate}
                       title={schedulePreparerDate ? `Date is set from schedule per module: ${schedulePreparerDate}. Cannot be changed.` : ""}
                       suppressHydrationWarning
@@ -686,6 +691,7 @@ export default function SOPHeader({
                         type="file"
                         accept="application/pdf"
                         onChange={handleFileChange}
+                        // Reviewer cannot upload; user and admin can upload & parse
                         disabled={isReviewer}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                       />
