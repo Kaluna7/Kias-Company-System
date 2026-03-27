@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -46,6 +46,61 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
   }, [initialData, initialMeta, setAccountingAndMeta]);
 
   const skipLoadForPublishedRef = useRef(!!(initialData?.length > 0));
+  const meta = useAccountingStore((s) => s.meta);
+  const accountings = useAccountingStore((s) => s.accounting);
+  const loadPage = useCallback(
+    async (page, pageSize = 50) => {
+      if (isLoadingRef.current) return;
+      isLoadingRef.current = true;
+      setPaginationLoading(true);
+      try {
+        await loadAccounting(
+          viewDraft ? "draft" : "published",
+          page ?? 1,
+          pageSize,
+          yearParam || undefined
+        );
+      } finally {
+        isLoadingRef.current = false;
+        setPaginationLoading(false);
+      }
+    },
+    [loadAccounting, viewDraft, yearParam]
+  );
+  const loadCurrentPage = useCallback(
+    () => loadPage(meta?.page ?? 1, meta?.pageSize ?? 50),
+    [loadPage, meta?.page, meta?.pageSize]
+  );
+  const prevViewDraftRef = useRef(viewDraft);
+  useEffect(() => {
+    const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
+    prevViewDraftRef.current = viewDraft;
+    if (!viewDraftChanged) {
+      if (viewDraft) loadPage(1);
+      else if (!skipLoadForPublishedRef.current) loadPage(1);
+      return;
+    }
+    loadPage(1);
+  }, [viewDraft, loadPage]);
+
+  const sortedAccountings = useMemo(() => {
+    if (!sortOption || !accountings) return accountings;
+
+    return [...accountings].sort((a, b) => {
+      const valA = a[sortOption.key];
+      const valB = b[sortOption.key];
+      if (valA === undefined || valB === undefined) return 0;
+
+      if (sortOption.key === "risk_id_no") {
+        const cmp = compareCode(valA, valB);
+        return sortOption.order === "asc" ? cmp : -cmp;
+      }
+
+      if (sortOption.order === "asc") return valA > valB ? 1 : -1;
+      else return valA < valB ? 1 : -1;
+    });
+  }, [accountings, sortOption]);
+
   const items = useMemo(() => {
     const base = [];
 
@@ -131,7 +186,7 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
         },
       },
     ];
-  }, [isAdmin, loadAccounting]);
+  }, [isAdmin, loadAccounting, yearParam]);
 
   const editItems = useMemo(
     () =>
@@ -174,86 +229,6 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
     []
   );
 
-  function AccountingTableWrapper() {
-    const meta = useAccountingStore((s) => s.meta);
-    const load = useCallback(
-      async (page) => {
-        if (isLoadingRef.current) return;
-        isLoadingRef.current = true;
-        setPaginationLoading(true);
-        try {
-          await loadAccounting(
-            viewDraft ? "draft" : "published",
-            page ?? meta?.page ?? 1,
-            meta?.pageSize ?? 50,
-            yearParam || undefined
-          );
-        } finally {
-          isLoadingRef.current = false;
-          setPaginationLoading(false);
-        }
-      },
-      [loadAccounting, viewDraft, meta?.page, meta?.pageSize]
-    );
-
-    const prevViewDraftRef = useRef(viewDraft);
-    useEffect(() => {
-      const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
-      prevViewDraftRef.current = viewDraft;
-      if (!viewDraftChanged) {
-        if (viewDraft) load(1);
-        else if (!skipLoadForPublishedRef.current) load(1);
-        return;
-      }
-      load(1);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewDraft]);
-
-    const accountings = useAccountingStore((s) => s.accounting);
-
-    const sortedAccountings = useMemo(() => {
-      if (!sortOption || !accountings) return accountings;
-
-      return [...accountings].sort((a, b) => {
-        const valA = a[sortOption.key];
-        const valB = b[sortOption.key];
-        if (valA === undefined || valB === undefined) return 0;
-
-        if (sortOption.key === "risk_id_no") {
-          const cmp = compareCode(valA, valB);
-          return sortOption.order === "asc" ? cmp : -cmp;
-        }
-
-        if (sortOption.order === "asc") return valA > valB ? 1 : -1;
-        else return valA < valB ? 1 : -1;
-      });
-    }, [accountings, sortOption]);
-
-    return (
-      <>
-        <DataTable
-          apiPath="accounting"
-          items={sortedAccountings}
-          load={() => load(meta?.page ?? 1)}
-          convertMode={convertMode}
-          onCloseConvert={() => setConvertMode(false)}
-          viewDraft={viewDraft}
-          editMode={editMode}
-          onEditRow={(item) => {
-            setSelectedItem(item);
-            openPopUp();
-          }}
-          searchQuery={searchQuery}
-        />
-        <Pagination
-          meta={meta}
-          onPageChange={(p) => load(p)}
-          loading={paginationLoading}
-        />
-      </>
-    );
-  }
-
   return (
     <main className="flex flex-col w-full h-screen overflow-hidden">
       <div className="flex flex-col flex-1 w-full h-full">
@@ -281,7 +256,25 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
               defaultData={selectedItem}
             />
           )}
-          <AccountingTableWrapper />
+          <DataTable
+            apiPath="accounting"
+            items={sortedAccountings}
+            load={loadCurrentPage}
+            convertMode={convertMode}
+            onCloseConvert={() => setConvertMode(false)}
+            viewDraft={viewDraft}
+            editMode={editMode}
+            onEditRow={(item) => {
+              setSelectedItem(item);
+              openPopUp();
+            }}
+            searchQuery={searchQuery}
+          />
+          <Pagination
+            meta={meta}
+            onPageChange={(p) => loadPage(p)}
+            loading={paginationLoading}
+          />
         </div>
       </div>
     </main>

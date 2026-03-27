@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -46,6 +46,61 @@ export default function MerchClient({ initialData = [], initialMeta = null }) {
   }, [initialData, initialMeta, setMerchAndMeta]);
 
   const skipLoadForPublishedRef = useRef(!!(initialData?.length > 0));
+  const meta = useMerchandiseStore((s) => s.meta);
+  const merchandises = useMerchandiseStore((s) => s.merchandise);
+  const loadPage = useCallback(
+    async (page, pageSize = 50) => {
+      if (isLoadingRef.current) return;
+      isLoadingRef.current = true;
+      setPaginationLoading(true);
+      try {
+        await loadMerchandise(
+          viewDraft ? "draft" : "published",
+          page ?? 1,
+          pageSize,
+          yearParam || undefined
+        );
+      } finally {
+        isLoadingRef.current = false;
+        setPaginationLoading(false);
+      }
+    },
+    [loadMerchandise, viewDraft, yearParam]
+  );
+  const loadCurrentPage = useCallback(
+    () => loadPage(meta?.page ?? 1, meta?.pageSize ?? 50),
+    [loadPage, meta?.page, meta?.pageSize]
+  );
+  const prevViewDraftRef = useRef(viewDraft);
+  useEffect(() => {
+    const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
+    prevViewDraftRef.current = viewDraft;
+    if (!viewDraftChanged) {
+      if (viewDraft) loadPage(1);
+      else if (!skipLoadForPublishedRef.current) loadPage(1);
+      return;
+    }
+    loadPage(1);
+  }, [viewDraft, loadPage]);
+
+  const sortedMerchandises = useMemo(() => {
+    if (!sortOption || !merchandises) return merchandises;
+
+    return [...merchandises].sort((a, b) => {
+      const valA = a[sortOption.key];
+      const valB = b[sortOption.key];
+      if (valA === undefined || valB === undefined) return 0;
+
+      if (sortOption.key === "risk_id_no") {
+        const cmp = compareCode(valA, valB);
+        return sortOption.order === "asc" ? cmp : -cmp;
+      }
+
+      if (sortOption.order === "asc") return valA > valB ? 1 : -1;
+      else return valA < valB ? 1 : -1;
+    });
+  }, [merchandises, sortOption]);
+
 
   // âœ… Menu tombol utama (hanya admin yang punya tombol New Data + Export)
   const items = useMemo(() => {
@@ -133,7 +188,7 @@ export default function MerchClient({ initialData = [], initialMeta = null }) {
         },
       },
     ];
-  }, [isAdmin, loadMerchandise]);
+  }, [isAdmin, loadMerchandise, yearParam]);
 
   const editItems = useMemo(
     () =>
@@ -176,82 +231,6 @@ export default function MerchClient({ initialData = [], initialMeta = null }) {
     []
   );
 
-  function MerchandiseTableWrapper() {
-    const meta = useMerchandiseStore((s) => s.meta);
-    const load = useCallback(
-      async (page) => {
-        if (isLoadingRef.current) return;
-        isLoadingRef.current = true;
-        setPaginationLoading(true);
-        try {
-          await loadMerchandise(
-            viewDraft ? "draft" : "published",
-            page ?? meta?.page ?? 1,
-            meta?.pageSize ?? 50,
-            yearParam || undefined
-          );
-        } finally {
-          isLoadingRef.current = false;
-          setPaginationLoading(false);
-        }
-      },
-      [loadMerchandise, viewDraft, meta?.page, meta?.pageSize]
-    );
-
-    const prevViewDraftRef = useRef(viewDraft);
-    useEffect(() => {
-      const viewDraftChanged = prevViewDraftRef.current !== viewDraft;
-      prevViewDraftRef.current = viewDraft;
-      if (!viewDraftChanged) {
-        if (viewDraft) load(1);
-        else if (!skipLoadForPublishedRef.current) load(1);
-        return;
-      }
-      load(1);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewDraft]);
-
-    const merchandises = useMerchandiseStore((s) => s.merchandise);
-
-    const sortedMerchandises = useMemo(() => {
-      if (!sortOption || !merchandises) return merchandises;
-
-      return [...merchandises].sort((a, b) => {
-        const valA = a[sortOption.key];
-        const valB = b[sortOption.key];
-        if (valA === undefined || valB === undefined) return 0;
-
-        if (sortOption.key === "risk_id_no") {
-          const cmp = compareCode(valA, valB);
-          return sortOption.order === "asc" ? cmp : -cmp;
-        }
-
-        if (sortOption.order === "asc") return valA > valB ? 1 : -1;
-        else return valA < valB ? 1 : -1;
-      });
-    }, [merchandises, sortOption]);
-
-    return (
-      <>
-        <DataTable
-          apiPath="merch"
-          items={sortedMerchandises}
-          load={() => load(meta?.page ?? 1)}
-          convertMode={convertMode}
-          onCloseConvert={() => setConvertMode(false)}
-          viewDraft={viewDraft}
-          editMode={editMode}
-          onEditRow={(item) => {
-            setSelectedItem(item);
-            openPopUp();
-          }}
-          searchQuery={searchQuery}
-        />
-        <Pagination meta={meta} onPageChange={(p) => load(p)} loading={paginationLoading} />
-      </>
-    );
-  }
-
   return (
     <main className="flex flex-col w-full h-screen overflow-hidden">
       <div className="flex flex-col flex-1 w-full h-full">
@@ -279,7 +258,21 @@ export default function MerchClient({ initialData = [], initialMeta = null }) {
               defaultData={selectedItem}
             />
           )}
-          <MerchandiseTableWrapper />
+          <DataTable
+            apiPath="merch"
+            items={sortedMerchandises}
+            load={loadCurrentPage}
+            convertMode={convertMode}
+            onCloseConvert={() => setConvertMode(false)}
+            viewDraft={viewDraft}
+            editMode={editMode}
+            onEditRow={(item) => {
+              setSelectedItem(item);
+              openPopUp();
+            }}
+            searchQuery={searchQuery}
+          />
+          <Pagination meta={meta} onPageChange={(p) => loadPage(p)} loading={paginationLoading} />
         </div>
       </div>
     </main>
