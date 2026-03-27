@@ -1,5 +1,6 @@
 // src/app/Page/dashboard/page.js
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
