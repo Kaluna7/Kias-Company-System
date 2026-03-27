@@ -27,6 +27,25 @@ function getDepartmentApiPath(name) {
   return deptMap[name] || null;
 }
 
+// Map card label to assignment dept key from API (/api/schedule/user-assignments)
+function getDeptKeyFromCardName(name) {
+  const keyMap = {
+    "Finnance": "finance",
+    "Finance": "finance",
+    "Accounting": "accounting",
+    "HRD": "hrd",
+    "General Affair": "g&a",
+    "Store D & P": "sdp",
+    "Tax": "tax",
+    "L & P": "l&p",
+    "MIS": "mis",
+    "Merchandise": "merch",
+    "Operational": "ops",
+    "Warehouse": "whs",
+  };
+  return keyMap[name] || null;
+}
+
 // Server-side: one batch request for all SOP statuses (fast)
 async function loadSopStatuses() {
   const statusMap = {};
@@ -173,11 +192,17 @@ async function SopReviewGrid({ yearParam }) {
       return Array.isArray(normalized) ? normalized : [normalized];
     }).flat()
   );
+  const allowedDeptKeys = new Set(
+    allowedDepartments
+      .map((d) => (d?.key || "").toString().trim().toLowerCase())
+      .filter(Boolean)
+  );
 
   // Debug logging
   console.log(`[SOP Review] User: ${userName}, isAdmin: ${isAdmin}`);
   console.log(`[SOP Review] Allowed departments from API:`, allowedDepartments);
   console.log(`[SOP Review] Allowed dept names Set:`, Array.from(allowedDeptNames));
+  console.log(`[SOP Review] Allowed dept keys Set:`, Array.from(allowedDeptKeys));
 
   const getStatusBadge = (status) => {
     const statusUpper = (status || "").toUpperCase();
@@ -204,10 +229,15 @@ async function SopReviewGrid({ yearParam }) {
     // Normalize department name for matching
     const normalized = normalizeDeptName(deptName);
     const normalizedList = Array.isArray(normalized) ? normalized : [normalized];
+    const deptKey = getDeptKeyFromCardName(deptName);
     
     // Check if any normalized variation is in allowed list
-    const enabled = normalizedList.some(n => allowedDeptNames.has(n));
-    console.log(`[SOP Review] Department "${deptName}" (normalized: ${normalizedList.join("/")}): ${enabled ? "ENABLED" : "DISABLED"}`);
+    const enabledByName = normalizedList.some((n) => allowedDeptNames.has(n));
+    const enabledByKey = !!(deptKey && allowedDeptKeys.has(deptKey));
+    const enabled = enabledByName || enabledByKey;
+    console.log(
+      `[SOP Review] Department "${deptName}" (normalized: ${normalizedList.join("/")}, key: ${deptKey || "-"}) => byName=${enabledByName}, byKey=${enabledByKey}, final=${enabled ? "ENABLED" : "DISABLED"}`
+    );
     return enabled;
   };
 
@@ -320,9 +350,22 @@ async function SopReviewGrid({ yearParam }) {
 export default async function SopReview({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
+        <div className="mb-4">
+          <Link
+            href={`/Page/dashboard${yearQuery}`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </Link>
+        </div>
+
         {/* Header dengan Logo */}
         <header className="mb-8">
           <div className="bg-gradient-to-r from-[#141D38] to-[#1a2747] rounded-2xl shadow-xl p-6 mb-6 border border-slate-700/50">

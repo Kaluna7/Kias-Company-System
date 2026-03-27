@@ -34,9 +34,16 @@ export function GenericInputModal({
   const [form, setForm] = useState(() => (initialForm ? { ...initialForm } : { ...emptyForm }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [sopRelatedChoice, setSopRelatedChoice] = useState(
+    String(initialForm?.sop_related ?? "").trim() ? "yes" : "no"
+  );
 
   useEffect(() => {
     setForm(initialForm ? { ...initialForm } : { ...emptyForm });
+  }, [initialForm, emptyForm]);
+
+  useEffect(() => {
+    setSopRelatedChoice(String((initialForm ? initialForm.sop_related : emptyForm.sop_related) ?? "").trim() ? "yes" : "no");
   }, [initialForm, emptyForm]);
 
   const onChange = (key, value) => {
@@ -75,29 +82,29 @@ export function GenericInputModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 overflow-y-auto">
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <div className="relative z-10 w-full max-w-5xl max-h-[92vh] sm:max-h-[85vh] bg-[#0F1730] rounded-2xl shadow-xl overflow-hidden ring-1 ring-white/10">
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10">
-          <h2 className="text-white text-lg sm:text-xl md:text-2xl font-semibold leading-tight">{title}</h2>
+      <div className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-5xl flex-col overflow-hidden bg-[#0F1730] shadow-xl ring-1 ring-white/10 md:h-auto md:max-h-[90dvh] md:rounded-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 md:px-6 md:py-4">
+          <h2 className="text-white text-base font-semibold leading-tight sm:text-lg md:text-2xl">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-white/80 hover:text-white rounded-md p-2 text-2xl leading-none"
+            className="shrink-0 rounded-md p-2 text-2xl leading-none text-white/80 hover:text-white"
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-4 sm:px-6 py-4 sm:py-6">
-          <div className="bg-gray-50 p-2 sm:p-3 rounded-lg h-[64vh] sm:h-[62vh] max-h-[64vh] sm:max-h-[62vh] overflow-y-auto">
-            <div className="pr-2" style={{ scrollbarGutter: "stable" }}>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 p-2 sm:p-4">
+        <form onSubmit={handleSubmit} className="flex flex-1 min-h-0 flex-col px-3 py-3 md:px-6 md:py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-gray-50 p-2 md:p-3">
+            <div className="md:pr-2" style={{ scrollbarGutter: "stable" }}>
+              <div className="grid grid-cols-1 gap-3 p-2 md:grid-cols-4 md:gap-4 md:p-4">
                 {Array.isArray(listForm) && listForm.length > 0 ? (
                   listForm.map((item, idx) => {
                     const label = item.label;
@@ -108,6 +115,7 @@ export function GenericInputModal({
                     const isTextarea = largeTA || textareaLabels?.has(label);
                     const isNumber = numericFields?.has(key);
                     const hasSelect = Array.isArray(SELECT_OPTIONS?.[key]);
+                    const isSopRelatedField = key === "sop_related";
 
                     if (isTextarea) {
                       // gunakan ukuran lebih besar jika label termasuk LARGE_TEXTAREA_LABELS
@@ -115,7 +123,7 @@ export function GenericInputModal({
                       const maxH = largeTA ? "max-h-[24rem]" : "max-h-[16rem]";
 
                       return (
-                        <div key={idx} className="col-span-4">
+                        <div key={idx} className="md:col-span-4">
                           <label className="block mb-2 text-sm font-medium text-gray-700">
                             {label}
                           </label>
@@ -123,7 +131,7 @@ export function GenericInputModal({
                             value={form[key] ?? ""}
                             onChange={(e) => onChange(key, e.target.value)}
                             placeholder={item.placeholder ?? ""}
-                            className={`w-full p-3 rounded resize-y ${minH} ${maxH} border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white`}
+                            className={`w-full rounded border border-gray-300 bg-white p-3 text-sm resize-y ${minH} ${maxH} focus:outline-none focus:ring-2 focus:ring-indigo-400`}
                           />
                         </div>
                       );
@@ -131,19 +139,46 @@ export function GenericInputModal({
 
                     return (
                       <React.Fragment key={idx}>
-                        <div className="col-span-1 flex items-center">
+                        <div className="flex items-start md:col-span-1 md:items-center">
                           <label className="text-sm font-medium text-gray-700">
                             {label}
-                            {!OPTIONAL_FIELDS.has(key) && <span className="text-red-500 ml-1">*</span>}
+                            {!OPTIONAL_FIELDS.has(key) && !isSopRelatedField && <span className="text-red-500 ml-1">*</span>}
                           </label>
                         </div>
 
-                        <div className="col-span-1 sm:col-span-3">
-                          {hasSelect ? (
+                        <div className="min-w-0 md:col-span-3">
+                          {isSopRelatedField ? (
+                            <div className="space-y-2">
+                              <select
+                                value={sopRelatedChoice}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value;
+                                  setSopRelatedChoice(nextValue);
+                                  if (nextValue === "no") {
+                                    onChange(key, "");
+                                  }
+                                }}
+                                className="h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                              >
+                                <option value="no">No</option>
+                                <option value="yes">Yes</option>
+                              </select>
+
+                              {sopRelatedChoice === "yes" ? (
+                                <input
+                                  value={form[key] ?? ""}
+                                  onChange={(e) => onChange(key, e.target.value)}
+                                  placeholder="Input SOP Related / Standard"
+                                  type="text"
+                                  className="h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                />
+                              ) : null}
+                            </div>
+                          ) : hasSelect ? (
                             <select
                               value={form[key] ?? ""}
                               onChange={(e) => onChange(key, e.target.value)}
-                              className="w-full p-2 rounded h-10 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                              className="h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                               required={!OPTIONAL_FIELDS.has(key)}
                             >
                               <option value="">{item.placeholder ?? "Pilih..."}</option>
@@ -162,7 +197,7 @@ export function GenericInputModal({
                               min={isNumber ? 0 : undefined}
                               required={!OPTIONAL_FIELDS.has(key)}
                               onWheel={isNumber ? (e) => e.currentTarget.blur() : undefined}
-                              className="w-full p-2 rounded h-10 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white appearance-none"
+                              className="h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
                             />
                           )}
                         </div>
@@ -182,18 +217,18 @@ export function GenericInputModal({
             <div className="mt-3 text-sm text-red-600 bg-red-50 p-3 rounded">{error}</div>
           )}
 
-          <div className="mt-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3">
+          <div className="mt-4 flex flex-col-reverse items-stretch justify-end gap-2 border-t border-white/10 bg-[#0F1730] pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+0.25rem)] md:flex-row md:items-center md:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300"
+              className="w-full rounded-lg bg-gray-200 px-4 py-3 text-gray-800 hover:bg-gray-300 md:w-auto md:py-2"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className={`w-full sm:w-auto px-4 py-2 rounded-lg text-white ${loading ? "bg-green-300" : "bg-green-600 hover:bg-green-700"}`}
+              className={`w-full rounded-lg px-4 py-3 text-white md:w-auto md:py-2 ${loading ? "bg-green-300" : "bg-green-600 hover:bg-green-700"}`}
             >
               {loading ? "Saving..." : (initialForm ? "Update" : "Save")}
             </button>

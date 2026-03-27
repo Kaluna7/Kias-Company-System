@@ -27,6 +27,7 @@ export default function EvidenceDeptPage({
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
   const yearFilter = yearParam ? parseInt(yearParam, 10) : null;
+  const backHref = `/Page/evidence${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
 
   // Map department label to schedule department_id
   const getScheduleDeptId = (deptLabel) => {
@@ -316,6 +317,26 @@ export default function EvidenceDeptPage({
   return (
     <main className="min-h-screen w-full bg-[#E6F0FA]">
       <div className="px-3 sm:px-4 pt-4 sm:pt-6 pb-4 flex flex-col h-full">
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              if (window.history.length > 1) {
+                window.history.back();
+                return;
+              }
+              window.location.href = backHref;
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </button>
+        </div>
+
         <div className="mb-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
             <div className="text-xs font-semibold text-slate-500 tracking-wide">B3.1 EVIDENCE</div>

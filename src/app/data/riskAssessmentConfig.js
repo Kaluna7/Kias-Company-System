@@ -93,15 +93,15 @@ export const ListAssessmentForm = [
   },
   {
     label: "Impact Level",
-    placeholder: "Rate (LOW) to 3 (HIGH)",
+    placeholder: "Select impact level",
   },
   {
     label: "Probability Level",
-    placeholder: "Rate 1 (LOW) to 3 (HIGH)",
+    placeholder: "Select probability level",
   },
   {
     label: "Priority Level",
-    placeholder: "(IMPACT X PROBABILITY) Address  highest first. ",
+    placeholder: "Select priority level",
   },
   {
     label: "Mitigation Strategy",
@@ -162,6 +162,28 @@ export const SELECT_OPTIONS = {
       { value: "Compliance", label: "Compliance" },
       { value: "Operational", label: "Operational" },
       { value: "Finance", label: "Finance" },
+    ],
+    impact_level: [
+      { value: "1", label: "1" },
+      { value: "2", label: "2" },
+      { value: "3", label: "3" },
+    ],
+    probability_level: [
+      { value: "1", label: "1" },
+      { value: "2", label: "2" },
+      { value: "3", label: "3" },
+    ],
+    priority_level: [
+      { value: "1", label: "1" },
+      { value: "2", label: "2" },
+      { value: "3", label: "3" },
+      { value: "4", label: "4" },
+      { value: "5", label: "5" },
+      { value: "6", label: "6" },
+      { value: "7", label: "7" },
+      { value: "8", label: "8" },
+      { value: "9", label: "9" },
+      { value: "10", label: "10" },
     ],
     onset_timeframe: [
       { value: "Slow", label: "Slow (Likely to occur with little or no warning)" },

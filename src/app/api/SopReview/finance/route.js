@@ -28,6 +28,10 @@ export async function GET(req) {
         ALTER TABLE sops_finance
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
       `);
+      await client.query(`
+        ALTER TABLE sops_finance
+        ADD COLUMN IF NOT EXISTS reviewer_feedback TEXT DEFAULT '';
+      `);
 
       const url = new URL(req?.url || "", "http://localhost");
       const yearParam = url.searchParams.get("year");
@@ -38,7 +42,7 @@ export async function GET(req) {
         const from = new Date(year, 0, 1);
         const to = new Date(year + 1, 0, 1);
         r = await client.query(
-          `SELECT id, no, sop_related, status, comment, reviewer
+          `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer
            FROM sops_finance
            WHERE created_at >= $1 AND created_at < $2
            ORDER BY no ASC NULLS LAST, id ASC`,
@@ -46,7 +50,7 @@ export async function GET(req) {
         );
       } else {
         r = await client.query(
-          `SELECT id, no, sop_related, status, comment, reviewer
+          `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer
            FROM sops_finance
            ORDER BY no ASC NULLS LAST, id ASC`,
         );
@@ -115,9 +119,9 @@ export async function POST(req) {
       }
       const inserted = [];
       for (const item of sopsArray) {
-        const q = `INSERT INTO sops_finance (no, sop_related, status, comment, reviewer)
-                   VALUES ($1,$2,$3,$4,$5) RETURNING id, no, sop_related, status, comment, reviewer`;
-        const vals = [item.no ?? null, (item.sop_related ?? item.name ?? "").toString().trim(), item.status ?? "DRAFT", item.comment ?? "", item.reviewer ?? ""];
+        const q = `INSERT INTO sops_finance (no, sop_related, status, comment, reviewer_feedback, reviewer)
+                   VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`;
+        const vals = [item.no ?? null, (item.sop_related ?? item.name ?? "").toString().trim(), item.status ?? "DRAFT", item.comment ?? "", item.reviewer_feedback ?? "", item.reviewer ?? ""];
         const r = await client.query(q, vals);
         inserted.push(r.rows[0]);
       }

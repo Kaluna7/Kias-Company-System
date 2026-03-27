@@ -51,12 +51,19 @@ function DashboardPageContent() {
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
   const [editName, setEditName] = useState("");
   const [editAvatarFile, setEditAvatarFile] = useState(null);
   const [editAvatarPreview, setEditAvatarPreview] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountEmail, setNewAccountEmail] = useState("");
+  const [newAccountPassword, setNewAccountPassword] = useState("");
+  const [newAccountRole, setNewAccountRole] = useState("user");
+  const [deletingUserId, setDeletingUserId] = useState(0);
   const [progress, setProgress] = useState({ loading: true, error: null, modules: [] });
   const [progressModuleKey, setProgressModuleKey] = useState("sop-review");
   const [expandedModuleKey, setExpandedModuleKey] = useState(null);
@@ -66,6 +73,7 @@ function DashboardPageContent() {
 
   const role = (session?.user?.role || "").toLowerCase();
   const isAdmin = role === "admin" || role === "reviewer";
+  const canCreateEmployeeAccount = role === "admin";
 
   const auditItems = useMemo(
     () => (isAdmin ? [...BASE_AUDIT_ITEMS, { id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" }] : BASE_AUDIT_ITEMS),
@@ -287,6 +295,20 @@ function DashboardPageContent() {
     setIsEditProfileOpen(false);
   }, [isSavingProfile]);
 
+  const openCreateAccount = useCallback(() => {
+    setIsProfileOpen(false);
+    setNewAccountName("");
+    setNewAccountEmail("");
+    setNewAccountPassword("");
+    setNewAccountRole("user");
+    setIsCreateAccountOpen(true);
+  }, []);
+
+  const closeCreateAccount = useCallback(() => {
+    if (isCreatingAccount) return;
+    setIsCreateAccountOpen(false);
+  }, [isCreatingAccount]);
+
   const handleAvatarChange = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -327,6 +349,78 @@ function DashboardPageContent() {
       setIsSavingProfile(false);
     }
   }, [editName, editAvatarFile, toast]);
+
+  const handleCreateAccount = useCallback(async () => {
+    const name = (newAccountName || "").trim();
+    const email = (newAccountEmail || "").toLowerCase().trim();
+    const password = String(newAccountPassword || "");
+    const role = (newAccountRole || "user").toLowerCase();
+
+    if (!name || !email || !password) {
+      toast.show("Name, email, and password are required.", "warning");
+      return;
+    }
+    if (password.length < 6) {
+      toast.show("Password must be at least 6 characters.", "warning");
+      return;
+    }
+
+    try {
+      setIsCreatingAccount(true);
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        toast.show(json?.error || `Failed to create account (HTTP ${res.status})`, "error");
+        return;
+      }
+
+      setProgressUsers((prev) => {
+        const next = [...prev, json.user].filter(Boolean);
+        next.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+        return next;
+      });
+      setIsCreateAccountOpen(false);
+      toast.show("Employee account created successfully.", "success");
+    } catch (e) {
+      toast.show(e?.message || "Failed to create account.", "error");
+    } finally {
+      setIsCreatingAccount(false);
+    }
+  }, [newAccountName, newAccountEmail, newAccountPassword, newAccountRole, toast]);
+
+  const handleDeleteUser = useCallback(
+    async (user) => {
+      if (!user?.id) return;
+      const ok = confirm(`Delete user "${user.name}" (${user.email})?`);
+      if (!ok) return;
+
+      try {
+        setDeletingUserId(Number(user.id));
+        const res = await fetch("/api/users", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: user.id }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) {
+          toast.show(json?.error || `Failed to delete user (HTTP ${res.status})`, "error");
+          return;
+        }
+
+        setProgressUsers((prev) => prev.filter((u) => Number(u?.id) !== Number(user.id)));
+        toast.show("User deleted successfully.", "success");
+      } catch (e) {
+        toast.show(e?.message || "Failed to delete user.", "error");
+      } finally {
+        setDeletingUserId(0);
+      }
+    },
+    [toast]
+  );
 
   // ---- UI (responsive: top bar with profile top-right on all screens)
   return (
@@ -397,6 +491,15 @@ function DashboardPageContent() {
                     >
                       <span className="font-medium">Edit Profile</span>
                     </button>
+                    {canCreateEmployeeAccount && (
+                      <button
+                        type="button"
+                        onClick={openCreateAccount}
+                        className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
+                      >
+                        <span className="font-medium">Create Account for Employee</span>
+                      </button>
+                    )}
                     <a href="/help" className="block"><button className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"><span className="font-medium">Help & Support</span></button></a>
                   </div>
                   <div className="border-t border-gray-200/30 mt-1 pt-1 px-2">
@@ -695,6 +798,124 @@ function DashboardPageContent() {
                 disabled={isSavingProfile}
               >
                 {isSavingProfile ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCreateAccountOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-3 p-6 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Create Account for Employee</h2>
+                <p className="text-xs text-slate-500 mt-1">Admin can create employee account and set role.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCreateAccount}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                disabled={isCreatingAccount}
+              >
+                <span className="sr-only">Close</span>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Full Name</label>
+                <input
+                  type="text"
+                  value={newAccountName}
+                  onChange={(e) => setNewAccountName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="Employee name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Email</label>
+                <input
+                  type="email"
+                  value={newAccountEmail}
+                  onChange={(e) => setNewAccountEmail(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="employee@email.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Password</label>
+                <input
+                  type="password"
+                  value={newAccountPassword}
+                  onChange={(e) => setNewAccountPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="Minimum 6 characters"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Role</label>
+                <select
+                  value={newAccountRole}
+                  onChange={(e) => setNewAccountRole(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                >
+                  <option value="user">User</option>
+                  <option value="reviewer">Reviewer</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-slate-800">Employee Accounts</h3>
+                <span className="text-xs text-slate-500">{progressUsers.length} user(s)</span>
+              </div>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200">
+                {progressUsers.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-slate-500">No employee users found.</div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {progressUsers.map((u) => (
+                      <div key={u.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">{u.name}</div>
+                          <div className="text-xs text-slate-500 truncate">{u.email} · {(u.role || "user").toLowerCase()}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(u)}
+                          disabled={deletingUserId === Number(u.id)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {deletingUserId === Number(u.id) ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeCreateAccount}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+                disabled={isCreatingAccount}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateAccount}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#141D38] to-[#2D3A5A] hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={isCreatingAccount}
+              >
+                {isCreatingAccount ? "Creating..." : "Create Account"}
               </button>
             </div>
           </div>

@@ -174,21 +174,21 @@ export async function POST(req) {
         const sopText = (u.sop_related || "").toString().trim();
 
         if (u.id != null) {
-          const q = `UPDATE sops_finance SET comment = $1 WHERE id = $2 RETURNING id, no, sop_related, status, comment, reviewer`;
+          const q = `UPDATE sops_finance SET comment = $1 WHERE id = $2 RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`;
           const r = await client.query(q, [commentVal, u.id]);
           if (r.rows && r.rows[0]) { applied.push(r.rows[0]); appliedThis = true; }
         }
 
         if (!appliedThis && sopText) {
-          const q2 = `UPDATE sops_finance SET comment = $1 WHERE TRIM(LOWER(sop_related)) = TRIM(LOWER($2)) RETURNING id, no, sop_related, status, comment, reviewer`;
+          const q2 = `UPDATE sops_finance SET comment = $1 WHERE TRIM(LOWER(sop_related)) = TRIM(LOWER($2)) RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`;
           const r2 = await client.query(q2, [commentVal, sopText]);
           if (r2.rows && r2.rows.length > 0) { applied.push(...r2.rows); appliedThis = true; }
         }
 
         if (!appliedThis) {
           // Insert fallback — useful if you want generated comments even when row missing
-          const insQ = `INSERT INTO sops_finance (no, sop_related, status, comment, reviewer) VALUES ($1,$2,$3,$4,$5) RETURNING id, no, sop_related, status, comment, reviewer`;
-          const insVals = [null, sopText || (u.sop_related ?? ""), "DRAFT", commentVal, ""];
+          const insQ = `INSERT INTO sops_finance (no, sop_related, status, comment, reviewer_feedback, reviewer) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`;
+          const insVals = [null, sopText || (u.sop_related ?? ""), "DRAFT", commentVal, "", ""];
           const ri = await client.query(insQ, insVals);
           if (ri.rows && ri.rows[0]) applied.push(ri.rows[0]);
         }

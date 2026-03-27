@@ -353,9 +353,21 @@ async function WorksheetContent({ yearParam }) {
 export default async function Worksheet({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
+        <div className="mb-4">
+          <Link
+            href={`/Page/dashboard${yearQuery}`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </Link>
+        </div>
         {/* Header dengan Logo */}
         <header className="mb-8">
           <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">

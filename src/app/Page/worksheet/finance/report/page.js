@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 
 export default function WorksheetFinanceReport() {
@@ -8,6 +9,8 @@ export default function WorksheetFinanceReport() {
   const [error, setError] = useState(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -41,7 +44,7 @@ export default function WorksheetFinanceReport() {
 
   return (
     <div className="flex flex-col">
-      <SmallHeader label="B.1.1 WORKSHEET - FINANCE REPORT" />
+      <SmallHeader label="B.1.1 WORKSHEET - FINANCE REPORT" backHref={`/Page/worksheet/finance${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`} />
       <div className="p-4">
         {loading && <div className="text-sm text-gray-600 mb-4">Memuat data...</div>}
         {error && <div className="text-sm text-red-600 mb-4">Gagal memuat data: {error}</div>}

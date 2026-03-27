@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { pool } from "./pool";
 import { requireReviewer } from "./auth";
 
-const API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyByg_otFYurK-Aw0KLtoknlw4x5usJDW10";
-const MODEL = process.env.GOOGLE_AI_MODEL || "gemini-2.5-flash";
-const BASE_URL = process.env.GOOGLE_AI_BASEURL || "https://generativelanguage.googleapis.com/v1beta";
-const GEN_PATH = process.env.GOOGLE_AI_GENPATH || "generateContent";
+const API_KEY = process.env.GOOGLE_API_KEY;
+const MODEL = process.env.GOOGLE_AI_MODEL;
+const BASE_URL = process.env.GOOGLE_AI_BASEURL;
+const GEN_PATH = process.env.GOOGLE_AI_GENPATH;
 const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:${GEN_PATH}`;
 
 const MAX_BATCH_ITEMS = 40;
@@ -52,20 +52,25 @@ function tryParseJsonArray(s) {
 
 function buildBatchPrompt(items) {
   const safeItems = items.slice(0, MAX_BATCH_ITEMS);
-  let prompt = "Tugas: Untuk daftar langkah SOP berikut, buat sebuah JSON ARRAY yang berisi objek {\"id\": <id or null>, \"comment\": \"<komentar singkat 1 kalimat>\"}.\n";
-  prompt += "HANYA kembalikan JSON array, TIDAK ADA teks lain. Gunakan bahasa Indonesia, profesional, padat.\n\n";
+  let prompt = "Task: Untuk daftar langkah SOP berikut, buat JSON ARRAY berisi objek {\"id\": <id or null>, \"comment\": \"<komentar reviewer>\"}.\n";
+  prompt += "WAJIB: HANYA keluarkan JSON array, tanpa teks tambahan.\n";
+  prompt += "WAJIB: Bahasa comment harus mengikuti bahasa pada langkah SOP masing-masing (jika langkah Indonesia, jawab Indonesia; jika English, jawab English).\n";
+  prompt += "WAJIB: Gaya profesional, jelas, mudah dipahami, actionable, dan maksimal 2 kalimat.\n\n";
   prompt += "Daftar (id | teks):\n";
   for (const it of safeItems) {
     const text = (it.sop_related || "").replace(/\s+/g, " ").trim().slice(0, 800);
     prompt += `- id:${it.id ?? "null"} | ${text}\n`;
   }
-  prompt += `\nCatatan: kembalikan TEPAT sebuah JSON array. Maks items: ${safeItems.length}.\n`;
+  prompt += `\nCatatan: kembalikan TEPAT satu JSON array valid. Maks items: ${safeItems.length}.\n`;
   return prompt;
 }
 
 function buildSinglePrompt(item) {
   const text = (item.sop_related || "").replace(/\s+/g, " ").trim().slice(0, MAX_SINGLE_TEXT_CHARS);
-  let prompt = "Buat satu komentar reviewer singkat (1 kalimat) dalam bahasa Indonesia yang membantu Team Audit menilai langkah berikut. Jangan menambahkan penjelasan lain — KELUARKAN HANYA KALIMAT KOMENTAR.\n\n";
+  let prompt = "Buat komentar reviewer profesional untuk langkah SOP berikut.\n";
+  prompt += "WAJIB: gunakan bahasa yang sama dengan langkah SOP.\n";
+  prompt += "WAJIB: mudah dipahami, actionable, dan maksimal 2 kalimat.\n";
+  prompt += "WAJIB: keluarkan HANYA isi komentar (tanpa numbering, tanpa label, tanpa JSON).\n\n";
   prompt += `Langkah: ${text}\n\n`;
   return prompt;
 }
@@ -130,7 +135,7 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
 
           if (u.id != null) {
             const r = await client.query(
-              `UPDATE ${stepsTable} SET comment = $1 WHERE id = $2 RETURNING id, no, sop_related, status, comment, reviewer`,
+              `UPDATE ${stepsTable} SET comment = $1 WHERE id = $2 RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`,
               [commentVal, u.id]
             );
             if (r.rows?.[0]) { applied.push(r.rows[0]); appliedThis = true; }
@@ -138,7 +143,7 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
 
           if (!appliedThis && sopText) {
             const r2 = await client.query(
-              `UPDATE ${stepsTable} SET comment = $1 WHERE TRIM(LOWER(sop_related)) = TRIM(LOWER($2)) RETURNING id, no, sop_related, status, comment, reviewer`,
+              `UPDATE ${stepsTable} SET comment = $1 WHERE TRIM(LOWER(sop_related)) = TRIM(LOWER($2)) RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`,
               [commentVal, sopText]
             );
             if (r2.rows?.length) { applied.push(...r2.rows); appliedThis = true; }
@@ -146,8 +151,8 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
 
           if (!appliedThis) {
             const ri = await client.query(
-              `INSERT INTO ${stepsTable} (no, sop_related, status, comment, reviewer) VALUES ($1,$2,$3,$4,$5) RETURNING id, no, sop_related, status, comment, reviewer`,
-              [null, sopText || (u.sop_related ?? ""), "DRAFT", commentVal, ""]
+              `INSERT INTO ${stepsTable} (no, sop_related, status, comment, reviewer_feedback, reviewer) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, no, sop_related, status, comment, reviewer_feedback, reviewer`,
+              [null, sopText || (u.sop_related ?? ""), "DRAFT", commentVal, "", ""]
             );
             if (ri.rows?.[0]) applied.push(ri.rows[0]);
           }

@@ -16,9 +16,27 @@ function RiskAssessmentReportPageContent() {
     alert(`Create report for year ${year}`);
   };
 
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = "/Page/risk-assessment-dashboard";
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/80 px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white"
+          >
+            <span aria-hidden="true">←</span>
+            <span>Back</span>
+          </button>
+        </div>
         <header className="mb-8">
           <div className="bg-gradient-to-r from-[#141D38] to-[#1a2747] rounded-2xl shadow-xl p-6 border border-slate-800/40">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

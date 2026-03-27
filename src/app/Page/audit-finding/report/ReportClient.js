@@ -147,6 +147,15 @@ export default function ReportClient({ initialData = [] }) {
     setSelectedGroup(null);
   };
 
+  const handleBack = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = "/Page/audit-finding";
+  }, []);
+
   const exportRowsToExcel = (rows, filenameSuffix = "All", periodStart = null, periodEnd = null) => {
     const headers = [
       "Audit Fieldwork Start",
@@ -302,6 +311,18 @@ export default function ReportClient({ initialData = [] }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
       <div className="max-w-full mx-auto">
+        <div className="mb-4">
+          <button
+            onClick={handleBack}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-semibold">Back</span>
+          </button>
+        </div>
+
         {/* Header (tanpa tombol export global) */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

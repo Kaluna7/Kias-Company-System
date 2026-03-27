@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -251,6 +251,7 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
           editItems={editItems}
           sortByItems={sortByItems}
           onSearch={setSearchQuery}
+          backHref={`/Page/risk-assessment-dashboard${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
         />
         <div className="flex-1 w-full h-full overflow-hidden mt-20 md:mt-14">
           <div className="md:hidden px-4 pt-4 pb-2">
@@ -272,4 +273,5 @@ export default function HrdClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 

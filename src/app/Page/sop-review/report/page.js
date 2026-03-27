@@ -135,6 +135,7 @@ async function loadReportData(year) {
             sop_related: r.sop_related || "",
             status: r.status || "DRAFT",
             comment: r.comment || "",
+            reviewer_feedback: r.reviewer_feedback || "",
             reviewer: r.reviewer || "",
           })),
           audit_period_start,

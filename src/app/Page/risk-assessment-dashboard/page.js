@@ -12,6 +12,15 @@ export default async function RiskAssessmentDashboard({ searchParams }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
+        <div className="mb-4">
+          <Link
+            href={`/Page/dashboard${yearQuery}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/80 px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white"
+          >
+            <span aria-hidden="true">←</span>
+            <span>Back</span>
+          </Link>
+        </div>
         {/* Header dengan Logo */}
         <header className="mb-8">
           <div className="bg-gradient-to-r from-[#141D38] to-[#1a2747] rounded-2xl shadow-xl p-6 mb-6 border border-slate-700/50">

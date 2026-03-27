@@ -62,7 +62,19 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
             className="w-full bg-transparent border border-transparent hover:border-green-200 focus:border-green-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
             rows={2}
             placeholder="Enter review comment..."
-            // Reviewer and Admin can change review comment; regular user cannot
+            // All roles can edit review comment (requested)
+            disabled={false}
+          />
+        </div>
+      </td>
+      <td className="p-3 align-top border-r border-slate-200/40">
+        <div className="relative">
+          <textarea
+            value={row.reviewer_feedback || ""}
+            onChange={(e) => onUpdate(idx, { reviewer_feedback: e.target.value })}
+            className="w-full bg-transparent border border-transparent hover:border-emerald-200 focus:border-emerald-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            rows={2}
+            placeholder="Enter reviewer feedback..."
             disabled={!(isReviewer || isAdmin)}
           />
         </div>
@@ -140,6 +152,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
+  const backHref = `/Page/sop-review${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
 
   useEffect(() => {
     const check = () => setIsMobileView(window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || ""));
@@ -297,6 +310,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             sop_related: (r.sop_related || "").toString(),
             status: r.status || "DRAFT",
             comment: r.comment || "",
+            reviewer_feedback: r.reviewer_feedback || "",
             reviewer: r.reviewer || "",
           }));
           if (mounted) {
@@ -443,7 +457,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           sop_related: (it.sop_related || it.name || "").trim(),
           // Default status after append: IN REVIEW
           status: it.status || "IN REVIEW",
-          comment: it.comment || "",
+          comment: it.comment || it.reviewer_comment || "",
+          reviewer_feedback: it.reviewer_feedback || "",
           reviewer: it.reviewer || "",
         }))
         .filter((it) => {
@@ -490,6 +505,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           // Default status for new manual row: IN REVIEW
           status: "IN REVIEW",
           comment: "",
+          reviewer_feedback: "",
           reviewer: "",
         },
       ])
@@ -506,6 +522,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       sop_related: (it.sop_related || "").trim(),
       status: it.status || null,
       comment: it.comment || null,
+      reviewer_feedback: it.reviewer_feedback || null,
       reviewer: it.reviewer || null,
     })), []);
 
@@ -707,6 +724,27 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
 
   return (
     <main className="min-h-screen w-full bg-[#E6F0FA]">
+      <div className="fixed top-3 left-3 sm:top-4 sm:left-4 z-40">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window === "undefined") return;
+            if (window.history.length > 1) {
+              window.history.back();
+              return;
+            }
+            window.location.href = backHref;
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full shadow-md hover:shadow-lg border border-slate-300 bg-white/95 text-xs sm:text-sm font-semibold text-slate-700 transition-all duration-300"
+          title="Back"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+      </div>
+
       {/* Integrated Header with SOP Source & Status */}
       <SOPHeader
         department={departmentName}
@@ -799,17 +837,19 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                       <span>➕</span>
                       <span className="hidden sm:inline">Add SOP Item</span>
                     </button>
-                    <button
-                      onClick={openPublishModal}
-                      disabled={sopData.length === 0 || isSaving}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                        sopData.length === 0 || isSaving
-                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                          : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md"
-                      }`}
-                    >
-                      {isSaving ? "Publishing..." : "Publish"}
-                    </button>
+                    {!isUser && (
+                      <button
+                        onClick={openPublishModal}
+                        disabled={sopData.length === 0 || isSaving}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                          sopData.length === 0 || isSaving
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md"
+                        }`}
+                      >
+                        {isSaving ? "Publishing..." : "Publish"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -849,6 +889,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                           <span className="text-xs">REVIEW COMMENT</span>
                         </div>
                       </th>
+                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[180px]">
+                        <div className="flex items-center gap-2">
+                          <span className="w-4 h-4 bg-emerald-100 rounded flex items-center justify-center">
+                            <span className="text-emerald-600 text-xs">🗣️</span>
+                          </span>
+                          <span className="text-xs">REVIEWER FEEDBACK</span>
+                        </div>
+                      </th>
                       <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-28">
                         <div className="flex items-center gap-1">
                           <span className="w-4 h-4 bg-purple-100 rounded flex items-center justify-center">
@@ -879,7 +927,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     ))}
                     {sopData.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="border-0">
+                        <td colSpan={7} className="border-0">
                           <div className="flex flex-col items-center justify-center py-16 px-4">
                             <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-4 shadow-lg">
                               <span className="text-3xl">📄</span>
@@ -901,6 +949,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             </div>
           )}
         </div>
+
       </div>
 
       {/* Publish Modal (no alert/confirm) */}

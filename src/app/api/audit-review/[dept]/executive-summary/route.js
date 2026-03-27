@@ -110,9 +110,14 @@ export async function POST(req, { params }) {
           limitations_time TEXT,
           limitations_resource TEXT,
           internal_audit_team TEXT,
+          is_locked BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `);
+      await client.query(`
+        ALTER TABLE ${tableName}
+        ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE
       `);
 
       // Check if record exists
@@ -131,8 +136,9 @@ export async function POST(req, { params }) {
             limitations_time = $7,
             limitations_resource = $8,
             internal_audit_team = $9,
+            is_locked = $10,
             updated_at = NOW()
-          WHERE id = $10
+          WHERE id = $11
         `, [
           body.objectiveOfAudit || null,
           body.scopeAreasCovered || null,
@@ -143,6 +149,7 @@ export async function POST(req, { params }) {
           body.limitationsTime || null,
           body.limitationsResource || null,
           body.internalAuditTeam || null,
+          body.isLocked === true,
           existing.rows[0].id,
         ]);
         
@@ -160,8 +167,9 @@ export async function POST(req, { params }) {
             limitations_scope,
             limitations_time,
             limitations_resource,
-            internal_audit_team
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            internal_audit_team,
+            is_locked
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *
         `, [
           body.objectiveOfAudit || null,
@@ -173,6 +181,7 @@ export async function POST(req, { params }) {
           body.limitationsTime || null,
           body.limitationsResource || null,
           body.internalAuditTeam || null,
+          body.isLocked === true,
         ]);
         
         return NextResponse.json({ success: true, data: result.rows[0] }, { status: 200 });

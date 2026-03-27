@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
 
 export default function GuidelinesPage() {
@@ -494,15 +493,23 @@ export default function GuidelinesPage() {
         </header>
 
         <div className="flex justify-end mb-6">
-          <Link
-            href="/Page/dashboard/"
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              if (window.history.length > 1) {
+                window.history.back();
+                return;
+              }
+              window.location.href = "/Page/dashboard";
+            }}
             className="bg-white rounded-xl shadow px-4 py-2 border border-gray-200 hover:shadow-md transition text-sm font-semibold text-gray-800 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            Back to Dashboard
-          </Link>
+            Back
+          </button>
         </div>
 
         {/* Button Groups */}

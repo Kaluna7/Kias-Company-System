@@ -147,7 +147,7 @@ function FinanceWorksheetPageContent() {
   return (
     <main className="flex flex-col w-full h-screen overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="flex flex-col flex-1 w-full h-full overflow-hidden">
-        <SmallHeader label="B.1.1 WORKSHEET - FINANCE" showSearch={false} />
+        <SmallHeader label="B.1.1 WORKSHEET - FINANCE" showSearch={false} backHref={`/Page/worksheet${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`} />
         <div className="flex-1 w-full h-full overflow-y-auto mt-20 md:mt-14 p-4 md:p-6">
           <div className="bg-white rounded-xl shadow-lg p-6 md:p-8 max-w-7xl mx-auto border border-gray-200">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
