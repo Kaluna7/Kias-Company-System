@@ -3,7 +3,8 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 
 const API_KEY = process.env.GOOGLE_API_KEY;
-const MODEL = process.env.GOOGLE_AI_MODEL || "gemini-3-flash-preview";
+/** Fixed model for extract-steps only; do not use GOOGLE_AI_MODEL so other features keep their env model. */
+const MODEL = "gemini-3-flash-preview";
 const BASE_URL = process.env.GOOGLE_AI_BASEURL || "https://generativelanguage.googleapis.com/v1beta";
 const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:generateContent`;
 
