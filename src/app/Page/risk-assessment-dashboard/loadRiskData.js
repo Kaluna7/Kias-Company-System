@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 
 /**
  * Server-side fetch for risk assessment data. Used for SSR.
@@ -6,10 +6,7 @@ import { headers } from "next/headers";
  */
 export async function loadRiskData(apiPath, status = "published", year) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     const params = new URLSearchParams({
       status,

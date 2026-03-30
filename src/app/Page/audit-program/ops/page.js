@@ -1,14 +1,11 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import OpsClient from "./OpsClient";
 
 export const dynamic = "force-dynamic";
 
 async function loadOpsData(status = "published", year) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     const params = new URLSearchParams({
       page: "1",

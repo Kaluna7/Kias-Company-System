@@ -1,6 +1,4 @@
-import { headers } from "next/headers";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import FinanceClient from "./FinanceClient";
 
 export const dynamic = "force-dynamic";
@@ -8,10 +6,7 @@ export const dynamic = "force-dynamic";
 // Server-side function to load finance data
 async function loadFinanceData(status = "published", year) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     const params = new URLSearchParams({
       page: "1",
@@ -47,10 +42,7 @@ export default async function FinancePage({ searchParams }) {
 
   // Load initial data on server
   const { data: initialData } = await loadFinanceData("published", !Number.isNaN(year) ? year : undefined);
-  
-  // Get session on server (optional, for future use)
-  // const session = await getServerSession(authOptions);
-  
+
   return (
     <FinanceClient 
       initialData={initialData} 

@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import AuditReviewDeptClient from "./_components/AuditReviewDeptClient";
 
 // Map department to API path and display info
@@ -20,10 +20,7 @@ const deptMap = {
 
 async function loadAuditReviewData(dept) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     const deptInfo = deptMap[dept];
     if (!deptInfo) {

@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import ReportClient from "./ReportClient";
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
 
@@ -35,10 +35,7 @@ const DEPT_TO_SCHEDULE_ID = {
 
 async function loadScheduleModuleData() {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
     const res = await fetch(`${baseUrl}/api/schedule/module?module=sop-review`, { cache: "no-store" });
     const data = await res.json();
     if (data.success && Array.isArray(data.rows)) {
@@ -76,10 +73,7 @@ async function loadScheduleModuleData() {
 }
 
 async function loadReportData(year) {
-  const headersList = await headers();
-  const host = headersList.get("host") || "localhost:3000";
-  const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-  const baseUrl = `${protocol}://${host}`;
+  const baseUrl = getInternalFetchBaseUrl();
   const scheduleMap = await loadScheduleModuleData();
   const depts = buttonSopReview.filter((b) => b.name !== "Report");
   const results = await Promise.allSettled(
@@ -186,10 +180,7 @@ async function loadReportData(year) {
 
 async function loadScheduleData() {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
     const res = await fetch(`${baseUrl}/api/schedule`, { cache: "default", next: { revalidate: 60 } });
     const data = await res.json();
     if (data.success && data.rows) return data.rows;
