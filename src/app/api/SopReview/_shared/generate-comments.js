@@ -13,7 +13,7 @@ const MAX_SINGLE_TEXT_CHARS = 1500;
 
 async function callGemini(prompt) {
   try {
-    const body = { contents: [{ parts: [{ text: prompt }] }], temperature: 0.0 };
+    const body = { contents: [{ parts: [{ text: prompt }] }], temperature: 0.2 };
     const res = await fetch(GOOGLE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-goog-api-key": API_KEY },
@@ -56,13 +56,13 @@ function buildBatchPrompt(items) {
   prompt += "WAJIB: HANYA keluarkan JSON array, tanpa teks tambahan.\n";
   prompt += "WAJIB: Bahasa comment harus mengikuti bahasa pada langkah SOP masing-masing (jika langkah Indonesia, jawab Indonesia; jika English, jawab English).\n";
   prompt += "WAJIB: Posisi Anda adalah reviewer SOP yang membantu penulis memperbaiki kalimat agar lebih jelas dan mudah dipahami.\n";
-  prompt += "WAJIB: Comment harus berupa arahan revisi yang konkret dan substantif, bukan analisis abstrak.\n";
+  prompt += "WAJIB: Comment harus berupa arahan revisi yang konkret, substantif, natural seperti ditulis manusia, dan bukan analisis abstrak.\n";
   prompt += "WAJIB: Jika langkah ambigu, langsung tuliskan isi perbaikan yang perlu dimasukkan ke SOP, misalnya definisi, kondisi if/when, decision rule, kriteria, pihak bertanggung jawab, dokumen/form, approval, batas waktu, output, atau exception handling.\n";
-  prompt += "WAJIB: Jangan hanya menulis perintah seperti 'Define...', 'Clarify...', 'Specify...', atau 'Add...' tanpa isi detailnya.\n";
+  prompt += "WAJIB: Jangan memakai pola perintah pendek yang kaku seperti 'Confirm...', 'Verify...', 'Define...', 'Clarify...', 'Specify...', atau 'Add...' tanpa isi detailnya.\n";
   prompt += "WAJIB: Gunakan bahasa yang mudah dimengerti user bisnis.\n";
   prompt += "WAJIB: Komentar boleh menyarankan bentuk kalimat yang lebih jelas, tetapi tetap singkat. Maksimal 2 kalimat, profesional, jelas, dan actionable.\n";
-  prompt += "Contoh style baik 1: Step: \"MIS Department will check the stock or repair the device.\" Comment: \"State that stock availability should be checked only if replacement is required, while repair should be performed if the device can still be fixed.\"\n";
-  prompt += "Contoh style baik 2: Step: \"If goods are damaged due to user negligence with an asset age requirement of less than 5 years, the user must pay 50% of the total repair costs.\" Comment: \"Define user negligence as misuse, improper handling, or failure to follow usage procedures, and state that asset age is calculated from the purchase date. Keep the 50% repair cost responsibility only when both conditions are met.\"\n";
+  prompt += "Contoh style baik 1: Step: \"MIS Department will check the stock or repair the device.\" Comment: \"This step should explain that stock availability is checked only when replacement is required, while repair is carried out when the device can still be fixed.\"\n";
+  prompt += "Contoh style baik 2: Step: \"If goods are damaged due to user negligence with an asset age requirement of less than 5 years, the user must pay 50% of the total repair costs.\" Comment: \"This step should explain that user negligence includes misuse, improper handling, or failure to follow procedures, and that asset age is calculated from the purchase date. The 50% repair cost should apply only when both conditions are met.\"\n";
   prompt += "Contoh style buruk: \"Define criteria for user negligence, asset age calculation, and the resulting payment structure.\"\n\n";
   prompt += "Daftar (id | teks):\n";
   for (const it of safeItems) {
@@ -77,13 +77,13 @@ function buildSinglePrompt(item) {
   const text = (item.sop_related || "").replace(/\s+/g, " ").trim().slice(0, MAX_SINGLE_TEXT_CHARS);
   let prompt = "Anda adalah reviewer SOP yang membantu penulis memperbaiki kalimat agar lebih jelas dan mudah dipahami. Buat komentar reviewer profesional untuk langkah SOP berikut.\n";
   prompt += "WAJIB: gunakan bahasa yang sama dengan langkah SOP.\n";
-  prompt += "WAJIB: komentar harus berupa arahan revisi yang konkret dan substantif, bukan analisis abstrak.\n";
+  prompt += "WAJIB: komentar harus berupa arahan revisi yang konkret, substantif, natural seperti ditulis manusia, dan bukan analisis abstrak.\n";
   prompt += "WAJIB: fokus pada gap paling penting, misalnya definisi, kondisi if/when, decision rule, kriteria, pihak bertanggung jawab, dokumen/form, approval, batas waktu, output, atau exception handling.\n";
   prompt += "WAJIB: langsung sebutkan isi perbaikan yang perlu dimasukkan ke SOP.\n";
-  prompt += "WAJIB: jangan hanya menulis perintah seperti 'Define...', 'Clarify...', 'Specify...', atau 'Add...' tanpa isi detailnya.\n";
+  prompt += "WAJIB: jangan memakai pola perintah pendek yang kaku seperti 'Confirm...', 'Verify...', 'Define...', 'Clarify...', 'Specify...', atau 'Add...' tanpa isi detailnya.\n";
   prompt += "WAJIB: gunakan bahasa yang mudah dipahami user bisnis, actionable, dan maksimal 2 kalimat.\n";
   prompt += "WAJIB: keluarkan HANYA isi komentar (tanpa numbering, tanpa label, tanpa JSON).\n\n";
-  prompt += "Contoh style baik: \"Define user negligence as misuse, improper handling, or failure to follow usage procedures, and state that asset age is calculated from the purchase date. Keep the 50% repair cost responsibility only when both conditions are met.\"\n";
+  prompt += "Contoh style baik: \"This step should explain that user negligence includes misuse, improper handling, or failure to follow procedures, and that asset age is calculated from the purchase date. The 50% repair cost should apply only when both conditions are met.\"\n";
   prompt += "Contoh style buruk: \"Define criteria for user negligence, asset age calculation, and the resulting payment structure.\"\n\n";
   prompt += `Langkah: ${text}\n\n`;
   return prompt;
