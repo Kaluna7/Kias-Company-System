@@ -1088,7 +1088,7 @@ export default function SchedulePage() {
     if (!selectedMainRow) return;
     
     // Confirm deletion
-    if (!confirm(`Apakah Anda yakin ingin menghapus schedule untuk ${selectedMainRow.department}?`)) {
+    if (!confirm(`Are you sure you want to delete the schedule for ${selectedMainRow.department}?`)) {
       return;
     }
 
@@ -1105,7 +1105,7 @@ export default function SchedulePage() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
-        toast.show("Gagal menghapus main schedule: " + (json?.error || `HTTP ${res.status}`), "error");
+        toast.show("Failed to delete main schedule: " + (json?.error || `HTTP ${res.status}`), "error");
         return;
       }
 
@@ -1133,10 +1133,10 @@ export default function SchedulePage() {
       await loadMainSchedule();
       
       setMainEditorOpen(false);
-      toast.show("Schedule berhasil dihapus!", "success");
+      toast.show("Schedule deleted successfully.", "success");
     } catch (e) {
       console.error("Error deleting main schedule:", e);
-      toast.show("Error menghapus schedule: " + (e?.message || String(e)), "error");
+      toast.show("Error deleting schedule: " + (e?.message || String(e)), "error");
     }
   };
 
@@ -1151,21 +1151,21 @@ export default function SchedulePage() {
       // Allow saving with empty incharge_modules (not set state)
       // Still validate main dates as they are required
       if (!mainTempStartDate || !mainTempEndDate) {
-        toast.show("Harap pilih Start dan End date!", "error");
+        toast.show("Please select a start and end date.", "error");
         return;
       }
       if (new Date(mainTempStartDate) > new Date(mainTempEndDate)) {
-        toast.show("Start date tidak boleh lebih besar dari End date!", "error");
+        toast.show("Start date cannot be after the end date.", "error");
         return;
       }
     } else if (isAll) {
       // Validate main dates (used when "All" is selected)
       if (!mainTempStartDate || !mainTempEndDate) {
-        toast.show("Harap pilih Start dan End date!", "error");
+        toast.show("Please select a start and end date.", "error");
         return;
       }
       if (new Date(mainTempStartDate) > new Date(mainTempEndDate)) {
-        toast.show("Start date tidak boleh lebih besar dari End date!", "error");
+        toast.show("Start date cannot be after the end date.", "error");
         return;
       }
     } else if (hasModules) {
@@ -1180,7 +1180,7 @@ export default function SchedulePage() {
             modDates.startDate !== "" && modDates.endDate !== "") {
           if (new Date(modDates.startDate) > new Date(modDates.endDate)) {
             const moduleLabel = MAIN_MODULES.find((m) => m.key === moduleKey)?.label || moduleKey;
-            toast.show(`${moduleLabel}: Start date tidak boleh lebih besar dari End date!`, "error");
+            toast.show(`${moduleLabel}: Start date cannot be after the end date.`, "error");
             return;
           }
         }
@@ -1251,7 +1251,7 @@ export default function SchedulePage() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
-        toast.show("Gagal menyimpan main schedule: " + (json?.error || `HTTP ${res.status}`), "error");
+        toast.show("Failed to save main schedule: " + (json?.error || `HTTP ${res.status}`), "error");
         return;
       }
 
@@ -1471,10 +1471,10 @@ export default function SchedulePage() {
       await loadAllModuleSchedules();
       console.log("Module schedules reloaded");
       
-      toast.show("Main schedule berhasil disimpan!", "success");
+      toast.show("Main schedule saved successfully.", "success");
     } catch (e) {
       console.error("Error saving main schedule:", e);
-      toast.show("Error menyimpan main schedule: " + (e?.message || String(e)), "error");
+      toast.show("Error saving main schedule: " + (e?.message || String(e)), "error");
     }
   };
 
@@ -1533,11 +1533,11 @@ export default function SchedulePage() {
 
   const handleDatePickerSave = async () => {
     if (!tempStartDate || !tempEndDate) {
-      toast.show("Harap pilih Start dan End date!", "error");
+      toast.show("Please select a start and end date.", "error");
       return;
     }
     if (new Date(tempStartDate) > new Date(tempEndDate)) {
-      toast.show("Start date tidak boleh lebih besar dari End date!", "error");
+      toast.show("Start date cannot be after the end date.", "error");
       return;
     }
     // Enforce Main Schedule bounds: sub-schedule cannot exceed main schedule dates
@@ -1573,13 +1573,13 @@ export default function SchedulePage() {
         });
 
         setDatePickerOpen(false);
-        toast.show("Data berhasil disimpan!", "success");
+        toast.show("Saved successfully.", "success");
       } else {
-        toast.show("Gagal menyimpan data: " + (data.error || "Unknown error"), "error");
+        toast.show("Failed to save data: " + (data.error || "Unknown error"), "error");
       }
     } catch (err) {
       console.error("Error saving schedule:", err);
-      toast.show("Error menyimpan data: " + err.message, "error");
+      toast.show("Error saving data: " + err.message, "error");
     }
   };
 
@@ -1678,7 +1678,7 @@ export default function SchedulePage() {
                         <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium text-sm sm:text-base">{row.department}</td>
                         <td
                           className="px-3 py-3 sm:px-6 sm:py-4 text-white/80 cursor-pointer hover:bg-white/10 rounded transition-colors text-sm sm:text-base"
-                          title="Klik untuk mengatur Incharge & tanggal"
+                          title="Click to set incharge and dates"
                           onClick={(e) => handleMainEditorOpen(row, e)}
                         >
                           <span className="truncate block max-w-[120px] sm:max-w-none">
@@ -1693,14 +1693,14 @@ export default function SchedulePage() {
                         </td>
                         <td
                           className="px-3 py-3 sm:px-6 sm:py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors text-sm"
-                          title="Klik untuk mengatur Start & End date"
+                          title="Click to set start and end dates"
                           onClick={(e) => handleMainEditorOpen(row, e)}
                         >
                           {mods.length === 0 ? "—" : row.startDate}
                         </td>
                         <td
                           className="px-3 py-3 sm:px-6 sm:py-4 text-center text-white/90 font-medium cursor-pointer hover:bg-white/10 rounded transition-colors text-sm"
-                          title="Klik untuk mengatur Start & End date"
+                          title="Click to set start and end dates"
                           onClick={(e) => handleMainEditorOpen(row, e)}
                         >
                           {mods.length === 0 ? "—" : row.endDate}
@@ -1760,14 +1760,14 @@ export default function SchedulePage() {
                           <td className="px-3 py-2 sm:px-6 sm:py-3 text-white/80 font-semibold text-xs sm:text-sm">{label}</td>
                           <td
                             className={`px-3 py-2 sm:px-6 sm:py-3 text-center text-white/90 font-medium rounded transition-colors text-xs sm:text-sm ${clickable ? "cursor-pointer hover:bg-white/10" : "opacity-60"}`}
-                            title="Klik untuk mengatur tanggal module ini di Main Schedule"
+                            title="Click to set this module’s dates in the main schedule"
                             onClick={(e) => handleMainEditorOpen(row, e)}
                           >
                             {start}
                           </td>
                           <td
                             className={`px-3 py-2 sm:px-6 sm:py-3 text-center text-white/90 font-medium rounded transition-colors text-xs sm:text-sm ${clickable ? "cursor-pointer hover:bg-white/10" : "opacity-60"}`}
-                            title="Klik untuk mengatur tanggal module ini di Main Schedule"
+                            title="Click to set this module’s dates in the main schedule"
                             onClick={(e) => handleMainEditorOpen(row, e)}
                           >
                             {end}
@@ -1855,7 +1855,7 @@ export default function SchedulePage() {
                               setTempSelectedUserIds(existingIds);
                               setUserPickerContext({ moduleKey: section.key, department_id: row.department_id });
                             }}
-                            title="Pilih user (multiple)"
+                            title="Select users (multiple)"
                           >
                             <span className={`text-xs truncate flex-1 min-w-0 ${row.user ? "text-white/95" : "text-white/50"}`}>
                               {row.user || "Select user"}
@@ -1930,7 +1930,7 @@ export default function SchedulePage() {
           });
           setInlineSavingKey("");
           if (!r.ok) {
-            toast.show("Gagal update user: " + (r.error || "Unknown error"), "error");
+            toast.show("Failed to update users: " + (r.error || "Unknown error"), "error");
           } else {
             setUserPickerContext(null);
           }
@@ -2184,12 +2184,12 @@ export default function SchedulePage() {
                 </div>
                 {mainTempInchargeModules.includes("all") && (
                   <div className="mt-1 text-xs text-slate-500">
-                    Mode <span className="font-semibold">All</span> aktif. Matikan All untuk memilih module tertentu.
+                    <span className="font-semibold">All</span> mode is on. Turn off All to choose specific modules.
                   </div>
                 )}
                 {mainTempInchargeModules.length === 0 && (
                   <div className="mt-1 text-xs text-slate-500">
-                    <span className="font-semibold">Not Set</span>: Pilih All atau module spesifik untuk mengatur schedule.
+                    <span className="font-semibold">Not set</span>: choose All or specific modules to configure the schedule.
                   </div>
                 )}
               </div>
@@ -2262,8 +2262,7 @@ export default function SchedulePage() {
                         }
                       }
                       
-                      // Untuk pemilihan tanggal per-module di main schedule editor,
-                      // batasi minimal ke hari ini supaya tidak bisa pilih tanggal yang sudah lewat.
+                      // Per-module dates in the main schedule editor: floor at today so past dates cannot be chosen.
                       const minIso = todayIso;
                       const maxIso = null;
 
@@ -2313,7 +2312,7 @@ export default function SchedulePage() {
                   type="button"
                   className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
                   onClick={handleMainScheduleDelete}
-                  title="Hapus schedule untuk department ini"
+                  title="Delete schedule for this department"
                 >
                   Delete schedule
                 </button>

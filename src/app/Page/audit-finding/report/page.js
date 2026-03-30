@@ -1,12 +1,9 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import ReportClient from "./ReportClient";
 
 async function loadAuditFindingReportData(year) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     // Map department untuk API endpoint
     // Mapping department_id dari schedule ke department name

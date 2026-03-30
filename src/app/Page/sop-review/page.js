@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { headers } from 'next/headers';
 import { Suspense } from 'react';
+import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
@@ -49,10 +49,7 @@ function getDeptKeyFromCardName(name) {
 // Server-side: one batch request for all SOP statuses (fast)
 async function loadSopStatuses() {
   const statusMap = {};
-  const headersList = await headers();
-  const host = headersList.get("host") || "localhost:3000";
-  const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-  const baseUrl = `${protocol}://${host}`;
+  const baseUrl = getInternalFetchBaseUrl();
 
   try {
     const res = await fetch(`${baseUrl}/api/SopReview/status`, { cache: "no-store" });

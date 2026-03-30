@@ -90,13 +90,13 @@ export default function EvidenceReportClient({ initialData }) {
   }, []);
 
   return (
-    <main className="min-h-screen w-full bg-[#E6F0FA]">
-      <div className="px-3 sm:px-4 pt-6 pb-4 flex flex-col h-full">
+    <main className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#E6F0FA]">
+      <div className="px-3 sm:px-4 pt-4 sm:pt-6 pb-4 flex flex-col h-full min-w-0">
         <div className="mb-3">
           <button
             type="button"
             onClick={handleBack}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 sm:px-4 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors text-sm w-full sm:w-auto justify-center sm:justify-start"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -105,10 +105,10 @@ export default function EvidenceReportClient({ initialData }) {
           </button>
         </div>
 
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-slate-700 font-semibold">B3.1 EVIDENCE REPORT</div>
         </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+        <div className="bg-white rounded-xl shadow-lg p-3 sm:p-6 border border-gray-200 min-w-0">
           {/* Grouped Data Display */}
           <div className="mt-4 space-y-4">
             {groupedData.length === 0 && (
@@ -123,12 +123,12 @@ export default function EvidenceReportClient({ initialData }) {
                 className="border border-gray-200 rounded-lg shadow-sm overflow-hidden"
               >
                 {/* Group Header */}
-                <div className="bg-gradient-to-r from-[#141D38] to-[#1a2744] text-white p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <h3 className="text-lg font-bold">{group.department}</h3>
-                        <span className="text-sm text-blue-200">
+                <div className="bg-gradient-to-r from-[#141D38] to-[#1a2744] text-white p-3 sm:p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-4 sm:gap-y-0">
+                        <h3 className="text-base sm:text-lg font-bold break-words">{group.department}</h3>
+                        <span className="text-xs sm:text-sm text-blue-200 shrink-0">
                           {group.createdDate 
                             ? group.createdDate.toLocaleDateString("en-GB", { 
                                 day: "2-digit", 
@@ -138,11 +138,11 @@ export default function EvidenceReportClient({ initialData }) {
                             : "No Date"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 mt-2 text-sm">
-                        <span className="text-gray-300">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-x-4 sm:gap-y-2 mt-2 text-xs sm:text-sm">
+                        <span className="text-gray-300 min-w-0 break-words">
                           <span className="font-semibold">Preparer:</span> {group.preparer || "-"}
                         </span>
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                        <span className={`px-2 py-1 rounded text-xs font-semibold shrink-0 ${
                           group.overallStatus === "COMPLETE"
                             ? "bg-yellow-500 text-yellow-900"
                             : group.overallStatus === "INCOMPLETE"
@@ -151,14 +151,15 @@ export default function EvidenceReportClient({ initialData }) {
                         }`}>
                           {group.overallStatus || "-"}
                         </span>
-                        <span className="text-gray-300">
+                        <span className="text-gray-300 shrink-0">
                           <span className="font-semibold">Items:</span> {group.items.length}
                         </span>
                       </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => handleView(group)}
-                      className="ml-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                      className="w-full sm:w-auto sm:shrink-0 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg touch-manipulation"
                     >
                       View Details
                     </button>
@@ -166,8 +167,8 @@ export default function EvidenceReportClient({ initialData }) {
                 </div>
 
                 {/* Group Summary Table (tanpa kolom Status) */}
-                <div className="overflow-x-auto -mx-2 sm:mx-0">
-                  <table className="min-w-[480px] w-full text-xs">
+                <div className="overflow-x-auto -mx-1 sm:mx-0 overscroll-x-contain touch-pan-x">
+                  <table className="min-w-[480px] w-full text-[11px] sm:text-xs">
                     <thead className="bg-gray-100">
                       <tr>
                         <th className="p-2 text-left font-semibold border border-gray-200">AP Code</th>
@@ -185,13 +186,13 @@ export default function EvidenceReportClient({ initialData }) {
                             className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
                           >
                             <td className="p-2 border border-gray-200 font-medium">{item.ap_code || "-"}</td>
-                            <td className="p-2 border border-gray-200">
-                              <div className="max-w-xs truncate" title={item.substantive_test || "-"}>
+                            <td className="p-2 border border-gray-200 max-w-[40vw] sm:max-w-xs">
+                              <div className="line-clamp-2 sm:line-clamp-none sm:truncate" title={item.substantive_test || "-"}>
                                 {item.substantive_test || "-"}
                               </div>
                             </td>
-                            <td className="p-2 border border-gray-200">
-                              <div className="max-w-xs text-xs text-gray-700" title={fileNames}>
+                            <td className="p-2 border border-gray-200 max-w-[35vw] sm:max-w-xs">
+                              <div className="text-[10px] sm:text-xs text-gray-700 break-words" title={fileNames}>
                                 {files.length > 1 ? `${files.length} files: ${fileNames.slice(0, 40)}${fileNames.length > 40 ? "…" : ""}` : (fileNames || "-")}
                               </div>
                             </td>
@@ -216,15 +217,19 @@ export default function EvidenceReportClient({ initialData }) {
 
       {/* Modal View Group Data */}
       {viewOpen && selectedGroup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-lg shadow-lg w-[min(1200px,95vw)] max-h-[90vh] overflow-auto">
-            <div className="sticky top-0 bg-white border-b z-10">
-              <div className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white shadow-lg w-full rounded-t-2xl sm:rounded-lg sm:w-[min(1200px,calc(100vw-2rem))] max-h-[min(100dvh,100vh)] sm:max-h-[90vh] flex flex-col min-h-0 overflow-hidden"
+          >
+            <div className="sticky top-0 bg-white border-b z-10 shrink-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between px-3 py-3 sm:px-4 sm:py-3 pr-12 sm:pr-4 relative">
+                <div className="min-w-0 pr-2">
+                  <h3 className="text-base sm:text-xl font-bold text-gray-800 break-words">
                     {selectedGroup.department} - Evidence Details
                   </h3>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-xs sm:text-sm text-gray-600 mt-1 break-words">
                     Created Date: {selectedGroup.createdDate 
                       ? selectedGroup.createdDate.toLocaleDateString("en-GB", { 
                           day: "2-digit", 
@@ -235,11 +240,13 @@ export default function EvidenceReportClient({ initialData }) {
                   </p>
                 </div>
                 <button
-                  className="text-gray-600 hover:text-gray-800"
+                  type="button"
+                  className="absolute right-2 top-2 sm:static sm:self-start p-2 -m-2 sm:m-0 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-100 touch-manipulation"
                   onClick={() => {
                     setViewOpen(false);
                     setSelectedGroup(null);
                   }}
+                  aria-label="Close"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -248,7 +255,7 @@ export default function EvidenceReportClient({ initialData }) {
               </div>
             </div>
             
-            <div className="p-4 space-y-4">
+            <div className="p-3 sm:p-4 space-y-4 overflow-y-auto min-h-0 flex-1">
               {/* Group Summary */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -280,8 +287,8 @@ export default function EvidenceReportClient({ initialData }) {
               </div>
 
               {/* All Items Table (tanpa kolom Status) */}
-              <div className="overflow-x-auto -mx-2 sm:mx-0">
-                <table className="min-w-[520px] w-full border-collapse text-xs">
+              <div className="overflow-x-auto -mx-1 sm:mx-0 overscroll-x-contain touch-pan-x">
+                <table className="min-w-[520px] w-full border-collapse text-[11px] sm:text-xs">
                   <thead>
                     <tr className="bg-[#141D38] text-white">
                       <th className="p-2 text-left font-semibold border border-gray-300">AP Code</th>
@@ -311,7 +318,7 @@ export default function EvidenceReportClient({ initialData }) {
                               )) : (item.file_name ? <span className="text-blue-600 font-medium">{item.file_name}</span> : "-")}
                             </div>
                           </td>
-                          <td className="p-2 border border-gray-200 text-center whitespace-nowrap align-top">
+                          <td className="p-2 border border-gray-200 text-center text-[10px] sm:text-xs whitespace-nowrap align-top">
                             {item.updated_at 
                               ? new Date(item.updated_at).toLocaleDateString("en-GB", { 
                                   day: "2-digit", 
@@ -352,21 +359,21 @@ export default function EvidenceReportClient({ initialData }) {
                     {selectedGroup.items.flatMap((item, itemIdx) =>
                       (item.attachments || []).map((att, attIdx) => (
                         <div key={`file-${item.ap_id}-${itemIdx}-${attIdx}`} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                          <div className="flex items-center gap-3">
-                            <svg className="w-6 h-6 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3">
+                            <svg className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-blue-900 text-xs">AP Code: {item.ap_code || "-"}</div>
-                              <div className="text-sm text-gray-700 truncate" title={att.name || ""}>{att.name || "N/A"}</div>
+                              <div className="text-sm text-gray-700 break-words" title={att.name || ""}>{att.name || "N/A"}</div>
                               {att.url && (
-                                <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all text-xs block truncate">
+                                <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all text-xs block mt-1">
                                   {att.url}
                                 </a>
                               )}
                             </div>
                             {att.url && (
-                              <a href={att.url} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1 flex-shrink-0">
+                              <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 inline-flex items-center gap-1 flex-shrink-0 touch-manipulation self-stretch sm:self-auto">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
@@ -382,9 +389,10 @@ export default function EvidenceReportClient({ initialData }) {
               )}
             </div>
             
-            <div className="sticky bottom-0 bg-white border-t px-4 py-3 flex justify-end">
+            <div className="sticky bottom-0 bg-white border-t px-3 py-3 sm:px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex justify-stretch sm:justify-end shrink-0">
               <button
-                className="px-4 py-2 rounded bg-gray-200 text-sm hover:bg-gray-300"
+                type="button"
+                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-gray-200 text-sm font-medium hover:bg-gray-300 touch-manipulation"
                 onClick={() => {
                   setViewOpen(false);
                   setSelectedGroup(null);

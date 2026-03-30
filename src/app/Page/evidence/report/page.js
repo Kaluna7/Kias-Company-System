@@ -1,12 +1,9 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import EvidenceReportClient from "./_components/EvidenceReportClient";
 
 async function loadEvidenceReportData(year) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     const params = new URLSearchParams();
     if (year) {

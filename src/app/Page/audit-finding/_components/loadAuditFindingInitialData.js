@@ -1,11 +1,8 @@
-import { headers } from "next/headers";
+import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 
 export async function loadAuditFindingInitialData(apiPath, year) {
   try {
-    const headersList = await headers();
-    const host = headersList.get("host") || "localhost:3000";
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-    const baseUrl = `${protocol}://${host}`;
+    const baseUrl = getInternalFetchBaseUrl();
 
     const url = new URL(`${baseUrl}/api/audit-finding/${encodeURIComponent(apiPath)}`);
     url.searchParams.set("page", "1");
