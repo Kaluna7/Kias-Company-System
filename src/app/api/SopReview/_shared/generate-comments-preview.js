@@ -7,7 +7,7 @@ const GEN_PATH = process.env.GOOGLE_AI_GENPATH;
 const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:${GEN_PATH}`;
 
 async function callGemini(prompt) {
-  const body = { contents: [{ parts: [{ text: prompt }] }] };
+  const body = { contents: [{ parts: [{ text: prompt }] }], temperature: 0.0 };
   try {
     const res = await fetch(GOOGLE_URL, {
       method: "POST",
@@ -81,14 +81,30 @@ function isEchoOfStep(comment, step, threshold = 0.35) {
 function buildSinglePromptStrict(item) {
   const step = (item.sop_related || "").replace(/\n+/g, " ").trim().slice(0, 1400);
   return [
-    "Anda adalah asisten profesional. Buat komentar reviewer untuk langkah SOP di bawah.",
+    "Anda adalah reviewer SOP yang membantu penulis SOP memperbaiki kalimat agar lebih jelas dan mudah dipahami.",
+    "Tugas Anda adalah menulis komentar review yang berisi usulan revisi konkret, bukan sekadar menyebut apa yang kurang.",
     "PERSYARATAN (WAJIB):",
     "1) Gunakan bahasa yang sama dengan bahasa pada langkah SOP.",
-    "2) Panjang komentar maksimal 2 kalimat.",
-    "3) Bahasa harus profesional, jelas, mudah dipahami, dan actionable.",
-    "4) Jangan menyalin atau mengulang langsung frasa lengkap dari langkah. Tidak lebih dari 30% kata yang sama.",
-    "5) Jangan sertakan numbering, 'Comment:', atau JSON.",
-    "6) Keluarkan HANYA isi komentar.",
+    "2) Komentar harus terdengar seperti arahan revisi yang jelas dan substantif, bukan analisis abstrak.",
+    "3) Jika langkah ambigu, langsung tuliskan isi perbaikan yang perlu dimasukkan ke SOP, misalnya definisi, kondisi if/when, decision rule, kriteria, pihak bertanggung jawab, dokumen/form, approval, batas waktu, output, atau exception handling.",
+    "4) Jangan hanya menulis perintah seperti 'Define...', 'Clarify...', 'Specify...', atau 'Add...' tanpa isi detailnya.",
+    "5) Komentar harus membantu user memahami bagaimana kalimat SOP seharusnya diperjelas.",
+    "6) Utamakan bahasa yang mudah dimengerti oleh user bisnis.",
+    "7) Komentar boleh menyarankan bentuk kalimat yang lebih jelas, tetapi tetap dalam format komentar reviewer singkat, bukan paragraf penjelasan panjang.",
+    "8) Panjang komentar maksimal 2 kalimat.",
+    "9) Bahasa harus profesional, jelas, spesifik, mudah dipahami, dan actionable.",
+    "10) Jangan sertakan numbering, 'Comment:', atau JSON.",
+    "11) Keluarkan HANYA isi komentar.",
+    "",
+    "Contoh gaya yang diinginkan:",
+    'Langkah: "MIS Department will check the stock or repair the device."',
+    'Komentar yang baik: "State that stock availability should be checked only if replacement is required, while repair should be performed if the device can still be fixed."',
+    'Komentar yang juga baik: "Revise this step so that the device is first assessed; if replacement is needed, stock availability should be checked, otherwise the device should be repaired."',
+    'Komentar yang buruk: "Specify the conditions dictating either inventory assessment or equipment servicing."',
+    "",
+    'Langkah: "If goods are damaged due to user negligence with an asset age requirement of less than 5 years, the user must pay 50% of the total repair costs."',
+    'Komentar yang baik: "Define user negligence as misuse, improper handling, or failure to follow usage procedures, and state that asset age is calculated from the purchase date. Keep the 50% repair cost responsibility only when both conditions are met."',
+    'Komentar yang buruk: "Define criteria for user negligence, asset age calculation, and the resulting payment structure."',
     "",
     `Langkah: ${step}`,
     "",
