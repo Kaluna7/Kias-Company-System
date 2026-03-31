@@ -379,7 +379,18 @@ function DashboardPageContent() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
-        toast.show(json?.error || `Failed to update profile (HTTP ${res.status})`, "error");
+        const serverError = String(json?.error || "").toLowerCase();
+        const isImageTooLarge =
+          res.status === 403 ||
+          res.status === 413 ||
+          serverError.includes("too large") ||
+          serverError.includes("payload");
+        toast.show(
+          isImageTooLarge
+            ? "Image too large. Please upload a smaller image."
+            : json?.error || `Failed to update profile (HTTP ${res.status})`,
+          "error"
+        );
         return;
       }
       setProfileName(json.user?.name || nameToSave);
@@ -587,7 +598,7 @@ function DashboardPageContent() {
                   className="bg-white/10 border border-white/30 text-white text-xs sm:text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200/70"
                 >
                   {[currentYear + 1, currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                    <option key={y} value={y}>
+                    <option key={y} value={y} className="text-slate-900 bg-white">
                       {y}
                     </option>
                   ))}
