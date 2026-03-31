@@ -52,6 +52,7 @@ function DashboardPageContent() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+  const [isHelpSupportOpen, setIsHelpSupportOpen] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
   const [editName, setEditName] = useState("");
@@ -351,6 +352,13 @@ function DashboardPageContent() {
     if (isCreatingAccount) return;
     setIsCreateAccountOpen(false);
   }, [isCreatingAccount]);
+  const openHelpSupport = useCallback(() => {
+    setIsProfileOpen(false);
+    setIsHelpSupportOpen(true);
+  }, []);
+  const closeHelpSupport = useCallback(() => {
+    setIsHelpSupportOpen(false);
+  }, []);
 
   const handleAvatarChange = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -403,6 +411,8 @@ function DashboardPageContent() {
       setIsSavingProfile(false);
     }
   }, [editName, editAvatarFile, toast]);
+  const helpSupportText = "Halo, system kias ada error.";
+  const helpSupportLink = `https://wa.me/qr/K5GKCLOXIZ3CE1?text=${encodeURIComponent(helpSupportText)}`;
 
   const handleCreateAccount = useCallback(async () => {
     const name = (newAccountName || "").trim();
@@ -537,7 +547,17 @@ function DashboardPageContent() {
                 <div className={`absolute right-0 top-full mt-2 w-56 sm:w-64 bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-200 py-3 z-20 transition-[opacity,transform] duration-200 ${isProfileOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none invisible"}`}>
                   <div className="px-4 py-3 border-b border-gray-200/30">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{initials}</div>
+                      {profileAvatarUrl ? (
+                        <img
+                          src={profileAvatarUrl}
+                          alt={effectiveName}
+                          className="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-sm flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                          {initials}
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-gray-800 text-sm truncate">{effectiveName}</p>
                         <p className="text-gray-600 text-xs capitalize">{userRole}</p>
@@ -561,7 +581,13 @@ function DashboardPageContent() {
                         <span className="font-medium">Create Account for Employee</span>
                       </button>
                     )}
-                    <a href="/help" className="block"><button className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"><span className="font-medium">Help & Support</span></button></a>
+                    <button
+                      type="button"
+                      onClick={openHelpSupport}
+                      className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
+                    >
+                      <span className="font-medium">Help & Support</span>
+                    </button>
                   </div>
                   <div className="border-t border-gray-200/30 mt-1 pt-1 px-2">
                     <button onClick={() => signOut({ callbackUrl: "/Page/auth" })} className="w-full flex items-center px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors text-sm"><span className="font-medium">Sign Out</span></button>
@@ -1012,6 +1038,51 @@ function DashboardPageContent() {
               >
                 {confirmDialog.confirmLabel}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isHelpSupportOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Help & Support</h3>
+                <p className="mt-1 text-sm text-slate-600">Contact support via WhatsApp.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeHelpSupport}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Auto message</p>
+              <p className="mt-1 text-sm text-slate-700">{helpSupportText}</p>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeHelpSupport}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <a
+                href={helpSupportLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#25D366] hover:bg-[#1ebe5d]"
+              >
+                Contact via WhatsApp
+              </a>
             </div>
           </div>
         </div>

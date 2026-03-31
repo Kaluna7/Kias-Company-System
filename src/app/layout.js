@@ -19,6 +19,11 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "KIAS AUDIT SYSTEM",
   description: "Enjoy your work with this system & earn your money",
+  icons: {
+    icon: "/images/kias-logo.png",
+    shortcut: "/images/kias-logo.png",
+    apple: "/images/kias-logo.png",
+  },
 };
 
 export default function RootLayout({ children }) {

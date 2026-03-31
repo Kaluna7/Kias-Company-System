@@ -51,6 +51,7 @@ export default function AuditFindingDeptClient({
   const isReviewer = role === "reviewer";
   const isAdmin = role === "admin";
   const isUser = role === "user";
+  const canPublish = isAdmin || isReviewer;
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1368,17 +1369,17 @@ export default function AuditFindingDeptClient({
                 </button>
                 <button
                   onClick={handlePublish}
-                  disabled={loading || (!isScheduleConfigured && !isAdmin) || isReviewer}
+                  disabled={loading || !canPublish || (!isScheduleConfigured && !isAdmin)}
                   className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                    loading || (!isScheduleConfigured && !isAdmin) || isReviewer
+                    loading || !canPublish || (!isScheduleConfigured && !isAdmin)
                       ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                       : "bg-purple-600 hover:bg-purple-700 text-white"
                   }`}
                   title={
                     !isScheduleConfigured && !isAdmin
                       ? "Schedule not configured"
-                      : isReviewer
-                      ? "Reviewer cannot publish"
+                      : !canPublish
+                      ? "Only admins and reviewers can publish"
                       : "Publish"
                   }
                 >
