@@ -14,6 +14,7 @@ export default function EvidenceDeptPage({
   const role = (session?.user?.role || "").toLowerCase();
   const isReviewer = role === "reviewer";
   const isAdmin = role === "admin";
+  const canPublish = isAdmin || isReviewer;
   const [preparer, setPreparer] = useState("");
   const [apData, setApData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -384,16 +385,19 @@ export default function EvidenceDeptPage({
             </select>
             <button
               onClick={handleSave}
-              disabled={saving || loading || overallStatus !== "COMPLETE"}
+              disabled={saving || loading || overallStatus !== "COMPLETE" || !canPublish}
               className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!canPublish ? "Only admins and reviewers can publish" : "Publish"}
             >
               {saving ? "Publishing..." : "Publish"}
             </button>
           </div>
         </div>
-        {overallStatus !== "COMPLETE" && (
+        {(overallStatus !== "COMPLETE" || !canPublish) && (
           <div className="mb-3 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
-            {isReviewer ? "Status must be COMPLETE to publish" : "Hanya role Reviewer yang dapat mengubah status ke COMPLETE"}
+            {!canPublish
+              ? "Only admins and reviewers can publish."
+              : "Status must be COMPLETE to publish."}
           </div>
         )}
 
