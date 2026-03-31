@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 
 function qIdent(name) {
@@ -155,6 +157,10 @@ export async function POST(req, { params }) {
     // Also check body parameter for replace mode
     const finalReplaceMode = replaceMode || body?.replace === true;
 
+    const session = await getServerSession(authOptions);
+    const role = (session?.user?.role || "").toLowerCase();
+    const canEditFinalStatus = role === "admin" || role === "reviewer";
+
     const client = await pool.connect();
     try {
       // Ensure table exists
@@ -178,10 +184,23 @@ export async function POST(req, { params }) {
 
       await client.query("BEGIN");
 
+      // Final status: hanya admin/reviewer boleh mengubah; user lain pertahankan nilai terakhir (sebelum DELETE).
+      let preservedFinalStatus = null;
+      if (!canEditFinalStatus) {
+        const prevR = await client.query(
+          `SELECT final_status FROM ${metaTable} ORDER BY id DESC LIMIT 1`
+        );
+        preservedFinalStatus = prevR.rows[0]?.final_status ?? null;
+      }
+
       // If replace mode, delete all existing data first
       if (finalReplaceMode) {
         await client.query(`DELETE FROM ${metaTable}`);
       }
+
+      const finalStatusToSave = canEditFinalStatus
+        ? final_status || null
+        : preservedFinalStatus;
 
       // Insert new meta data
       const q = `
@@ -194,7 +213,7 @@ export async function POST(req, { params }) {
       const vals = [
         departmentName,
         preparer_status || null,
-        final_status || null,
+        finalStatusToSave,
         finding_result || null,
         finding_result_file_name || null,
         report_as || null,

@@ -40,20 +40,12 @@ export async function GET(req) {
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") ?? "").trim();
     const status = (url.searchParams.get("status") ?? "").trim();
-    const yearParam = url.searchParams.get("year");
     const page = Math.max(1, toIntSafe(url.searchParams.get("page"), 1));
     const pageSize = Math.max(1, toIntSafe(url.searchParams.get("pageSize"), 50));
     const skip = (page - 1) * pageSize;
 
     const where = {
       ...(status ? { status } : {}),
-      ...(() => {
-        const y = yearParam ? parseInt(yearParam, 10) : null;
-        if (!y || Number.isNaN(y)) return {};
-        const from = new Date(y, 0, 1);
-        const to = new Date(y + 1, 0, 1);
-        return { created_at: { gte: from, lt: to } };
-      })(),
       ...(q
         ? {
             OR: [

@@ -1,9 +1,13 @@
 // app/b2-audit/page.js
 import Link from 'next/link';
 import Image from 'next/image';
-import { headers } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
+import {
+  buildScheduleWindowsByDeptKey,
+  formatScheduleRange,
+} from "@/lib/scheduleCardHelpers";
 
 // Map department name to deptKey for user assignment checking
 function getDeptKeyFromDepartmentName(deptName) {
@@ -36,13 +40,9 @@ export default async function B2AuditFinding({ searchParams }) {
   // Get user assignments for Audit Finding module
   // Reviewer needs assignment like regular user, but can only edit reviewer fields
   let allowedDepartments = [];
-  if (!isAdmin && userName) {
+  if (!isAdmin && !isReviewer && userName) {
     try {
-      const headersList = await headers();
-      const host = headersList.get('host') || 'localhost:3000';
-      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-      const baseUrl = `${protocol}://${host}`;
-      
+      const baseUrl = getInternalFetchBaseUrl();
       const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=audit-finding`, {
         cache: "no-store",
       });
@@ -92,41 +92,47 @@ export default async function B2AuditFinding({ searchParams }) {
     { id: 'B2.11', department: 'WAREHOUSE', apiPath: 'whs' },
   ];
 
-  // Fetch status from each department's meta (preparer_status / final_status)
-  let baseUrl = '';
-  try {
-    const headersList = await headers();
-    const host = headersList.get('host') || 'localhost:3000';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-    baseUrl = `${protocol}://${host}`;
-  } catch (_) {}
+  const internalBase = getInternalFetchBaseUrl();
 
-  const metaResults = await Promise.all(
-    baseFindings.map(async (base) => {
-      if (!baseUrl) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
-      try {
-        const url = new URL(`${baseUrl}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`);
-        if (yearParam) {
-          url.searchParams.set("year", String(yearParam));
+  const [metaResults, scheduleByDeptKey] = await Promise.all([
+    Promise.all(
+      baseFindings.map(async (base) => {
+        try {
+          const url = new URL(`${internalBase}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`);
+          if (yearParam) {
+            url.searchParams.set("year", String(yearParam));
+          }
+          const res = await fetch(url.toString(), { cache: 'no-store' });
+          if (!res.ok) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
+          const json = await res.json().catch(() => null);
+          const meta = json?.success ? json.data : null;
+          const preparerStatus = (meta?.preparer_status || '').toUpperCase().trim();
+          const finalStatus = (meta?.final_status || '').toUpperCase().trim();
+          // Process: from preparer_status or final_status; show nothing (-) when neither is set
+          const process = preparerStatus || finalStatus || '';
+          // statusWP (Not Checked / Checked): from page meta — Checked when COMPLETED/APPROVED, else Not Checked
+          const statusWP = (preparerStatus === 'COMPLETED' || preparerStatus === 'APPROVED' || finalStatus === 'COMPLETED' || finalStatus === 'APPROVED')
+            ? 'Checked'
+            : 'Not Checked';
+          return { ...base, statusWP, process, finalStatus };
+        } catch (_) {
+          return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
         }
-        const res = await fetch(url.toString(), { cache: 'no-store' });
-        if (!res.ok) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
-        const json = await res.json().catch(() => null);
-        const meta = json?.success ? json.data : null;
-        const preparerStatus = (meta?.preparer_status || '').toUpperCase().trim();
-        const finalStatus = (meta?.final_status || '').toUpperCase().trim();
-        // Process: from preparer_status or final_status; show nothing (-) when neither is set
-        const process = preparerStatus || finalStatus || '';
-        // statusWP (Not Checked / Checked): from page meta — Checked when COMPLETED/APPROVED, else Not Checked
-        const statusWP = (preparerStatus === 'COMPLETED' || preparerStatus === 'APPROVED' || finalStatus === 'COMPLETED' || finalStatus === 'APPROVED')
-          ? 'Checked'
-          : 'Not Checked';
-        return { ...base, statusWP, process, finalStatus };
-      } catch (_) {
-        return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
+      })
+    ),
+    (async () => {
+      try {
+        const sr = await fetch(`${internalBase}/api/schedule/module?module=audit-finding`, { cache: "no-store" });
+        const sj = await sr.json().catch(() => null);
+        if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
+          return buildScheduleWindowsByDeptKey(sj.rows);
+        }
+      } catch (e) {
+        console.warn("Failed to load audit-finding schedule dates:", e?.message);
       }
-    })
-  );
+      return {};
+    })(),
+  ]);
 
   const auditFindings = metaResults;
 
@@ -252,7 +258,9 @@ export default async function B2AuditFinding({ searchParams }) {
               const deptPath = deptMap[finding.id] || finding.id.toLowerCase();
               const isEnabled = isDepartmentEnabled(finding.department);
               const isDisabled = !isEnabled;
-              
+              const win = scheduleByDeptKey[finding.apiPath];
+              const scheduleRange = win ? formatScheduleRange(win.start, win.end) : "";
+
               return isDisabled ? (
                 <div
                   key={finding.id}
@@ -274,6 +282,11 @@ export default async function B2AuditFinding({ searchParams }) {
                     </span>
                   </div>
                   </div>
+
+                  <p className="text-xs text-slate-500 mb-2">
+                    <span className="font-semibold text-slate-600">Schedule</span>
+                    <span className="block mt-0.5">{scheduleRange || "—"}</span>
+                  </p>
                   
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <div className="flex justify-between items-center">
@@ -314,6 +327,11 @@ export default async function B2AuditFinding({ searchParams }) {
                     </span>
                   </div>
                 </div>
+
+                <p className="text-xs text-slate-500 mb-2">
+                  <span className="font-semibold text-slate-600">Schedule</span>
+                  <span className="block mt-0.5">{scheduleRange || "—"}</span>
+                </p>
                 
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <div className="flex justify-between items-center">
@@ -353,6 +371,11 @@ export default async function B2AuditFinding({ searchParams }) {
                   </span>
                 </div>
               </div>
+
+              <p className="text-xs text-slate-500 mb-2">
+                <span className="font-semibold text-slate-600">Schedule</span>
+                <span className="block mt-0.5">—</span>
+              </p>
               
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <div className="flex justify-between items-center">

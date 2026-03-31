@@ -54,41 +54,48 @@ export async function GET(req) {
       return NextResponse.json({ success: true, allowedDepartments: [] }, { status: 200 });
     }
 
-    // Get user assignments for the specified module
-    // Use case-insensitive matching for user_name to handle variations
+    // user_name di schedule bisa berisi beberapa orang (dipisah koma). Equality SQL pada
+    // seluruh string gagal jika session = "A" tapi kolom = "A, B". Sama seperti dashboard progress.
     const r = await schedulePool.query(
       `SELECT department_id, department_name, user_name
        FROM public.schedule_module_feedback
-       WHERE LOWER(TRIM(user_name)) = LOWER(TRIM($1)) AND module_key = $2 AND is_configured = true`,
-      [userName, moduleKey]
+       WHERE module_key = $1 AND is_configured = true`,
+      [moduleKey]
     );
-    
-    console.log(`[user-assignments] Query result: Found ${r.rows?.length || 0} rows for user "${userName}" and module "${moduleKey}"`);
-    if (r.rows?.length > 0) {
-      console.log(`[user-assignments] Sample rows:`, r.rows.slice(0, 3).map(row => ({
-        department_id: row.department_id,
-        department_name: row.department_name,
-        user_name: row.user_name,
-      })));
-    }
 
+    const target = String(userName || "").trim().toLowerCase();
+    const seenDeptIds = new Set();
     const allowedDepartments = [];
+
     for (const row of r.rows || []) {
+      const rawName = String(row.user_name || "").trim();
+      if (!rawName) continue;
+
+      const names = rawName
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean)
+        .map((n) => n.toLowerCase());
+
+      if (!names.includes(target)) continue;
+
       const deptId = String(row.department_id || "").trim();
+      if (seenDeptIds.has(deptId)) continue;
       const deptKey = DEPT_KEY_BY_SCHEDULE_ID[deptId];
-      if (deptKey) {
-        // Use department_name from database if available, otherwise use mapping
-        // This ensures consistency with what was saved in schedule
-        const deptName = row.department_name || DEPT_NAME_BY_KEY[deptKey] || deptKey;
-        allowedDepartments.push({
-          key: deptKey,
-          name: deptName,
-          department_id: deptId,
-        });
-      }
+      if (!deptKey) continue;
+
+      seenDeptIds.add(deptId);
+      const deptName = row.department_name || DEPT_NAME_BY_KEY[deptKey] || deptKey;
+      allowedDepartments.push({
+        key: deptKey,
+        name: deptName,
+        department_id: deptId,
+      });
     }
 
-    console.log(`[user-assignments] User: ${userName}, Module: ${moduleKey}, Found ${allowedDepartments.length} assignments:`, allowedDepartments);
+    console.log(
+      `[user-assignments] User: "${userName}", module: "${moduleKey}", matched ${allowedDepartments.length} dept(s)`
+    );
 
     return NextResponse.json({ success: true, allowedDepartments }, { status: 200 });
   } catch (err) {

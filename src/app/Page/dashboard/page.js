@@ -125,6 +125,11 @@ function DashboardPageContent() {
 
   const loadProgressRef = useRef(null);
   useEffect(() => {
+    if (status === "loading") return;
+    if (status !== "authenticated") {
+      setProgress({ loading: false, error: null, modules: [] });
+      return;
+    }
     let mounted = true;
     async function loadProgress() {
       try {
@@ -222,9 +227,9 @@ function DashboardPageContent() {
       if (selectedYear) {
         url.searchParams.set("year", String(selectedYear));
       }
-      window.location.href = url.toString();
+      router.push(`${url.pathname}${url.search}`);
     },
-    [selectedYear],
+    [selectedYear, router],
   );
   const toggleExpanded = useCallback((key) => {
     setExpandedModuleKey((prev) => (prev === key ? null : key));

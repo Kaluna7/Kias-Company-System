@@ -59,10 +59,23 @@ const deptToWorksheetEvidenceName = {
  * - worksheetHasFile: apakah pernah ada file worksheet untuk department ini (dipakai hanya sebagai info tambahan).
  * - evidenceApCodesWithFile: SET ap_code yang SUDAH PUBLISH di Evidence (overall_status = COMPLETE + ada file).
  */
-async function getWorksheetAndEvidenceFileStatus(dept) {
+async function getWorksheetAndEvidenceFileStatus(dept, options = {}) {
   const deptName = deptToWorksheetEvidenceName[dept];
   if (!deptName) return { worksheetHasFile: false, evidenceApCodesWithFile: new Set() };
   try {
+    const { from = null, to = null } = options;
+    const evidenceWhere = {
+      department: deptName,
+      file_url: { not: null },
+      overall_status: {
+        equals: "COMPLETE",
+        mode: "insensitive",
+      },
+    };
+    if (from && to) {
+      evidenceWhere.updated_at = { gte: from, lt: to };
+    }
+
     const [worksheetLatest, evidenceRows] = await Promise.all([
       prisma.worksheet_finance.findFirst({
         where: { department: deptName },
@@ -70,14 +83,7 @@ async function getWorksheetAndEvidenceFileStatus(dept) {
         select: { file_path: true },
       }),
       prisma.evidence.findMany({
-        where: {
-          department: deptName,
-          file_url: { not: null },
-          overall_status: {
-            equals: "COMPLETE",
-            mode: "insensitive",
-          },
-        },
+        where: evidenceWhere,
         select: { ap_code: true },
       }),
     ]);
@@ -104,6 +110,20 @@ function toIntSafe(v, fallback) {
   if (v === undefined || v === null || v === "") return fallback;
   const n = parseInt(v, 10);
   return Number.isNaN(n) ? fallback : n;
+}
+
+function parseSelectedYear(req) {
+  const { searchParams } = new URL(req.url);
+  const yearParam = searchParams.get("year");
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  return !Number.isNaN(year) && year ? year : null;
+}
+
+function alignDateToSelectedYear(dateValue, selectedYear) {
+  const date = new Date(dateValue);
+  if (!selectedYear || Number.isNaN(date.getTime())) return date;
+  date.setFullYear(selectedYear);
+  return date;
 }
 
 // Truncate string to max length
@@ -244,11 +264,21 @@ async function loadFindingsFromTable(dept, options) {
   return { rows, total: countRows?.[0]?.total ?? 0, columns };
 }
 
-async function loadCompletedFindingKeysFromTable(dept) {
+async function loadCompletedFindingKeysFromTable(dept, options = {}) {
   const tableName = getFindingTableName(dept);
   if (!tableName) return [];
+  const params = [];
+  const whereSql = buildFindingWhereSql(
+    {
+      includeCompleted: true,
+      from: options.from ?? null,
+      to: options.to ?? null,
+    },
+    params
+  );
   return prisma.$queryRawUnsafe(
-    `SELECT risk_id, ap_code FROM "${tableName}" WHERE UPPER(COALESCE(completion_status, '')) = 'COMPLETED'`
+    `SELECT risk_id, ap_code FROM "${tableName}" ${whereSql}`,
+    ...params
   );
 }
 
@@ -487,13 +517,6 @@ export async function GET(req, { params }) {
         { status: null },
       ],
     };
-    // Sama seperti di atas: hanya layar kerja yang dibatasi tahun di parent audit program.
-    if (!includeCompleted && hasValidYear) {
-      const pFrom = new Date(year, 0, 1);
-      const pTo = new Date(year + 1, 0, 1);
-      parentWhere.created_at = { gte: pFrom, lt: pTo };
-    }
-
     const [parents, allFindings, completedFindings] = await Promise.all([
       parentModel.findMany({
         where: parentWhere,
@@ -519,10 +542,30 @@ export async function GET(req, { params }) {
                   equals: "COMPLETED",
                   mode: "insensitive",
                 },
+                ...(hasValidYear
+                  ? {
+                      OR: [
+                        { completion_date: { gte: from, lt: to } },
+                        {
+                          AND: [
+                            { completion_date: null },
+                            { updated_at: { gte: from, lt: to } },
+                          ],
+                        },
+                        {
+                          AND: [
+                            { completion_date: null },
+                            { updated_at: null },
+                            { created_at: { gte: from, lt: to } },
+                          ],
+                        },
+                      ],
+                    }
+                  : {}),
               },
               select: { risk_id: true, ap_code: true },
             })
-          : loadCompletedFindingKeysFromTable(dept),
+          : loadCompletedFindingKeysFromTable(dept, { from, to }),
     ]);
 
     const findingByKey = new Map();
@@ -549,7 +592,10 @@ export async function GET(req, { params }) {
         .filter(Boolean),
     );
 
-    const { worksheetHasFile, evidenceApCodesWithFile } = await getWorksheetAndEvidenceFileStatus(dept);
+    const { worksheetHasFile, evidenceApCodesWithFile } = await getWorksheetAndEvidenceFileStatus(
+      dept,
+      { from, to }
+    );
 
     const auditProgramData = parents.flatMap((p) =>
       p.aps && p.aps.length > 0
@@ -593,7 +639,9 @@ export async function GET(req, { params }) {
                 impact_description: p.impact_description ?? null,
                 ap_code: ap.ap_code ?? null,
                 substantive_test: ap.substantive_test ?? null,
-                risk: finding?.risk ?? null,
+                // Risk di Finding mengikuti priority_level dari Risk Assessment.
+                // Jika baris finding sudah pernah disimpan, tetap gunakan nilai tersimpan.
+                risk: finding?.risk ?? p.priority_level ?? null,
                 check_yn: finding?.check_yn ?? null,
                 method: finding?.method ?? ap.method ?? null,
                 preparer: finding?.preparer ?? null,
@@ -622,7 +670,7 @@ export async function GET(req, { params }) {
               impact_description: p.impact_description ?? null,
               ap_code: null,
               substantive_test: null,
-              risk: null,
+              risk: p.priority_level ?? null,
               check_yn: null,
               method: null,
               preparer: null,
@@ -661,6 +709,8 @@ export async function POST(req, { params }) {
     if (!delegate) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
 
     const body = await req.json();
+    const selectedYear = parseSelectedYear(req);
+    const timestamp = alignDateToSelectedYear(new Date(), selectedYear);
     const createData = {
       risk_id: truncateString(body.riskId, 50),
       risk_description: body.riskDescription ?? null,
@@ -676,7 +726,11 @@ export async function POST(req, { params }) {
       recommendation: body.recommendation ?? null,
       auditee: truncateString(body.auditee, 255),
       completion_status: truncateString(body.completionStatus, 50),
-      completion_date: body.completionDate ? new Date(body.completionDate) : null,
+      completion_date: body.completionDate
+        ? alignDateToSelectedYear(new Date(body.completionDate), selectedYear)
+        : null,
+      created_at: timestamp,
+      updated_at: timestamp,
     };
 
     if (supportsFindingSnapshotFields(dept)) {

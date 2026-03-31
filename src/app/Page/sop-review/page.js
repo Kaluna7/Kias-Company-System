@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Suspense } from 'react';
 import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
+import { buildScheduleWindowsByDeptKey, formatScheduleRange } from "@/lib/scheduleCardHelpers";
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
@@ -124,29 +125,19 @@ async function SopReviewGrid({ yearParam }) {
   const session = await getServerSession(authOptions);
   const userName = (session?.user?.name || "").trim();
   const role = (session?.user?.role || "").toLowerCase();
+  // Sama seperti dashboard: admin & reviewer buka semua department tanpa cek penugasan.
   const isAdmin = role === "admin";
   const isReviewer = role === "reviewer";
-  
-  console.log(`[SOP Review] Session check:`, {
-    userName,
-    isAdmin,
-    isReviewer,
-    sessionUser: session?.user,
-  });
-  
-  // Get user assignments for SOP Review module
-  // Reviewer needs assignment like regular user, but can only edit reviewer fields
+  const isPrivileged = isAdmin || isReviewer;
+
+  // Get user assignments for SOP Review module (role user).
+  // Panggilan server-to-server harus ke 127.0.0.1 (getInternalFetchBaseUrl), bukan Host browser —
+  // di Docker/reverse proxy fetch ke URL publik sering gagal dan semua kartu jadi Locked.
   let allowedDepartments = [];
-  if (!isAdmin && userName) {
+  if (!isPrivileged && userName) {
     try {
-      const headersList = await headers();
-      const host = headersList.get('host') || 'localhost:3000';
-      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-      const baseUrl = `${protocol}://${host}`;
-      
+      const baseUrl = getInternalFetchBaseUrl();
       const apiUrl = `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=sop-review`;
-      console.log(`[SOP Review] Fetching assignments from: ${apiUrl}`);
-      
       const res = await fetch(apiUrl, {
         cache: "no-store",
       });
@@ -154,7 +145,6 @@ async function SopReviewGrid({ yearParam }) {
         const data = await res.json().catch(() => null);
         if (data?.success) {
           allowedDepartments = data.allowedDepartments || [];
-          console.log(`[SOP Review] API returned ${allowedDepartments.length} assignments`);
         } else {
           console.warn(`[SOP Review] API returned success=false:`, data);
         }
@@ -164,8 +154,6 @@ async function SopReviewGrid({ yearParam }) {
     } catch (err) {
       console.warn("Failed to load user assignments:", err.message);
     }
-  } else {
-    console.log(`[SOP Review] Skipping assignment fetch: isAdmin=${isAdmin}, userName="${userName}"`);
   }
   
   // Normalize department name: remove "Sec." prefix and handle typos
@@ -195,11 +183,25 @@ async function SopReviewGrid({ yearParam }) {
       .filter(Boolean)
   );
 
-  // Debug logging
-  console.log(`[SOP Review] User: ${userName}, isAdmin: ${isAdmin}`);
-  console.log(`[SOP Review] Allowed departments from API:`, allowedDepartments);
-  console.log(`[SOP Review] Allowed dept names Set:`, Array.from(allowedDeptNames));
-  console.log(`[SOP Review] Allowed dept keys Set:`, Array.from(allowedDeptKeys));
+  let scheduleByDeptKey = {};
+  try {
+    const baseUrl = getInternalFetchBaseUrl();
+    const sr = await fetch(`${baseUrl}/api/schedule/module?module=sop-review`, { cache: "no-store" });
+    const sj = await sr.json().catch(() => null);
+    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
+      scheduleByDeptKey = buildScheduleWindowsByDeptKey(sj.rows);
+    }
+  } catch (e) {
+    console.warn("Failed to load SOP Review schedule dates:", e?.message);
+  }
+
+  const scheduleRangeForCard = (cardName) => {
+    if (cardName === "Report") return "";
+    const k = getDeptKeyFromCardName(cardName);
+    if (!k) return "";
+    const w = scheduleByDeptKey[k];
+    return w ? formatScheduleRange(w.start, w.end) : "";
+  };
 
   const getStatusBadge = (status) => {
     const statusUpper = (status || "").toUpperCase();
@@ -213,16 +215,11 @@ async function SopReviewGrid({ yearParam }) {
   };
   
   const isDepartmentEnabled = (deptName) => {
-    // Admin can access all departments
-    // Reviewer can access all departments (for viewing), but can only edit reviewer fields
-    if (isAdmin || isReviewer) return true;
+    if (isPrivileged) return true;
     // Report is always accessible
     if (deptName === "Report") return true;
     // If no assignments, disable all departments
-    if (allowedDepartments.length === 0) {
-      console.log(`[SOP Review] Department "${deptName}" disabled: no assignments`);
-      return false;
-    }
+    if (allowedDepartments.length === 0) return false;
     // Normalize department name for matching
     const normalized = normalizeDeptName(deptName);
     const normalizedList = Array.isArray(normalized) ? normalized : [normalized];
@@ -231,11 +228,7 @@ async function SopReviewGrid({ yearParam }) {
     // Check if any normalized variation is in allowed list
     const enabledByName = normalizedList.some((n) => allowedDeptNames.has(n));
     const enabledByKey = !!(deptKey && allowedDeptKeys.has(deptKey));
-    const enabled = enabledByName || enabledByKey;
-    console.log(
-      `[SOP Review] Department "${deptName}" (normalized: ${normalizedList.join("/")}, key: ${deptKey || "-"}) => byName=${enabledByName}, byKey=${enabledByKey}, final=${enabled ? "ENABLED" : "DISABLED"}`
-    );
-    return enabled;
+    return enabledByName || enabledByKey;
   };
 
   const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
@@ -247,7 +240,8 @@ async function SopReviewGrid({ yearParam }) {
         {buttonSopReview.map((item, index) => {
           const isEnabled = item.name === "Report" || isDepartmentEnabled(item.name);
           const isDisabled = !isEnabled;
-          
+          const scheduleRange = scheduleRangeForCard(item.name);
+
           return isDisabled ? (
             <div
               key={index}
@@ -270,6 +264,13 @@ async function SopReviewGrid({ yearParam }) {
                 <h3 className="text-lg font-bold text-slate-800">{item.name}</h3>
               </div>
             </div>
+
+            <p className="text-xs text-slate-500 mb-2">
+              <span className="font-semibold text-slate-600">Schedule</span>
+              <span className="block mt-0.5">
+                {item.name === "Report" ? "—" : scheduleRange || "—"}
+              </span>
+            </p>
 
             {/* SOP Status - hanya untuk yang bukan Report */}
             {item.name !== "Report" && (
@@ -315,6 +316,13 @@ async function SopReviewGrid({ yearParam }) {
                 <h3 className="text-lg font-bold text-slate-800">{item.name}</h3>
               </div>
             </div>
+
+            <p className="text-xs text-slate-500 mb-2">
+              <span className="font-semibold text-slate-600">Schedule</span>
+              <span className="block mt-0.5">
+                {item.name === "Report" ? "—" : scheduleRange || "—"}
+              </span>
+            </p>
 
             {/* SOP Status - hanya untuk yang bukan Report */}
             {item.name !== "Report" && (
