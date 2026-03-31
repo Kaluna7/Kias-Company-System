@@ -1,6 +1,11 @@
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import AuditReviewDeptClient from "./_components/AuditReviewDeptClient";
 
+/** Always read fresh audit-review data from DB after edits (avoid stale Next.js fetch cache). */
+export const dynamic = "force-dynamic";
+
+const noStore = { cache: "no-store" };
+
 // Map department to API path and display info
 const deptMap = {
   finance: { apiPath: "finance", deptName: "FINANCE", titleCode: "C1.1" },
@@ -18,7 +23,7 @@ const deptMap = {
   whs: { apiPath: "whs", deptName: "WAREHOUSE", titleCode: "C1.11" },
 };
 
-async function loadAuditReviewData(dept) {
+async function loadAuditReviewData(dept, selectedYear = null) {
   try {
     const baseUrl = getInternalFetchBaseUrl();
 
@@ -30,9 +35,14 @@ async function loadAuditReviewData(dept) {
     // Fetch audit finding report data (completed findings only)
     let findings = [];
     try {
-      const findingsRes = await fetch(`${baseUrl}/api/audit-finding/${encodeURIComponent(deptInfo.apiPath)}?include_completed=1`, {
-        next: { revalidate: 30 },
-      });
+      const findingsUrl = new URL(
+        `${baseUrl}/api/audit-finding/${encodeURIComponent(deptInfo.apiPath)}`,
+      );
+      findingsUrl.searchParams.set("include_completed", "1");
+      if (Number.isInteger(selectedYear)) {
+        findingsUrl.searchParams.set("year", String(selectedYear));
+      }
+      const findingsRes = await fetch(findingsUrl.toString(), noStore);
       if (findingsRes.ok) {
         const findingsJson = await findingsRes.json();
         const dataArray = findingsJson.success && Array.isArray(findingsJson.data) 
@@ -52,9 +62,13 @@ async function loadAuditReviewData(dept) {
     // Fetch executive summary data
     let executiveSummary = null;
     try {
-      const summaryRes = await fetch(`${baseUrl}/api/audit-review/${deptInfo.apiPath}/executive-summary`, {
-        next: { revalidate: 30 },
-      });
+      const summaryUrl = new URL(
+        `${baseUrl}/api/audit-review/${deptInfo.apiPath}/executive-summary`,
+      );
+      if (Number.isInteger(selectedYear)) {
+        summaryUrl.searchParams.set("year", String(selectedYear));
+      }
+      const summaryRes = await fetch(summaryUrl.toString(), noStore);
       if (summaryRes.ok) {
         const summaryJson = await summaryRes.json();
         if (summaryJson.success && summaryJson.data) {
@@ -68,9 +82,7 @@ async function loadAuditReviewData(dept) {
     // Fetch schedule data
     let schedule = null;
     try {
-      const scheduleRes = await fetch(`${baseUrl}/api/schedule/module?module=audit-finding`, {
-        next: { revalidate: 30 },
-      });
+      const scheduleRes = await fetch(`${baseUrl}/api/schedule/module?module=audit-finding`, noStore);
       if (scheduleRes.ok) {
         const scheduleJson = await scheduleRes.json();
         if (scheduleJson.success && Array.isArray(scheduleJson.rows)) {
@@ -110,18 +122,45 @@ async function loadAuditReviewData(dept) {
           ? new Date(schedule.start_date).getFullYear()
           : new Date().getFullYear();
 
+    /** Align with client getAuditYear() (from finding completion dates) so POST and GET use the same row. */
+    const auditYearFromFindings = (() => {
+      if (!Array.isArray(findings) || findings.length === 0) return null;
+      const years = findings
+        .map((row) => row?.completion_date || row?.updated_at || null)
+        .filter(Boolean)
+        .map((v) => {
+          const d = new Date(v);
+          return Number.isNaN(d.getTime()) ? null : d.getFullYear();
+        })
+        .filter((y) => y != null);
+      if (years.length === 0) return null;
+      return Math.max(...years);
+    })();
+
+    const findingsQueryYear =
+      Number.isInteger(selectedYear) ? selectedYear : auditYearFromFindings ?? scheduleYear;
+
     // Fetch saved audit-review findings first, because report preview must follow reviewed data.
     let reviewedFindings = [];
     try {
       const reviewedFindingsRes = await fetch(
-        `${baseUrl}/api/audit-review/${encodeURIComponent(deptInfo.apiPath)}/findings?year=${encodeURIComponent(String(scheduleYear))}`,
-        {
-          next: { revalidate: 30 },
-        },
+        `${baseUrl}/api/audit-review/${encodeURIComponent(deptInfo.apiPath)}/findings?year=${encodeURIComponent(String(findingsQueryYear))}`,
+        noStore,
       );
       if (reviewedFindingsRes.ok) {
         const reviewedJson = await reviewedFindingsRes.json();
         reviewedFindings = Array.isArray(reviewedJson.rows) ? reviewedJson.rows : [];
+      }
+      // Only fallback to latest when there is no explicit year filter.
+      if (reviewedFindings.length === 0 && !Number.isInteger(selectedYear)) {
+        const latestRes = await fetch(
+          `${baseUrl}/api/audit-review/${encodeURIComponent(deptInfo.apiPath)}/findings`,
+          noStore,
+        );
+        if (latestRes.ok) {
+          const latestJson = await latestRes.json();
+          reviewedFindings = Array.isArray(latestJson.rows) ? latestJson.rows : [];
+        }
       }
     } catch (err) {
       console.warn(`Error fetching reviewed findings for ${dept}:`, err);
@@ -134,8 +173,9 @@ async function loadAuditReviewData(dept) {
   }
 }
 
-export default async function AuditReviewDeptPage({ params }) {
-  const p = await Promise.resolve(params);
+export default async function AuditReviewDeptPage({ params, searchParams }) {
+  const p = await params;
+  const sp = await searchParams;
   const rawDept = String(p?.dept || "");
   let dept = rawDept;
   try {
@@ -159,7 +199,14 @@ export default async function AuditReviewDeptPage({ params }) {
     );
   }
 
-  const { findings, reviewedFindings, executiveSummary, schedule } = await loadAuditReviewData(dept);
+  const selectedYearRaw = sp?.year;
+  const selectedYearParsed = selectedYearRaw ? parseInt(String(selectedYearRaw), 10) : null;
+  const selectedYear = Number.isNaN(selectedYearParsed) ? null : selectedYearParsed;
+
+  const { findings, reviewedFindings, executiveSummary, schedule } = await loadAuditReviewData(
+    dept,
+    selectedYear,
+  );
 
   return (
     <AuditReviewDeptClient
@@ -170,6 +217,7 @@ export default async function AuditReviewDeptPage({ params }) {
       initialReviewedFindings={reviewedFindings}
       initialExecutiveSummary={executiveSummary}
       initialSchedule={schedule}
+      selectedYear={selectedYear}
     />
   );
 }

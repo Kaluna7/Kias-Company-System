@@ -201,13 +201,38 @@ export async function GET(req, { params }) {
 
     let from = null;
     let to = null;
-    // Untuk layar kerja (tanpa include_completed), filter tahun berdasarkan created_at.
-    // Untuk include_completed (Report/Review), tahun difilter di layer pemanggil (berdasarkan updated_at/completion_date),
-    // jadi di sini tidak perlu membatasi created_at supaya semua finding COMPLETED bisa terbaca.
-    if (!includeCompleted && hasValidYear) {
+    if (hasValidYear) {
       from = new Date(year, 0, 1);
       to = new Date(year + 1, 0, 1);
-      whereFinding.created_at = { gte: from, lt: to };
+
+      if (!includeCompleted) {
+        // Layar kerja: filter tahun berdasarkan created_at.
+        whereFinding.created_at = { gte: from, lt: to };
+      } else {
+        // Review/report: filter berdasarkan completion_date terlebih dulu.
+        // Jika completion_date kosong, fallback ke updated_at lalu created_at.
+        whereFinding.AND = [
+          ...(Array.isArray(whereFinding.AND) ? whereFinding.AND : []),
+          {
+            OR: [
+              { completion_date: { gte: from, lt: to } },
+              {
+                AND: [
+                  { completion_date: null },
+                  { updated_at: { gte: from, lt: to } },
+                ],
+              },
+              {
+                AND: [
+                  { completion_date: null },
+                  { updated_at: null },
+                  { created_at: { gte: from, lt: to } },
+                ],
+              },
+            ],
+          },
+        ];
+      }
     }
 
     const apMapping = deptToAuditProgram[dept];
@@ -238,7 +263,7 @@ export async function GET(req, { params }) {
 
     // Always use audit program (published) as source of truth — same as evidence. Load all findings (unpublished) to merge.
     const parentWhere = { status: "published" };
-    // Sama seperti di atas: hanya layar kerja yang dibatasi tahun di sini.
+    // Sama seperti di atas: hanya layar kerja yang dibatasi tahun di parent audit program.
     if (!includeCompleted && hasValidYear) {
       const pFrom = new Date(year, 0, 1);
       const pTo = new Date(year + 1, 0, 1);

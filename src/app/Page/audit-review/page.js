@@ -1,31 +1,36 @@
 "use client";
 
-import { useCallback } from "react";
+import { Suspense, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 
-export default function AuditReviewHomePage() {
+function AuditReviewHomePageContent() {
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+
   const handleBack = useCallback(() => {
     if (typeof window === "undefined") return;
     if (window.history.length > 1) {
       window.history.back();
       return;
     }
-    window.location.href = "/Page/dashboard";
-  }, []);
+    window.location.href = `/Page/dashboard${yearQuery}`;
+  }, [yearQuery]);
 
   const auditReviewDepts = [
-    { id: "C1.1", label: "FINANCE", href: "/Page/audit-review/finance" },
-    { id: "C1.2", label: "ACCOUNTING", href: "/Page/audit-review/accounting" },
-    { id: "C1.3", label: "HRD", href: "/Page/audit-review/hrd" },
-    { id: "C1.4", label: "G&A", href: "/Page/audit-review/g&a" },
-    { id: "C1.5", label: "STORE DESIGN PLANNER", href: "/Page/audit-review/sdp" },
-    { id: "C1.6", label: "TAX", href: "/Page/audit-review/tax" },
-    { id: "C1.7", label: "SECURITY L&P", href: "/Page/audit-review/l&p" },
-    { id: "C1.8", label: "MIS", href: "/Page/audit-review/mis" },
-    { id: "C1.9", label: "MERCHANDISE", href: "/Page/audit-review/merch" },
-    { id: "C1.10", label: "OPERATIONAL", href: "/Page/audit-review/ops" },
-    { id: "C1.11", label: "WAREHOUSE", href: "/Page/audit-review/whs" },
+    { id: "C1.1", label: "FINANCE", href: `/Page/audit-review/finance${yearQuery}` },
+    { id: "C1.2", label: "ACCOUNTING", href: `/Page/audit-review/accounting${yearQuery}` },
+    { id: "C1.3", label: "HRD", href: `/Page/audit-review/hrd${yearQuery}` },
+    { id: "C1.4", label: "G&A", href: `/Page/audit-review/g&a${yearQuery}` },
+    { id: "C1.5", label: "STORE DESIGN PLANNER", href: `/Page/audit-review/sdp${yearQuery}` },
+    { id: "C1.6", label: "TAX", href: `/Page/audit-review/tax${yearQuery}` },
+    { id: "C1.7", label: "SECURITY L&P", href: `/Page/audit-review/l&p${yearQuery}` },
+    { id: "C1.8", label: "MIS", href: `/Page/audit-review/mis${yearQuery}` },
+    { id: "C1.9", label: "MERCHANDISE", href: `/Page/audit-review/merch${yearQuery}` },
+    { id: "C1.10", label: "OPERATIONAL", href: `/Page/audit-review/ops${yearQuery}` },
+    { id: "C1.11", label: "WAREHOUSE", href: `/Page/audit-review/whs${yearQuery}` },
   ];
 
   return (
@@ -78,7 +83,7 @@ export default function AuditReviewHomePage() {
 
               <div className="mt-4 grid gap-3">
                 <Link
-                  href="/Page/audit-review/guidelines/"
+                  href={`/Page/audit-review/guidelines${yearQuery}`}
                   className="rounded-2xl bg-white/90 border border-white shadow-sm hover:shadow-md transition px-4 py-3 text-center font-extrabold text-[#141D38] text-sm"
                 >
                   REVIEW
@@ -86,7 +91,7 @@ export default function AuditReviewHomePage() {
                   GUIDELINES
                 </Link>
                 <Link
-                  href="/Page/report/"
+                  href={`/Page/report${yearQuery}`}
                   className="rounded-2xl bg-white/90 border border-white shadow-sm hover:shadow-md transition px-4 py-3 text-center font-extrabold text-[#141D38] text-sm"
                 >
                   REPORT
@@ -165,7 +170,7 @@ export default function AuditReviewHomePage() {
                 ))}
                 {/* Report: buat report setelah data Audit Finding di-publish ke Audit Review dan di-cek */}
                 <Link
-                  href="/Page/report/"
+                  href={`/Page/report${yearQuery}`}
                   className="group bg-gradient-to-br from-white to-emerald-50 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-gray-200 hover:border-emerald-300 hover:translate-y-[-4px]"
                 >
                   <div className="flex justify-between items-start">
@@ -198,6 +203,14 @@ export default function AuditReviewHomePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AuditReviewHomePage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <AuditReviewHomePageContent />
+    </Suspense>
   );
 }
 

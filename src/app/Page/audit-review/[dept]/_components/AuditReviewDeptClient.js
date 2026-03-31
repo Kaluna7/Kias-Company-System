@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 
 // Default options for SELECT fields based on Executive Summary template
@@ -49,6 +50,50 @@ const LIMITATIONS_RESOURCE_OPTIONS = [
   "Staffing Constraints",
 ];
 
+const REVIEW_STATUS_OPTIONS = [
+  "No Action Required",
+  "Pending Review",
+  "Reviewed, revision needed",
+  "Reviewed, revision completed",
+];
+
+const REVIEW_STATUS_DEFAULT = REVIEW_STATUS_OPTIONS[0];
+
+function normalizeReviewStatus(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s || s === "-") return REVIEW_STATUS_DEFAULT;
+  const exact = REVIEW_STATUS_OPTIONS.find((o) => o === s);
+  if (exact) return exact;
+  const lower = s.toLowerCase();
+  const ci = REVIEW_STATUS_OPTIONS.find((o) => o.toLowerCase() === lower);
+  if (ci) return ci;
+  return REVIEW_STATUS_DEFAULT;
+}
+
+const FOLLOW_UP_STATUS_IN_PROGRESS = "In progress";
+const FOLLOW_UP_STATUS_COMPLETE = "Complete";
+
+function normalizeFollowUpStatus(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return FOLLOW_UP_STATUS_IN_PROGRESS;
+  const lower = s.toLowerCase();
+  if (lower === "complete" || lower === "completed" || s === "COMPLETED") {
+    return FOLLOW_UP_STATUS_COMPLETE;
+  }
+  return FOLLOW_UP_STATUS_IN_PROGRESS;
+}
+
+function parseStoredArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function normalizeKeyFindingRow(finding, idx) {
   return {
     no: finding?.no ?? idx + 1,
@@ -66,14 +111,12 @@ function normalizeKeyFindingRow(finding, idx) {
     recommendation: finding?.recommendation || "",
     status: finding?.status || "",
     reviewNote: finding?.reviewNote || "",
-    reviewStatus: finding?.reviewStatus || "",
+    reviewStatus: normalizeReviewStatus(finding?.reviewStatus ?? finding?.review_status ?? ""),
     preparerRespo: finding?.preparerRespo || "",
     referenceLink: finding?.referenceLink || "",
-    followUpDueDate:
-      finding?.followUpDueDate ||
-      (finding?.completion_date ? new Date(finding.completion_date).toISOString().split("T")[0] : ""),
+    followUpDueDate: finding?.followUpDueDate || finding?.follow_up_due_date || "",
     timeline: finding?.timeline || "",
-    followUpStatus: finding?.followUpStatus || finding?.completion_status || "",
+    followUpStatus: normalizeFollowUpStatus(finding?.followUpStatus ?? finding?.follow_up_status ?? ""),
     auditee: finding?.auditee || "",
   };
 }
@@ -86,8 +129,10 @@ export default function AuditReviewDeptClient({
   initialReviewedFindings = [],
   initialExecutiveSummary = null,
   initialSchedule = null,
+  selectedYear = null,
 }) {
   const toast = useToast();
+  const router = useRouter();
   const [findings, setFindings] = useState(initialFindings);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -106,12 +151,15 @@ export default function AuditReviewDeptClient({
   const [limitationsResource, setLimitationsResource] = useState([]);
   const [internalAuditTeam, setInternalAuditTeam] = useState([]);
   const [isLocked, setIsLocked] = useState(Boolean(initialExecutiveSummary?.is_locked));
+  const [summaryHydrated, setSummaryHydrated] = useState(false);
+  const isInteractionDisabled = isLocked || loading;
 
   // Key Findings state
   const [keyFindings, setKeyFindings] = useState([]);
   const [hasSavedReviewFindings, setHasSavedReviewFindings] = useState(
     Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0,
   );
+  const [isTableEditMode, setIsTableEditMode] = useState(false);
 
   const autoAuditPeriod = useMemo(() => {
     const sourceRows = Array.isArray(initialFindings) ? initialFindings : [];
@@ -168,40 +216,49 @@ export default function AuditReviewDeptClient({
     onConfirm: null,
   });
 
-  // Load executive summary from localStorage or initial data
+  const [teamAddModalOpen, setTeamAddModalOpen] = useState(false);
+  const [teamRemoveModalOpen, setTeamRemoveModalOpen] = useState(false);
+  const [teamNameInput, setTeamNameInput] = useState("");
+  const [teamRegionInput, setTeamRegionInput] = useState("");
+
+  // Hydrate executive summary. Prefer server data when available so saved/locked
+  // records reopen with the latest persisted values instead of stale local cache.
   useEffect(() => {
-    const storageKey = `auditReviewExecutiveSummary_${apiPath}`;
+    const storageKey = `auditReviewExecutiveSummary_${apiPath}_${selectedYear || "default"}`;
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setObjectiveOfAudit(parsed.objectiveOfAudit || []);
-        setScopeAreasCovered(parsed.scopeAreasCovered || []);
-        setScopeMethodology(parsed.scopeMethodology || []);
-        setScopeTimeframeAuditPeriod(parsed.scopeTimeframeAuditPeriod || "");
-        setScopeTimeframeFieldworkDates(parsed.scopeTimeframeFieldworkDates || "");
-        setLimitationsScope(parsed.limitationsScope || []);
-        setLimitationsTime(parsed.limitationsTime || []);
-        setLimitationsResource(parsed.limitationsResource || []);
-        setInternalAuditTeam(parsed.internalAuditTeam || []);
-        setIsLocked(Boolean(parsed.isLocked));
-      } else if (initialExecutiveSummary) {
-        // Load from initial data
-        setObjectiveOfAudit(initialExecutiveSummary.objective_of_audit ? JSON.parse(initialExecutiveSummary.objective_of_audit) : []);
-        setScopeAreasCovered(initialExecutiveSummary.scope_areas_covered ? JSON.parse(initialExecutiveSummary.scope_areas_covered) : []);
-        setScopeMethodology(initialExecutiveSummary.scope_methodology ? JSON.parse(initialExecutiveSummary.scope_methodology) : []);
+      if (initialExecutiveSummary) {
+        setObjectiveOfAudit(parseStoredArray(initialExecutiveSummary.objective_of_audit));
+        setScopeAreasCovered(parseStoredArray(initialExecutiveSummary.scope_areas_covered));
+        setScopeMethodology(parseStoredArray(initialExecutiveSummary.scope_methodology));
         setScopeTimeframeAuditPeriod(initialExecutiveSummary.scope_timeframe_audit_period || "");
         setScopeTimeframeFieldworkDates(initialExecutiveSummary.scope_timeframe_fieldwork_dates || "");
-        setLimitationsScope(initialExecutiveSummary.limitations_scope ? JSON.parse(initialExecutiveSummary.limitations_scope) : []);
-        setLimitationsTime(initialExecutiveSummary.limitations_time ? JSON.parse(initialExecutiveSummary.limitations_time) : []);
-        setLimitationsResource(initialExecutiveSummary.limitations_resource ? JSON.parse(initialExecutiveSummary.limitations_resource) : []);
-        setInternalAuditTeam(initialExecutiveSummary.internal_audit_team ? JSON.parse(initialExecutiveSummary.internal_audit_team) : []);
+        setLimitationsScope(parseStoredArray(initialExecutiveSummary.limitations_scope));
+        setLimitationsTime(parseStoredArray(initialExecutiveSummary.limitations_time));
+        setLimitationsResource(parseStoredArray(initialExecutiveSummary.limitations_resource));
+        setInternalAuditTeam(parseStoredArray(initialExecutiveSummary.internal_audit_team));
         setIsLocked(Boolean(initialExecutiveSummary.is_locked));
+      } else {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setObjectiveOfAudit(parsed.objectiveOfAudit || []);
+          setScopeAreasCovered(parsed.scopeAreasCovered || []);
+          setScopeMethodology(parsed.scopeMethodology || []);
+          setScopeTimeframeAuditPeriod(parsed.scopeTimeframeAuditPeriod || "");
+          setScopeTimeframeFieldworkDates(parsed.scopeTimeframeFieldworkDates || "");
+          setLimitationsScope(parsed.limitationsScope || []);
+          setLimitationsTime(parsed.limitationsTime || []);
+          setLimitationsResource(parsed.limitationsResource || []);
+          setInternalAuditTeam(parsed.internalAuditTeam || []);
+          setIsLocked(Boolean(parsed.isLocked));
+        }
       }
     } catch (err) {
       console.warn("Error loading executive summary:", err);
+    } finally {
+      setSummaryHydrated(true);
     }
-  }, [apiPath, initialExecutiveSummary]);
+  }, [apiPath, initialExecutiveSummary, selectedYear]);
 
   // Initialize findings from saved audit-review data first, fallback to audit-finding report.
   useEffect(() => {
@@ -218,7 +275,8 @@ export default function AuditReviewDeptClient({
 
   // Save executive summary to localStorage
   useEffect(() => {
-    const storageKey = `auditReviewExecutiveSummary_${apiPath}`;
+    if (!summaryHydrated) return;
+    const storageKey = `auditReviewExecutiveSummary_${apiPath}_${selectedYear || "default"}`;
     try {
       localStorage.setItem(
         storageKey,
@@ -240,6 +298,8 @@ export default function AuditReviewDeptClient({
     }
   }, [
     apiPath,
+    selectedYear,
+    summaryHydrated,
     objectiveOfAudit,
     scopeAreasCovered,
     scopeMethodology,
@@ -270,6 +330,7 @@ export default function AuditReviewDeptClient({
 
   // Open select modal
   const openSelectModal = (type, options, currentSelection, onConfirm) => {
+    if (isInteractionDisabled) return;
     setSelectModal({
       open: true,
       type,
@@ -292,6 +353,7 @@ export default function AuditReviewDeptClient({
 
   // Toggle item in modal selection
   const toggleModalSelection = (item) => {
+    if (isInteractionDisabled) return;
     setSelectModal((prev) => {
       const newSelection = prev.currentSelection.includes(item)
         ? prev.currentSelection.filter((i) => i !== item)
@@ -302,11 +364,78 @@ export default function AuditReviewDeptClient({
 
   // Confirm modal selection
   const confirmModalSelection = () => {
+    if (isInteractionDisabled) return;
     if (selectModal.onConfirm) {
       selectModal.onConfirm(selectModal.currentSelection);
     }
     closeSelectModal();
   };
+
+  useEffect(() => {
+    if (isLocked && selectModal.open) {
+      closeSelectModal();
+    }
+  }, [isLocked, selectModal.open]);
+
+  useEffect(() => {
+    if (isLocked) {
+      setTeamAddModalOpen(false);
+      setTeamRemoveModalOpen(false);
+    }
+  }, [isLocked]);
+
+  const openTeamAddModal = () => {
+    if (isInteractionDisabled) return;
+    setTeamNameInput("");
+    setTeamRegionInput("");
+    setTeamAddModalOpen(true);
+  };
+
+  const closeTeamAddModal = () => {
+    setTeamAddModalOpen(false);
+    setTeamNameInput("");
+    setTeamRegionInput("");
+  };
+
+  const confirmTeamAdd = () => {
+    if (isInteractionDisabled) return;
+    const name = (teamNameInput || "").trim();
+    const region = (teamRegionInput || "").trim();
+    if (!name || !region) {
+      toast.show("Please enter both name and region.", "error");
+      return;
+    }
+    setInternalAuditTeam((prev) => [...prev, { name, region }]);
+    closeTeamAddModal();
+  };
+
+  const openTeamRemoveModal = () => {
+    if (isInteractionDisabled) return;
+    if (internalAuditTeam.length === 0) {
+      toast.show("No team members to remove.", "error");
+      return;
+    }
+    setTeamRemoveModalOpen(true);
+  };
+
+  const closeTeamRemoveModal = () => setTeamRemoveModalOpen(false);
+
+  const removeTeamMemberAt = (index) => {
+    if (isInteractionDisabled) return;
+    setInternalAuditTeam((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  useEffect(() => {
+    if (teamRemoveModalOpen && internalAuditTeam.length === 0) {
+      setTeamRemoveModalOpen(false);
+    }
+  }, [teamRemoveModalOpen, internalAuditTeam.length]);
+
+  useEffect(() => {
+    if (isLocked) {
+      setIsTableEditMode(false);
+    }
+  }, [isLocked]);
 
   // Add new finding row
   const handleAddRow = () => {
@@ -328,12 +457,12 @@ export default function AuditReviewDeptClient({
         recommendation: "",
         status: "",
         reviewNote: "",
-        reviewStatus: "",
+        reviewStatus: REVIEW_STATUS_DEFAULT,
         preparerRespo: "",
         referenceLink: "",
         followUpDueDate: "",
         timeline: "",
-        followUpStatus: "",
+        followUpStatus: FOLLOW_UP_STATUS_IN_PROGRESS,
         auditee: "",
       },
     ]);
@@ -353,24 +482,86 @@ export default function AuditReviewDeptClient({
     setKeyFindings(updated.map((f, i) => ({ ...f, no: i + 1 })));
   };
 
+  const getAuditYear = () => {
+    if (auditPeriodEnd && !Number.isNaN(new Date(auditPeriodEnd).getFullYear())) {
+      return new Date(auditPeriodEnd).getFullYear();
+    }
+    if (auditPeriodStart && !Number.isNaN(new Date(auditPeriodStart).getFullYear())) {
+      return new Date(auditPeriodStart).getFullYear();
+    }
+    return selectedYear || new Date().getFullYear();
+  };
+
+  /** Persists key findings only (e.g. when finishing table edit). */
+  const handleSaveFindingsOnly = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const auditYear = getAuditYear();
+      const findingsRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/findings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auditYear,
+          findings: keyFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)),
+        }),
+      });
+
+      if (!findingsRes.ok) {
+        const findingsText = await findingsRes.text().catch(() => "");
+        let findingsJson = null;
+        try {
+          findingsJson = findingsText ? JSON.parse(findingsText) : null;
+        } catch {
+          findingsJson = null;
+        }
+        throw new Error(
+          findingsJson?.error ||
+            findingsJson?.details ||
+            findingsText ||
+            "Failed to save audit review findings",
+        );
+      }
+
+      const findingsJson = await findingsRes.json().catch(() => ({}));
+      if (Array.isArray(findingsJson.rows)) {
+        setKeyFindings(findingsJson.rows.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+      }
+      setHasSavedReviewFindings(true);
+      toast.show("Key findings saved.", "success");
+      router.refresh();
+      return true;
+    } catch (e) {
+      setError(e?.message || String(e));
+      toast.show("Error: " + (e?.message || String(e)), "error");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDoneTableEdit = async () => {
+    const ok = await handleSaveFindingsOnly();
+    if (ok) {
+      setIsTableEditMode(false);
+    }
+  };
+
   // Save all data
   const handleSaveAll = async (nextLocked = isLocked) => {
     try {
       setLoading(true);
       setError(null);
 
-      const auditYear =
-        auditPeriodEnd && !Number.isNaN(new Date(auditPeriodEnd).getFullYear())
-          ? new Date(auditPeriodEnd).getFullYear()
-          : auditPeriodStart && !Number.isNaN(new Date(auditPeriodStart).getFullYear())
-            ? new Date(auditPeriodStart).getFullYear()
-            : new Date().getFullYear();
+      const auditYear = getAuditYear();
 
       // Save executive summary
       const summaryRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          auditYear,
           objectiveOfAudit: JSON.stringify(objectiveOfAudit),
           scopeAreasCovered: JSON.stringify(scopeAreasCovered),
           scopeMethodology: JSON.stringify(scopeMethodology),
@@ -385,7 +576,19 @@ export default function AuditReviewDeptClient({
       });
 
       if (!summaryRes.ok) {
-        throw new Error("Failed to save executive summary");
+        const summaryText = await summaryRes.text().catch(() => "");
+        let summaryJson = null;
+        try {
+          summaryJson = summaryText ? JSON.parse(summaryText) : null;
+        } catch {
+          summaryJson = null;
+        }
+        throw new Error(
+          summaryJson?.error ||
+          summaryJson?.details ||
+          summaryText ||
+          "Failed to save executive summary"
+        );
       }
 
       const findingsRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/findings`, {
@@ -398,7 +601,19 @@ export default function AuditReviewDeptClient({
       });
 
       if (!findingsRes.ok) {
-        throw new Error("Failed to save audit review findings");
+        const findingsText = await findingsRes.text().catch(() => "");
+        let findingsJson = null;
+        try {
+          findingsJson = findingsText ? JSON.parse(findingsText) : null;
+        } catch {
+          findingsJson = null;
+        }
+        throw new Error(
+          findingsJson?.error ||
+          findingsJson?.details ||
+          findingsText ||
+          "Failed to save audit review findings"
+        );
       }
 
       const findingsJson = await findingsRes.json().catch(() => ({}));
@@ -409,6 +624,7 @@ export default function AuditReviewDeptClient({
       setIsLocked(nextLocked);
 
       toast.show(nextLocked ? "Data saved and locked for report!" : "Data saved and unlocked from report!", "success");
+      router.refresh();
     } catch (e) {
       setError(e?.message || String(e));
       toast.show("Error: " + (e?.message || String(e)), "error");
@@ -430,8 +646,13 @@ export default function AuditReviewDeptClient({
       window.history.back();
       return;
     }
-    window.location.href = "/Page/audit-review";
-  }, []);
+    window.location.href = `/Page/audit-review${selectedYear ? `?year=${encodeURIComponent(String(selectedYear))}` : ""}`;
+  }, [selectedYear]);
+
+  const tableFieldClass =
+    "w-full min-w-0 text-[11px] leading-tight border border-slate-300 rounded px-1 py-0.5 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+  const tableAreaClass =
+    "w-full min-w-0 text-[11px] leading-tight border border-slate-300 rounded px-1 py-0.5 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[2.5rem] disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
     <>
@@ -523,13 +744,15 @@ export default function AuditReviewDeptClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">Objective of the Audit</label>
                     <button
+                      type="button"
+                      disabled={isInteractionDisabled}
                       onClick={() => openSelectModal(
                         'objective',
                         OBJECTIVE_OPTIONS,
                         objectiveOfAudit,
                         (selected) => setObjectiveOfAudit(selected)
                       )}
-                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                     >
                       SELECT
                     </button>
@@ -552,13 +775,15 @@ export default function AuditReviewDeptClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">1.1 Scope - Areas Covered</label>
                     <button
+                      type="button"
+                      disabled={isInteractionDisabled}
                       onClick={() => openSelectModal(
                         'scopeAreas',
                         SCOPE_AREAS_COVERED_OPTIONS,
                         scopeAreasCovered,
                         (selected) => setScopeAreasCovered(selected)
                       )}
-                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                     >
                       SELECT
                     </button>
@@ -581,13 +806,15 @@ export default function AuditReviewDeptClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">1.2 Methodology</label>
                     <button
+                      type="button"
+                      disabled={isInteractionDisabled}
                       onClick={() => openSelectModal(
                         'methodology',
                         METHODOLOGY_OPTIONS,
                         scopeMethodology,
                         (selected) => setScopeMethodology(selected)
                       )}
-                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                     >
                       SELECT
                     </button>
@@ -610,13 +837,15 @@ export default function AuditReviewDeptClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">1.4 Limitations - Scope</label>
                     <button
+                      type="button"
+                      disabled={isInteractionDisabled}
                       onClick={() => openSelectModal(
                         'limitationsScope',
                         LIMITATIONS_SCOPE_OPTIONS,
                         limitationsScope,
                         (selected) => setLimitationsScope(selected)
                       )}
-                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                     >
                       SELECT
                     </button>
@@ -639,13 +868,15 @@ export default function AuditReviewDeptClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">Limitations - Time</label>
                     <button
+                      type="button"
+                      disabled={isInteractionDisabled}
                       onClick={() => openSelectModal(
                         'limitationsTime',
                         LIMITATIONS_TIME_OPTIONS,
                         limitationsTime,
                         (selected) => setLimitationsTime(selected)
                       )}
-                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                     >
                       SELECT
                     </button>
@@ -668,13 +899,15 @@ export default function AuditReviewDeptClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">Limitations - Resource</label>
                     <button
+                      type="button"
+                      disabled={isInteractionDisabled}
                       onClick={() => openSelectModal(
                         'limitationsResource',
                         LIMITATIONS_RESOURCE_OPTIONS,
                         limitationsResource,
                         (selected) => setLimitationsResource(selected)
                       )}
-                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                      className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                     >
                       SELECT
                     </button>
@@ -698,30 +931,20 @@ export default function AuditReviewDeptClient({
                     <label className="text-[10px] sm:text-xs font-semibold text-slate-700 leading-tight">Internal Audit Team</label>
                     <div className="flex gap-1">
                       <button
-                        onClick={() => {
-                          const name = prompt("Enter team member name:");
-                          const region = prompt("Enter region:");
-                          if (name && region) {
-                            setInternalAuditTeam([...internalAuditTeam, { name, region }]);
-                          }
-                        }}
-                        className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                        type="button"
+                        disabled={isInteractionDisabled}
+                        onClick={openTeamAddModal}
+                        className="px-2 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                       >
-                        SELECT
+                        Add
                       </button>
                       <button
-                        onClick={() => {
-                          if (internalAuditTeam.length > 0) {
-                            const index = prompt(`Enter index to remove (1-${internalAuditTeam.length}):`);
-                            const idx = parseInt(index) - 1;
-                            if (idx >= 0 && idx < internalAuditTeam.length) {
-                              setInternalAuditTeam(internalAuditTeam.filter((_, i) => i !== idx));
-                            }
-                          }
-                        }}
-                        className="px-2 py-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                        type="button"
+                        disabled={isInteractionDisabled}
+                        onClick={openTeamRemoveModal}
+                        className="px-2 py-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-[10px] font-semibold rounded transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-red-600 disabled:hover:to-red-700"
                       >
-                        REMOVE
+                        Remove
                       </button>
                     </div>
                   </div>
@@ -816,6 +1039,23 @@ export default function AuditReviewDeptClient({
 
         {/* Table - responsive: horizontal scroll when narrow */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 bg-slate-50/80">
+            <span className="text-xs font-semibold text-slate-600">Key findings</span>
+            <button
+              type="button"
+              disabled={isInteractionDisabled}
+              onClick={() => {
+                if (isTableEditMode) {
+                  void handleDoneTableEdit();
+                } else {
+                  setIsTableEditMode(true);
+                }
+              }}
+              className="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading && isTableEditMode ? "Saving..." : isTableEditMode ? "Done" : "Edit"}
+            </button>
+          </div>
           <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
             <table className="w-full border-collapse text-xs min-w-[2200px]" style={{ tableLayout: "fixed" }}>
               <thead>
@@ -853,28 +1093,254 @@ export default function AuditReviewDeptClient({
                   keyFindings.map((finding, idx) => (
                     <tr key={idx} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
                       <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.no}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.apNo || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
-                        <div className="space-y-1">
-                          <div><strong>Substantive Test:</strong> {finding.substantiveTest || "-"}</div>
-                          <div><strong>Check:</strong> {finding.checkYn || "-"}</div>
-                          <div><strong>Method:</strong> {finding.method || "-"}</div>
-                        </div>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.apNo ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "apNo", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.apNo || "-"
+                        )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.risk || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.preparer || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.findingResult || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{finding.findingDescription || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{finding.recommendation || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.status || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{finding.reviewNote || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center bg-blue-50 align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.reviewStatus || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.preparerRespo || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.referenceLink || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.followUpDueDate || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.timeline || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.followUpStatus || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.auditee || "-"}</td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                        {isTableEditMode ? (
+                          <div className="space-y-1">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] font-semibold text-slate-600">Substantive Test</span>
+                              <input
+                                type="text"
+                                value={finding.substantiveTest ?? ""}
+                                disabled={isInteractionDisabled}
+                                onChange={(e) => handleUpdateFinding(idx, "substantiveTest", e.target.value)}
+                                className={tableFieldClass}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] font-semibold text-slate-600">Check</span>
+                              <select
+                                value={finding.checkYn ?? ""}
+                                disabled={isInteractionDisabled}
+                                onChange={(e) => handleUpdateFinding(idx, "checkYn", e.target.value)}
+                                className={tableFieldClass}
+                              >
+                                <option value="">—</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                                <option value="-">-</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] font-semibold text-slate-600">Method</span>
+                              <input
+                                type="text"
+                                value={finding.method ?? ""}
+                                disabled={isInteractionDisabled}
+                                onChange={(e) => handleUpdateFinding(idx, "method", e.target.value)}
+                                className={tableFieldClass}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div><strong>Substantive Test:</strong> {finding.substantiveTest || "-"}</div>
+                            <div><strong>Check:</strong> {finding.checkYn || "-"}</div>
+                            <div><strong>Method:</strong> {finding.method || "-"}</div>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.risk ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "risk", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.risk || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.preparer ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "preparer", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.preparer || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.findingResult ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "findingResult", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.findingResult || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                        {isTableEditMode ? (
+                          <textarea
+                            value={finding.findingDescription ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "findingDescription", e.target.value)}
+                            className={tableAreaClass}
+                            rows={3}
+                          />
+                        ) : (
+                          finding.findingDescription || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                        {isTableEditMode ? (
+                          <textarea
+                            value={finding.recommendation ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "recommendation", e.target.value)}
+                            className={tableAreaClass}
+                            rows={3}
+                          />
+                        ) : (
+                          finding.recommendation || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.status ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "status", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.status || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                        {isTableEditMode ? (
+                          <textarea
+                            value={finding.reviewNote ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "reviewNote", e.target.value)}
+                            className={tableAreaClass}
+                            rows={3}
+                          />
+                        ) : (
+                          finding.reviewNote || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center bg-blue-50 align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <select
+                            value={normalizeReviewStatus(finding.reviewStatus)}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "reviewStatus", e.target.value)}
+                            className={tableFieldClass}
+                          >
+                            {REVIEW_STATUS_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          normalizeReviewStatus(finding.reviewStatus)
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.preparerRespo ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "preparerRespo", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.preparerRespo || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.referenceLink ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "referenceLink", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.referenceLink || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="date"
+                            value={finding.followUpDueDate ? String(finding.followUpDueDate).slice(0, 10) : ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "followUpDueDate", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.followUpDueDate || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.timeline ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "timeline", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.timeline || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <select
+                            value={normalizeFollowUpStatus(finding.followUpStatus)}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "followUpStatus", e.target.value)}
+                            className={tableFieldClass}
+                          >
+                            <option value={FOLLOW_UP_STATUS_IN_PROGRESS}>{FOLLOW_UP_STATUS_IN_PROGRESS}</option>
+                            <option value={FOLLOW_UP_STATUS_COMPLETE}>{FOLLOW_UP_STATUS_COMPLETE}</option>
+                          </select>
+                        ) : (
+                          normalizeFollowUpStatus(finding.followUpStatus)
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                        {isTableEditMode ? (
+                          <input
+                            type="text"
+                            value={finding.auditee ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "auditee", e.target.value)}
+                            className={tableFieldClass}
+                          />
+                        ) : (
+                          finding.auditee || "-"
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -908,6 +1374,7 @@ export default function AuditReviewDeptClient({
                       <input
                         type="checkbox"
                         checked={selectModal.currentSelection.includes(option)}
+                        disabled={isInteractionDisabled}
                         onChange={() => toggleModalSelection(option)}
                         className="mr-3 w-4 h-4 text-blue-600"
                       />
@@ -918,16 +1385,153 @@ export default function AuditReviewDeptClient({
               </div>
               <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
                 <button
+                  type="button"
                   onClick={closeSelectModal}
                   className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-all duration-200 shadow-sm"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  disabled={isInteractionDisabled}
                   onClick={confirmModalSelection}
-                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
                 >
                   Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Internal Audit Team member */}
+        {teamAddModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-white/20 p-4"
+            onClick={closeTeamAddModal}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-blue-600 p-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white">Add team member</h3>
+                <button
+                  type="button"
+                  onClick={closeTeamAddModal}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div>
+                  <label htmlFor="team-member-name" className="block text-sm font-medium text-slate-700 mb-1">
+                    Name
+                  </label>
+                  <input
+                    id="team-member-name"
+                    type="text"
+                    value={teamNameInput}
+                    onChange={(e) => setTeamNameInput(e.target.value)}
+                    disabled={isInteractionDisabled}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                    placeholder="Full name"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="team-member-region" className="block text-sm font-medium text-slate-700 mb-1">
+                    Region
+                  </label>
+                  <input
+                    id="team-member-region"
+                    type="text"
+                    value={teamRegionInput}
+                    onChange={(e) => setTeamRegionInput(e.target.value)}
+                    disabled={isInteractionDisabled}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                    placeholder="e.g. Jakarta"
+                  />
+                </div>
+              </div>
+              <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeTeamAddModal}
+                  className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-all duration-200 shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isInteractionDisabled}
+                  onClick={confirmTeamAdd}
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Add member
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Remove Internal Audit Team member */}
+        {teamRemoveModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-white/20 p-4"
+            onClick={closeTeamRemoveModal}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-red-600 p-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white">Remove team member</h3>
+                <button
+                  type="button"
+                  onClick={closeTeamRemoveModal}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <p className="text-sm text-slate-600 mb-3">Select a member to remove from the list.</p>
+                <ul className="space-y-2">
+                  {internalAuditTeam.map((member, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-center justify-between gap-2 p-3 border border-slate-200 rounded-lg bg-slate-50"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-800 truncate">{member.name}</div>
+                        <div className="text-xs text-slate-600 truncate">{member.region}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isInteractionDisabled}
+                        onClick={() => removeTeamMemberAt(idx)}
+                        className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="p-4 border-t border-gray-200 flex justify-end">
+                <button
+                  type="button"
+                  onClick={closeTeamRemoveModal}
+                  className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-all duration-200 shadow-sm"
+                >
+                  Close
                 </button>
               </div>
             </div>

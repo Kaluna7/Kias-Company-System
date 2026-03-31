@@ -16,6 +16,7 @@ if (!global._pgPool) {
 const pool = global._pgPool;
 
 const ALLOWED_MODULES = new Set(["sop-review", "worksheet", "audit-finding", "evidence"]);
+const ALL_MODULE_KEYS = ["sop-review", "worksheet", "audit-finding", "evidence"];
 
 async function ensureTable(client) {
   await client.query(`
@@ -136,12 +137,11 @@ export async function POST(req) {
                 ? (() => { try { return JSON.parse(row.incharge_modules); } catch { return []; } })()
                 : [];
             
-            // Remove module from incharge_modules (but keep "all" if it exists)
-            // If "all" is selected, we don't need to remove module from incharge_modules
-            // because "all" means all modules, and removing one module doesn't change that
-            // But if specific module is selected, remove it
-            if (!inchargeModules.includes("all")) {
-              // Only remove if it's a specific module selection (not "all")
+            // Remove module from incharge_modules.
+            // If "all" is selected, convert it into explicit remaining modules except the archived one.
+            if (inchargeModules.includes("all")) {
+              inchargeModules = ALL_MODULE_KEYS.filter((m) => m !== module_key);
+            } else {
               inchargeModules = inchargeModules.filter((m) => m !== module_key);
             }
             
