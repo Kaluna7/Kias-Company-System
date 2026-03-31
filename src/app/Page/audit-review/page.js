@@ -48,7 +48,7 @@ function AuditReviewHomePageContent() {
           </button>
         </div>
 
-        {/* Header (mengikuti Evidence) */}
+        {/* Header (aligned with Evidence page style) */}
         <header className="mb-8">
           <div className="bg-[#141D38] rounded-xl shadow-lg p-6 mb-6">
             <div className="flex flex-row justify-between items-center">
@@ -77,8 +77,8 @@ function AuditReviewHomePageContent() {
             <div className="mt-8 text-[#141D38]">
               <div className="text-2xl font-black">Homepage</div>
               <p className="mt-3 text-sm font-semibold text-[#141D38]/80">
-                Akses cepat untuk <span className="font-black">Review Guidelines</span>,{" "}
-                <span className="font-black">Review Template</span>, dan mapping departemen.
+                Quick access to <span className="font-black">Review Guidelines</span>,{" "}
+                <span className="font-black">Review Template</span>, and department mapping.
               </p>
 
               <div className="mt-4 grid gap-3">
@@ -168,7 +168,7 @@ function AuditReviewHomePageContent() {
                     </div>
                   </Link>
                 ))}
-                {/* Report: buat report setelah data Audit Finding di-publish ke Audit Review dan di-cek */}
+                {/* Report: available after Audit Finding data is published and reviewed in Audit Review */}
                 <Link
                   href={`/Page/report${yearQuery}`}
                   className="group bg-gradient-to-br from-white to-emerald-50 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-gray-200 hover:border-emerald-300 hover:translate-y-[-4px]"
@@ -181,7 +181,7 @@ function AuditReviewHomePageContent() {
                       <h3 className="text-lg font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">
                         Report
                       </h3>
-                      <p className="text-xs text-gray-500 mt-1">KIAS Consolidated Report (data dari Audit Review)</p>
+                      <p className="text-xs text-gray-500 mt-1">KIAS consolidated report (data from Audit Review)</p>
                     </div>
                     <div className="text-emerald-600 flex items-center group-hover:translate-x-1 transition-transform">
                       <span className="text-sm font-semibold mr-1">Open</span>
