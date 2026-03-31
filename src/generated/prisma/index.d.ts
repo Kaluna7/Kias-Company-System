@@ -35491,8 +35491,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -35512,8 +35517,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -35533,8 +35543,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -35566,8 +35581,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -35587,8 +35607,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -35608,8 +35633,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -35716,8 +35746,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -35756,8 +35791,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -35777,8 +35817,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -35798,8 +35843,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -35819,8 +35869,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -35835,7 +35890,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_accountingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_accounting"]>
+  export type audit_finding_accountingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_accounting"]>
 
   export type $audit_finding_accountingPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_accounting"
@@ -35845,8 +35900,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -36286,8 +36346,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_accounting", 'String'>
     readonly risk_description: FieldRef<"audit_finding_accounting", 'String'>
     readonly risk_details: FieldRef<"audit_finding_accounting", 'String'>
+    readonly owners: FieldRef<"audit_finding_accounting", 'String'>
     readonly ap_code: FieldRef<"audit_finding_accounting", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_accounting", 'String'>
+    readonly objective: FieldRef<"audit_finding_accounting", 'String'>
+    readonly procedures: FieldRef<"audit_finding_accounting", 'String'>
+    readonly description: FieldRef<"audit_finding_accounting", 'String'>
+    readonly application: FieldRef<"audit_finding_accounting", 'String'>
     readonly risk: FieldRef<"audit_finding_accounting", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_accounting", 'String'>
     readonly method: FieldRef<"audit_finding_accounting", 'String'>
@@ -36693,8 +36758,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -36714,8 +36784,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -36735,8 +36810,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -36768,8 +36848,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -36789,8 +36874,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -36810,8 +36900,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -36918,8 +37013,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -36958,8 +37058,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -36979,8 +37084,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -37000,8 +37110,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -37021,8 +37136,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -37037,7 +37157,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_finance"]>
+  export type audit_finding_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_finance"]>
 
   export type $audit_finding_financePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_finance"
@@ -37047,8 +37167,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -37488,8 +37613,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_finance", 'String'>
     readonly risk_description: FieldRef<"audit_finding_finance", 'String'>
     readonly risk_details: FieldRef<"audit_finding_finance", 'String'>
+    readonly owners: FieldRef<"audit_finding_finance", 'String'>
     readonly ap_code: FieldRef<"audit_finding_finance", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_finance", 'String'>
+    readonly objective: FieldRef<"audit_finding_finance", 'String'>
+    readonly procedures: FieldRef<"audit_finding_finance", 'String'>
+    readonly description: FieldRef<"audit_finding_finance", 'String'>
+    readonly application: FieldRef<"audit_finding_finance", 'String'>
     readonly risk: FieldRef<"audit_finding_finance", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_finance", 'String'>
     readonly method: FieldRef<"audit_finding_finance", 'String'>
@@ -37895,8 +38025,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -37916,8 +38051,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -37937,8 +38077,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -37970,8 +38115,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -37991,8 +38141,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -38012,8 +38167,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -38120,8 +38280,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -38160,8 +38325,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -38181,8 +38351,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -38202,8 +38377,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -38223,8 +38403,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -38239,7 +38424,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_hrdOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_hrd"]>
+  export type audit_finding_hrdOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_hrd"]>
 
   export type $audit_finding_hrdPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_hrd"
@@ -38249,8 +38434,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -38690,8 +38880,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_hrd", 'String'>
     readonly risk_description: FieldRef<"audit_finding_hrd", 'String'>
     readonly risk_details: FieldRef<"audit_finding_hrd", 'String'>
+    readonly owners: FieldRef<"audit_finding_hrd", 'String'>
     readonly ap_code: FieldRef<"audit_finding_hrd", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_hrd", 'String'>
+    readonly objective: FieldRef<"audit_finding_hrd", 'String'>
+    readonly procedures: FieldRef<"audit_finding_hrd", 'String'>
+    readonly description: FieldRef<"audit_finding_hrd", 'String'>
+    readonly application: FieldRef<"audit_finding_hrd", 'String'>
     readonly risk: FieldRef<"audit_finding_hrd", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_hrd", 'String'>
     readonly method: FieldRef<"audit_finding_hrd", 'String'>
@@ -39097,8 +39292,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -39118,8 +39318,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -39139,8 +39344,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -39172,8 +39382,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -39193,8 +39408,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -39214,8 +39434,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -39322,8 +39547,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -39362,8 +39592,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -39383,8 +39618,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -39404,8 +39644,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -39425,8 +39670,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -39441,7 +39691,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_gaOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_ga"]>
+  export type audit_finding_gaOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_ga"]>
 
   export type $audit_finding_gaPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_ga"
@@ -39451,8 +39701,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -39892,8 +40147,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_ga", 'String'>
     readonly risk_description: FieldRef<"audit_finding_ga", 'String'>
     readonly risk_details: FieldRef<"audit_finding_ga", 'String'>
+    readonly owners: FieldRef<"audit_finding_ga", 'String'>
     readonly ap_code: FieldRef<"audit_finding_ga", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_ga", 'String'>
+    readonly objective: FieldRef<"audit_finding_ga", 'String'>
+    readonly procedures: FieldRef<"audit_finding_ga", 'String'>
+    readonly description: FieldRef<"audit_finding_ga", 'String'>
+    readonly application: FieldRef<"audit_finding_ga", 'String'>
     readonly risk: FieldRef<"audit_finding_ga", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_ga", 'String'>
     readonly method: FieldRef<"audit_finding_ga", 'String'>
@@ -40299,8 +40559,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -40320,8 +40585,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -40341,8 +40611,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -40374,8 +40649,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -40395,8 +40675,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -40416,8 +40701,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -40524,8 +40814,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -40564,8 +40859,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -40585,8 +40885,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -40606,8 +40911,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -40627,8 +40937,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -40643,7 +40958,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_sdpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_sdp"]>
+  export type audit_finding_sdpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_sdp"]>
 
   export type $audit_finding_sdpPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_sdp"
@@ -40653,8 +40968,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -41094,8 +41414,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_sdp", 'String'>
     readonly risk_description: FieldRef<"audit_finding_sdp", 'String'>
     readonly risk_details: FieldRef<"audit_finding_sdp", 'String'>
+    readonly owners: FieldRef<"audit_finding_sdp", 'String'>
     readonly ap_code: FieldRef<"audit_finding_sdp", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_sdp", 'String'>
+    readonly objective: FieldRef<"audit_finding_sdp", 'String'>
+    readonly procedures: FieldRef<"audit_finding_sdp", 'String'>
+    readonly description: FieldRef<"audit_finding_sdp", 'String'>
+    readonly application: FieldRef<"audit_finding_sdp", 'String'>
     readonly risk: FieldRef<"audit_finding_sdp", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_sdp", 'String'>
     readonly method: FieldRef<"audit_finding_sdp", 'String'>
@@ -41501,8 +41826,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -41522,8 +41852,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -41543,8 +41878,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -41576,8 +41916,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -41597,8 +41942,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -41618,8 +41968,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -41726,8 +42081,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -41766,8 +42126,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -41787,8 +42152,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -41808,8 +42178,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -41829,8 +42204,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -41845,7 +42225,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_taxOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_tax"]>
+  export type audit_finding_taxOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_tax"]>
 
   export type $audit_finding_taxPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_tax"
@@ -41855,8 +42235,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -42296,8 +42681,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_tax", 'String'>
     readonly risk_description: FieldRef<"audit_finding_tax", 'String'>
     readonly risk_details: FieldRef<"audit_finding_tax", 'String'>
+    readonly owners: FieldRef<"audit_finding_tax", 'String'>
     readonly ap_code: FieldRef<"audit_finding_tax", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_tax", 'String'>
+    readonly objective: FieldRef<"audit_finding_tax", 'String'>
+    readonly procedures: FieldRef<"audit_finding_tax", 'String'>
+    readonly description: FieldRef<"audit_finding_tax", 'String'>
+    readonly application: FieldRef<"audit_finding_tax", 'String'>
     readonly risk: FieldRef<"audit_finding_tax", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_tax", 'String'>
     readonly method: FieldRef<"audit_finding_tax", 'String'>
@@ -42703,8 +43093,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -42724,8 +43119,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -42745,8 +43145,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -42778,8 +43183,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -42799,8 +43209,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -42820,8 +43235,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -42928,8 +43348,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -42968,8 +43393,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -42989,8 +43419,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -43010,8 +43445,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -43031,8 +43471,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -43047,7 +43492,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_lpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_lp"]>
+  export type audit_finding_lpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_lp"]>
 
   export type $audit_finding_lpPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_lp"
@@ -43057,8 +43502,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -43498,8 +43948,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_lp", 'String'>
     readonly risk_description: FieldRef<"audit_finding_lp", 'String'>
     readonly risk_details: FieldRef<"audit_finding_lp", 'String'>
+    readonly owners: FieldRef<"audit_finding_lp", 'String'>
     readonly ap_code: FieldRef<"audit_finding_lp", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_lp", 'String'>
+    readonly objective: FieldRef<"audit_finding_lp", 'String'>
+    readonly procedures: FieldRef<"audit_finding_lp", 'String'>
+    readonly description: FieldRef<"audit_finding_lp", 'String'>
+    readonly application: FieldRef<"audit_finding_lp", 'String'>
     readonly risk: FieldRef<"audit_finding_lp", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_lp", 'String'>
     readonly method: FieldRef<"audit_finding_lp", 'String'>
@@ -43905,8 +44360,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -43926,8 +44386,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -43947,8 +44412,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -43980,8 +44450,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -44001,8 +44476,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -44022,8 +44502,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -44130,8 +44615,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -44170,8 +44660,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -44191,8 +44686,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -44212,8 +44712,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -44233,8 +44738,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -44249,7 +44759,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_misOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_mis"]>
+  export type audit_finding_misOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_mis"]>
 
   export type $audit_finding_misPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_mis"
@@ -44259,8 +44769,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -44700,8 +45215,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_mis", 'String'>
     readonly risk_description: FieldRef<"audit_finding_mis", 'String'>
     readonly risk_details: FieldRef<"audit_finding_mis", 'String'>
+    readonly owners: FieldRef<"audit_finding_mis", 'String'>
     readonly ap_code: FieldRef<"audit_finding_mis", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_mis", 'String'>
+    readonly objective: FieldRef<"audit_finding_mis", 'String'>
+    readonly procedures: FieldRef<"audit_finding_mis", 'String'>
+    readonly description: FieldRef<"audit_finding_mis", 'String'>
+    readonly application: FieldRef<"audit_finding_mis", 'String'>
     readonly risk: FieldRef<"audit_finding_mis", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_mis", 'String'>
     readonly method: FieldRef<"audit_finding_mis", 'String'>
@@ -45107,8 +45627,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -45128,8 +45653,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -45149,8 +45679,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -45182,8 +45717,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -45203,8 +45743,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -45224,8 +45769,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -45332,8 +45882,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -45372,8 +45927,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -45393,8 +45953,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -45414,8 +45979,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -45435,8 +46005,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -45451,7 +46026,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_merchOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_merch"]>
+  export type audit_finding_merchOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_merch"]>
 
   export type $audit_finding_merchPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_merch"
@@ -45461,8 +46036,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -45902,8 +46482,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_merch", 'String'>
     readonly risk_description: FieldRef<"audit_finding_merch", 'String'>
     readonly risk_details: FieldRef<"audit_finding_merch", 'String'>
+    readonly owners: FieldRef<"audit_finding_merch", 'String'>
     readonly ap_code: FieldRef<"audit_finding_merch", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_merch", 'String'>
+    readonly objective: FieldRef<"audit_finding_merch", 'String'>
+    readonly procedures: FieldRef<"audit_finding_merch", 'String'>
+    readonly description: FieldRef<"audit_finding_merch", 'String'>
+    readonly application: FieldRef<"audit_finding_merch", 'String'>
     readonly risk: FieldRef<"audit_finding_merch", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_merch", 'String'>
     readonly method: FieldRef<"audit_finding_merch", 'String'>
@@ -46309,8 +46894,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -46330,8 +46920,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -46351,8 +46946,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -46384,8 +46984,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -46405,8 +47010,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -46426,8 +47036,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -46534,8 +47149,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -46574,8 +47194,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -46595,8 +47220,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -46616,8 +47246,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -46637,8 +47272,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -46653,7 +47293,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_opsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_ops"]>
+  export type audit_finding_opsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_ops"]>
 
   export type $audit_finding_opsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_ops"
@@ -46663,8 +47303,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -47104,8 +47749,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_ops", 'String'>
     readonly risk_description: FieldRef<"audit_finding_ops", 'String'>
     readonly risk_details: FieldRef<"audit_finding_ops", 'String'>
+    readonly owners: FieldRef<"audit_finding_ops", 'String'>
     readonly ap_code: FieldRef<"audit_finding_ops", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_ops", 'String'>
+    readonly objective: FieldRef<"audit_finding_ops", 'String'>
+    readonly procedures: FieldRef<"audit_finding_ops", 'String'>
+    readonly description: FieldRef<"audit_finding_ops", 'String'>
+    readonly application: FieldRef<"audit_finding_ops", 'String'>
     readonly risk: FieldRef<"audit_finding_ops", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_ops", 'String'>
     readonly method: FieldRef<"audit_finding_ops", 'String'>
@@ -47511,8 +48161,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -47532,8 +48187,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -47553,8 +48213,13 @@ export namespace Prisma {
     risk_id: number
     risk_description: number
     risk_details: number
+    owners: number
     ap_code: number
     substantive_test: number
+    objective: number
+    procedures: number
+    description: number
+    application: number
     risk: number
     check_yn: number
     method: number
@@ -47586,8 +48251,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -47607,8 +48277,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -47628,8 +48303,13 @@ export namespace Prisma {
     risk_id?: true
     risk_description?: true
     risk_details?: true
+    owners?: true
     ap_code?: true
     substantive_test?: true
+    objective?: true
+    procedures?: true
+    description?: true
+    application?: true
     risk?: true
     check_yn?: true
     method?: true
@@ -47736,8 +48416,13 @@ export namespace Prisma {
     risk_id: string | null
     risk_description: string | null
     risk_details: string | null
+    owners: string | null
     ap_code: string | null
     substantive_test: string | null
+    objective: string | null
+    procedures: string | null
+    description: string | null
+    application: string | null
     risk: number | null
     check_yn: string | null
     method: string | null
@@ -47776,8 +48461,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -47797,8 +48487,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -47818,8 +48513,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -47839,8 +48539,13 @@ export namespace Prisma {
     risk_id?: boolean
     risk_description?: boolean
     risk_details?: boolean
+    owners?: boolean
     ap_code?: boolean
     substantive_test?: boolean
+    objective?: boolean
+    procedures?: boolean
+    description?: boolean
+    application?: boolean
     risk?: boolean
     check_yn?: boolean
     method?: boolean
@@ -47855,7 +48560,7 @@ export namespace Prisma {
     updated_at?: boolean
   }
 
-  export type audit_finding_whsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "ap_code" | "substantive_test" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_whs"]>
+  export type audit_finding_whsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_whs"]>
 
   export type $audit_finding_whsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_whs"
@@ -47865,8 +48570,13 @@ export namespace Prisma {
       risk_id: string | null
       risk_description: string | null
       risk_details: string | null
+      owners: string | null
       ap_code: string | null
       substantive_test: string | null
+      objective: string | null
+      procedures: string | null
+      description: string | null
+      application: string | null
       risk: number | null
       check_yn: string | null
       method: string | null
@@ -48306,8 +49016,13 @@ export namespace Prisma {
     readonly risk_id: FieldRef<"audit_finding_whs", 'String'>
     readonly risk_description: FieldRef<"audit_finding_whs", 'String'>
     readonly risk_details: FieldRef<"audit_finding_whs", 'String'>
+    readonly owners: FieldRef<"audit_finding_whs", 'String'>
     readonly ap_code: FieldRef<"audit_finding_whs", 'String'>
     readonly substantive_test: FieldRef<"audit_finding_whs", 'String'>
+    readonly objective: FieldRef<"audit_finding_whs", 'String'>
+    readonly procedures: FieldRef<"audit_finding_whs", 'String'>
+    readonly description: FieldRef<"audit_finding_whs", 'String'>
+    readonly application: FieldRef<"audit_finding_whs", 'String'>
     readonly risk: FieldRef<"audit_finding_whs", 'Int'>
     readonly check_yn: FieldRef<"audit_finding_whs", 'String'>
     readonly method: FieldRef<"audit_finding_whs", 'String'>
@@ -51432,8 +52147,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51456,8 +52176,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51480,8 +52205,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51504,8 +52234,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51528,8 +52263,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51552,8 +52292,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51576,8 +52321,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51600,8 +52350,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51624,8 +52379,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51648,8 +52408,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -51672,8 +52437,13 @@ export namespace Prisma {
     risk_id: 'risk_id',
     risk_description: 'risk_description',
     risk_details: 'risk_details',
+    owners: 'owners',
     ap_code: 'ap_code',
     substantive_test: 'substantive_test',
+    objective: 'objective',
+    procedures: 'procedures',
+    description: 'description',
+    application: 'application',
     risk: 'risk',
     check_yn: 'check_yn',
     method: 'method',
@@ -54212,8 +54982,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_accounting"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_accounting"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    owners?: StringNullableFilter<"audit_finding_accounting"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_accounting"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    objective?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    description?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    application?: StringNullableFilter<"audit_finding_accounting"> | string | null
     risk?: IntNullableFilter<"audit_finding_accounting"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_accounting"> | string | null
     method?: StringNullableFilter<"audit_finding_accounting"> | string | null
@@ -54233,8 +55008,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54257,8 +55037,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_accounting"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_accounting"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    owners?: StringNullableFilter<"audit_finding_accounting"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_accounting"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    objective?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    description?: StringNullableFilter<"audit_finding_accounting"> | string | null
+    application?: StringNullableFilter<"audit_finding_accounting"> | string | null
     risk?: IntNullableFilter<"audit_finding_accounting"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_accounting"> | string | null
     method?: StringNullableFilter<"audit_finding_accounting"> | string | null
@@ -54278,8 +55063,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54307,8 +55097,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_accounting"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_accounting"> | string | null
@@ -54331,8 +55126,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_finance"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_finance"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_finance"> | string | null
+    owners?: StringNullableFilter<"audit_finding_finance"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_finance"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_finance"> | string | null
+    objective?: StringNullableFilter<"audit_finding_finance"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_finance"> | string | null
+    description?: StringNullableFilter<"audit_finding_finance"> | string | null
+    application?: StringNullableFilter<"audit_finding_finance"> | string | null
     risk?: IntNullableFilter<"audit_finding_finance"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_finance"> | string | null
     method?: StringNullableFilter<"audit_finding_finance"> | string | null
@@ -54352,8 +55152,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54376,8 +55181,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_finance"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_finance"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_finance"> | string | null
+    owners?: StringNullableFilter<"audit_finding_finance"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_finance"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_finance"> | string | null
+    objective?: StringNullableFilter<"audit_finding_finance"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_finance"> | string | null
+    description?: StringNullableFilter<"audit_finding_finance"> | string | null
+    application?: StringNullableFilter<"audit_finding_finance"> | string | null
     risk?: IntNullableFilter<"audit_finding_finance"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_finance"> | string | null
     method?: StringNullableFilter<"audit_finding_finance"> | string | null
@@ -54397,8 +55207,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54426,8 +55241,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_finance"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_finance"> | string | null
@@ -54450,8 +55270,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_hrd"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_hrd"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    owners?: StringNullableFilter<"audit_finding_hrd"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_hrd"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    objective?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    description?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    application?: StringNullableFilter<"audit_finding_hrd"> | string | null
     risk?: IntNullableFilter<"audit_finding_hrd"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_hrd"> | string | null
     method?: StringNullableFilter<"audit_finding_hrd"> | string | null
@@ -54471,8 +55296,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54495,8 +55325,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_hrd"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_hrd"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    owners?: StringNullableFilter<"audit_finding_hrd"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_hrd"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    objective?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    description?: StringNullableFilter<"audit_finding_hrd"> | string | null
+    application?: StringNullableFilter<"audit_finding_hrd"> | string | null
     risk?: IntNullableFilter<"audit_finding_hrd"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_hrd"> | string | null
     method?: StringNullableFilter<"audit_finding_hrd"> | string | null
@@ -54516,8 +55351,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54545,8 +55385,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_hrd"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_hrd"> | string | null
@@ -54569,8 +55414,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_ga"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_ga"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_ga"> | string | null
+    owners?: StringNullableFilter<"audit_finding_ga"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_ga"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_ga"> | string | null
+    objective?: StringNullableFilter<"audit_finding_ga"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_ga"> | string | null
+    description?: StringNullableFilter<"audit_finding_ga"> | string | null
+    application?: StringNullableFilter<"audit_finding_ga"> | string | null
     risk?: IntNullableFilter<"audit_finding_ga"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_ga"> | string | null
     method?: StringNullableFilter<"audit_finding_ga"> | string | null
@@ -54590,8 +55440,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54614,8 +55469,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_ga"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_ga"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_ga"> | string | null
+    owners?: StringNullableFilter<"audit_finding_ga"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_ga"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_ga"> | string | null
+    objective?: StringNullableFilter<"audit_finding_ga"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_ga"> | string | null
+    description?: StringNullableFilter<"audit_finding_ga"> | string | null
+    application?: StringNullableFilter<"audit_finding_ga"> | string | null
     risk?: IntNullableFilter<"audit_finding_ga"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_ga"> | string | null
     method?: StringNullableFilter<"audit_finding_ga"> | string | null
@@ -54635,8 +55495,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54664,8 +55529,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_ga"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_ga"> | string | null
@@ -54688,8 +55558,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_sdp"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_sdp"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    owners?: StringNullableFilter<"audit_finding_sdp"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_sdp"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    objective?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    description?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    application?: StringNullableFilter<"audit_finding_sdp"> | string | null
     risk?: IntNullableFilter<"audit_finding_sdp"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_sdp"> | string | null
     method?: StringNullableFilter<"audit_finding_sdp"> | string | null
@@ -54709,8 +55584,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54733,8 +55613,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_sdp"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_sdp"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    owners?: StringNullableFilter<"audit_finding_sdp"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_sdp"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    objective?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    description?: StringNullableFilter<"audit_finding_sdp"> | string | null
+    application?: StringNullableFilter<"audit_finding_sdp"> | string | null
     risk?: IntNullableFilter<"audit_finding_sdp"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_sdp"> | string | null
     method?: StringNullableFilter<"audit_finding_sdp"> | string | null
@@ -54754,8 +55639,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54783,8 +55673,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_sdp"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_sdp"> | string | null
@@ -54807,8 +55702,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_tax"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_tax"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_tax"> | string | null
+    owners?: StringNullableFilter<"audit_finding_tax"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_tax"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_tax"> | string | null
+    objective?: StringNullableFilter<"audit_finding_tax"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_tax"> | string | null
+    description?: StringNullableFilter<"audit_finding_tax"> | string | null
+    application?: StringNullableFilter<"audit_finding_tax"> | string | null
     risk?: IntNullableFilter<"audit_finding_tax"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_tax"> | string | null
     method?: StringNullableFilter<"audit_finding_tax"> | string | null
@@ -54828,8 +55728,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54852,8 +55757,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_tax"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_tax"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_tax"> | string | null
+    owners?: StringNullableFilter<"audit_finding_tax"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_tax"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_tax"> | string | null
+    objective?: StringNullableFilter<"audit_finding_tax"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_tax"> | string | null
+    description?: StringNullableFilter<"audit_finding_tax"> | string | null
+    application?: StringNullableFilter<"audit_finding_tax"> | string | null
     risk?: IntNullableFilter<"audit_finding_tax"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_tax"> | string | null
     method?: StringNullableFilter<"audit_finding_tax"> | string | null
@@ -54873,8 +55783,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54902,8 +55817,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_tax"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_tax"> | string | null
@@ -54926,8 +55846,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_lp"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_lp"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_lp"> | string | null
+    owners?: StringNullableFilter<"audit_finding_lp"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_lp"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_lp"> | string | null
+    objective?: StringNullableFilter<"audit_finding_lp"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_lp"> | string | null
+    description?: StringNullableFilter<"audit_finding_lp"> | string | null
+    application?: StringNullableFilter<"audit_finding_lp"> | string | null
     risk?: IntNullableFilter<"audit_finding_lp"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_lp"> | string | null
     method?: StringNullableFilter<"audit_finding_lp"> | string | null
@@ -54947,8 +55872,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -54971,8 +55901,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_lp"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_lp"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_lp"> | string | null
+    owners?: StringNullableFilter<"audit_finding_lp"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_lp"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_lp"> | string | null
+    objective?: StringNullableFilter<"audit_finding_lp"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_lp"> | string | null
+    description?: StringNullableFilter<"audit_finding_lp"> | string | null
+    application?: StringNullableFilter<"audit_finding_lp"> | string | null
     risk?: IntNullableFilter<"audit_finding_lp"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_lp"> | string | null
     method?: StringNullableFilter<"audit_finding_lp"> | string | null
@@ -54992,8 +55927,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55021,8 +55961,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_lp"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_lp"> | string | null
@@ -55045,8 +55990,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_mis"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_mis"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_mis"> | string | null
+    owners?: StringNullableFilter<"audit_finding_mis"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_mis"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_mis"> | string | null
+    objective?: StringNullableFilter<"audit_finding_mis"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_mis"> | string | null
+    description?: StringNullableFilter<"audit_finding_mis"> | string | null
+    application?: StringNullableFilter<"audit_finding_mis"> | string | null
     risk?: IntNullableFilter<"audit_finding_mis"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_mis"> | string | null
     method?: StringNullableFilter<"audit_finding_mis"> | string | null
@@ -55066,8 +56016,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55090,8 +56045,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_mis"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_mis"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_mis"> | string | null
+    owners?: StringNullableFilter<"audit_finding_mis"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_mis"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_mis"> | string | null
+    objective?: StringNullableFilter<"audit_finding_mis"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_mis"> | string | null
+    description?: StringNullableFilter<"audit_finding_mis"> | string | null
+    application?: StringNullableFilter<"audit_finding_mis"> | string | null
     risk?: IntNullableFilter<"audit_finding_mis"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_mis"> | string | null
     method?: StringNullableFilter<"audit_finding_mis"> | string | null
@@ -55111,8 +56071,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55140,8 +56105,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_mis"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_mis"> | string | null
@@ -55164,8 +56134,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_merch"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_merch"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_merch"> | string | null
+    owners?: StringNullableFilter<"audit_finding_merch"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_merch"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_merch"> | string | null
+    objective?: StringNullableFilter<"audit_finding_merch"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_merch"> | string | null
+    description?: StringNullableFilter<"audit_finding_merch"> | string | null
+    application?: StringNullableFilter<"audit_finding_merch"> | string | null
     risk?: IntNullableFilter<"audit_finding_merch"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_merch"> | string | null
     method?: StringNullableFilter<"audit_finding_merch"> | string | null
@@ -55185,8 +56160,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55209,8 +56189,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_merch"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_merch"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_merch"> | string | null
+    owners?: StringNullableFilter<"audit_finding_merch"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_merch"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_merch"> | string | null
+    objective?: StringNullableFilter<"audit_finding_merch"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_merch"> | string | null
+    description?: StringNullableFilter<"audit_finding_merch"> | string | null
+    application?: StringNullableFilter<"audit_finding_merch"> | string | null
     risk?: IntNullableFilter<"audit_finding_merch"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_merch"> | string | null
     method?: StringNullableFilter<"audit_finding_merch"> | string | null
@@ -55230,8 +56215,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55259,8 +56249,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_merch"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_merch"> | string | null
@@ -55283,8 +56278,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_ops"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_ops"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_ops"> | string | null
+    owners?: StringNullableFilter<"audit_finding_ops"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_ops"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_ops"> | string | null
+    objective?: StringNullableFilter<"audit_finding_ops"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_ops"> | string | null
+    description?: StringNullableFilter<"audit_finding_ops"> | string | null
+    application?: StringNullableFilter<"audit_finding_ops"> | string | null
     risk?: IntNullableFilter<"audit_finding_ops"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_ops"> | string | null
     method?: StringNullableFilter<"audit_finding_ops"> | string | null
@@ -55304,8 +56304,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55328,8 +56333,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_ops"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_ops"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_ops"> | string | null
+    owners?: StringNullableFilter<"audit_finding_ops"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_ops"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_ops"> | string | null
+    objective?: StringNullableFilter<"audit_finding_ops"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_ops"> | string | null
+    description?: StringNullableFilter<"audit_finding_ops"> | string | null
+    application?: StringNullableFilter<"audit_finding_ops"> | string | null
     risk?: IntNullableFilter<"audit_finding_ops"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_ops"> | string | null
     method?: StringNullableFilter<"audit_finding_ops"> | string | null
@@ -55349,8 +56359,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55378,8 +56393,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_ops"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_ops"> | string | null
@@ -55402,8 +56422,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_whs"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_whs"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_whs"> | string | null
+    owners?: StringNullableFilter<"audit_finding_whs"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_whs"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_whs"> | string | null
+    objective?: StringNullableFilter<"audit_finding_whs"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_whs"> | string | null
+    description?: StringNullableFilter<"audit_finding_whs"> | string | null
+    application?: StringNullableFilter<"audit_finding_whs"> | string | null
     risk?: IntNullableFilter<"audit_finding_whs"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_whs"> | string | null
     method?: StringNullableFilter<"audit_finding_whs"> | string | null
@@ -55423,8 +56448,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55447,8 +56477,13 @@ export namespace Prisma {
     risk_id?: StringNullableFilter<"audit_finding_whs"> | string | null
     risk_description?: StringNullableFilter<"audit_finding_whs"> | string | null
     risk_details?: StringNullableFilter<"audit_finding_whs"> | string | null
+    owners?: StringNullableFilter<"audit_finding_whs"> | string | null
     ap_code?: StringNullableFilter<"audit_finding_whs"> | string | null
     substantive_test?: StringNullableFilter<"audit_finding_whs"> | string | null
+    objective?: StringNullableFilter<"audit_finding_whs"> | string | null
+    procedures?: StringNullableFilter<"audit_finding_whs"> | string | null
+    description?: StringNullableFilter<"audit_finding_whs"> | string | null
+    application?: StringNullableFilter<"audit_finding_whs"> | string | null
     risk?: IntNullableFilter<"audit_finding_whs"> | number | null
     check_yn?: StringNullableFilter<"audit_finding_whs"> | string | null
     method?: StringNullableFilter<"audit_finding_whs"> | string | null
@@ -55468,8 +56503,13 @@ export namespace Prisma {
     risk_id?: SortOrderInput | SortOrder
     risk_description?: SortOrderInput | SortOrder
     risk_details?: SortOrderInput | SortOrder
+    owners?: SortOrderInput | SortOrder
     ap_code?: SortOrderInput | SortOrder
     substantive_test?: SortOrderInput | SortOrder
+    objective?: SortOrderInput | SortOrder
+    procedures?: SortOrderInput | SortOrder
+    description?: SortOrderInput | SortOrder
+    application?: SortOrderInput | SortOrder
     risk?: SortOrderInput | SortOrder
     check_yn?: SortOrderInput | SortOrder
     method?: SortOrderInput | SortOrder
@@ -55497,8 +56537,13 @@ export namespace Prisma {
     risk_id?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
     risk_description?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
     risk_details?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
+    owners?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
     ap_code?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
     substantive_test?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
+    objective?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
+    procedures?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
+    description?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
+    application?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
     risk?: IntNullableWithAggregatesFilter<"audit_finding_whs"> | number | null
     check_yn?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
     method?: StringNullableWithAggregatesFilter<"audit_finding_whs"> | string | null
@@ -58402,8 +59447,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58423,8 +59473,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58443,8 +59498,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58464,8 +59524,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58485,8 +59550,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58505,8 +59575,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58526,8 +59601,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58546,8 +59626,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58567,8 +59652,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58587,8 +59677,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58608,8 +59703,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58629,8 +59729,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58649,8 +59754,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58670,8 +59780,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58690,8 +59805,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58711,8 +59831,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58731,8 +59856,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58752,8 +59882,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58773,8 +59908,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58793,8 +59933,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58814,8 +59959,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58834,8 +59984,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58855,8 +60010,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58875,8 +60035,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58896,8 +60061,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58917,8 +60087,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58937,8 +60112,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58958,8 +60138,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58978,8 +60163,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -58999,8 +60189,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59019,8 +60214,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59040,8 +60240,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59061,8 +60266,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59081,8 +60291,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59102,8 +60317,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59122,8 +60342,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59143,8 +60368,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59163,8 +60393,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59184,8 +60419,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59205,8 +60445,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59225,8 +60470,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59246,8 +60496,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59266,8 +60521,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59287,8 +60547,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59307,8 +60572,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59328,8 +60598,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59349,8 +60624,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59369,8 +60649,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59390,8 +60675,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59410,8 +60700,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59431,8 +60726,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59451,8 +60751,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59472,8 +60777,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59493,8 +60803,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59513,8 +60828,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59534,8 +60854,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59554,8 +60879,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59575,8 +60905,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59595,8 +60930,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59616,8 +60956,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59637,8 +60982,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59657,8 +61007,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59678,8 +61033,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59698,8 +61058,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59719,8 +61084,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59739,8 +61109,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59760,8 +61135,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59781,8 +61161,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59801,8 +61186,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59822,8 +61212,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59842,8 +61237,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59863,8 +61263,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59883,8 +61288,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59904,8 +61314,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59925,8 +61340,13 @@ export namespace Prisma {
     risk_id?: string | null
     risk_description?: string | null
     risk_details?: string | null
+    owners?: string | null
     ap_code?: string | null
     substantive_test?: string | null
+    objective?: string | null
+    procedures?: string | null
+    description?: string | null
+    application?: string | null
     risk?: number | null
     check_yn?: string | null
     method?: string | null
@@ -59945,8 +61365,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -59966,8 +61391,13 @@ export namespace Prisma {
     risk_id?: NullableStringFieldUpdateOperationsInput | string | null
     risk_description?: NullableStringFieldUpdateOperationsInput | string | null
     risk_details?: NullableStringFieldUpdateOperationsInput | string | null
+    owners?: NullableStringFieldUpdateOperationsInput | string | null
     ap_code?: NullableStringFieldUpdateOperationsInput | string | null
     substantive_test?: NullableStringFieldUpdateOperationsInput | string | null
+    objective?: NullableStringFieldUpdateOperationsInput | string | null
+    procedures?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    application?: NullableStringFieldUpdateOperationsInput | string | null
     risk?: NullableIntFieldUpdateOperationsInput | number | null
     check_yn?: NullableStringFieldUpdateOperationsInput | string | null
     method?: NullableStringFieldUpdateOperationsInput | string | null
@@ -61979,8 +63409,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62005,8 +63440,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62026,8 +63466,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62052,8 +63497,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62078,8 +63528,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62099,8 +63554,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62125,8 +63585,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62151,8 +63616,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62172,8 +63642,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62198,8 +63673,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62224,8 +63704,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62245,8 +63730,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62271,8 +63761,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62297,8 +63792,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62318,8 +63818,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62344,8 +63849,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62370,8 +63880,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62391,8 +63906,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62417,8 +63937,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62443,8 +63968,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62464,8 +63994,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62490,8 +64025,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62516,8 +64056,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62537,8 +64082,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62563,8 +64113,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62589,8 +64144,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62610,8 +64170,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62636,8 +64201,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62662,8 +64232,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62683,8 +64258,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62709,8 +64289,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62735,8 +64320,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder
@@ -62756,8 +64346,13 @@ export namespace Prisma {
     risk_id?: SortOrder
     risk_description?: SortOrder
     risk_details?: SortOrder
+    owners?: SortOrder
     ap_code?: SortOrder
     substantive_test?: SortOrder
+    objective?: SortOrder
+    procedures?: SortOrder
+    description?: SortOrder
+    application?: SortOrder
     risk?: SortOrder
     check_yn?: SortOrder
     method?: SortOrder

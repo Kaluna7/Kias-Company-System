@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
+import { PrismaClient, Prisma } from "@/generated/prisma";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 
 const prisma = globalThis.prisma || new PrismaClient();
@@ -65,6 +65,16 @@ function getDelegate(dept) {
   return prisma[model];
 }
 
+function supportsFindingSnapshotFields(dept) {
+  const modelName = deptToModel[dept];
+  const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
+  if (!model) return false;
+  const fieldNames = new Set(model.fields.map((field) => field.name));
+  return ["objective", "procedures", "description", "application", "owners"].every((field) =>
+    fieldNames.has(field)
+  );
+}
+
 // Helper to get audit-program parent model
 function getAuditProgramParent(dept) {
   const mapping = {
@@ -125,6 +135,57 @@ function getApRiskIdField(dept) {
     whs: "warehouse_risk_id",
   };
   return mapping[dept] || null;
+}
+
+async function buildAuditProgramSnapshotMap(dept, apCodes = []) {
+  const mapping = deptToAuditProgram[dept];
+  const apModel = mapping ? getAuditProgramAp(dept) : null;
+  if (!mapping || !apModel || !Array.isArray(apCodes) || apCodes.length === 0) {
+    return new Map();
+  }
+
+  const normalizedCodes = Array.from(
+    new Set(
+      apCodes
+        .map((code) => (code != null ? String(code).trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (normalizedCodes.length === 0) return new Map();
+
+  const aps = await apModel.findMany({
+    where: { ap_code: { in: normalizedCodes } },
+    include: {
+      [mapping.relation]: true,
+    },
+  });
+
+  return new Map(
+    aps.map((ap) => {
+      const parent = ap?.[mapping.relation] ?? null;
+      return [
+        String(ap.ap_code).trim(),
+        {
+          risk_id:
+            parent?.risk_id_no != null && String(parent.risk_id_no).trim() !== ""
+              ? String(parent.risk_id_no).trim()
+              : parent?.risk_id != null
+                ? String(parent.risk_id)
+                : null,
+          risk_description: parent?.risk_description ?? null,
+          risk_details: parent?.risk_details ?? null,
+          substantive_test: ap?.substantive_test ?? null,
+          objective: ap?.objective ?? null,
+          procedures: ap?.procedures ?? null,
+          description: ap?.description ?? null,
+          application: ap?.application ?? null,
+          method: ap?.method ?? null,
+          owners: parent?.owners ?? null,
+        },
+      ];
+    })
+  );
 }
 
 // Map audit-finding dept slug to Evidence department name (uppercase)
@@ -214,18 +275,39 @@ export async function PUT(req, { params }) {
       }, { status: 200 });
     }
 
-    // Update findings: set completion_status to COMPLETED dan updated_at supaya muncul di report
-    const updated = await delegate.updateMany({
-      where: {
-        id: {
-          in: readyFindings.map((f) => f.id),
-        },
-      },
-      data: {
+    const snapshotMap = await buildAuditProgramSnapshotMap(dept, Array.from(readyApCodes));
+    const publishTimestamp = new Date();
+    const canPersistSnapshot = supportsFindingSnapshotFields(dept);
+
+    // Update findings: set completion_status to COMPLETED dan simpan snapshot
+    // dari audit-program / risk-assessment sebelum source dihapus.
+    for (const finding of readyFindings) {
+      const snapshot = snapshotMap.get(String(finding.ap_code ?? "").trim()) || null;
+
+      const updateData = {
+        risk_id: finding.risk_id ?? snapshot?.risk_id ?? undefined,
+        risk_description: finding.risk_description ?? snapshot?.risk_description ?? undefined,
+        risk_details: finding.risk_details ?? snapshot?.risk_details ?? undefined,
+        substantive_test: finding.substantive_test ?? snapshot?.substantive_test ?? undefined,
+        method: finding.method ?? snapshot?.method ?? undefined,
         completion_status: "COMPLETED",
-        updated_at: new Date(),
-      },
-    });
+        completion_date: finding.completion_date ?? publishTimestamp,
+        updated_at: publishTimestamp,
+      };
+
+      if (canPersistSnapshot) {
+        updateData.objective = snapshot?.objective ?? undefined;
+        updateData.procedures = snapshot?.procedures ?? undefined;
+        updateData.description = snapshot?.description ?? undefined;
+        updateData.application = snapshot?.application ?? undefined;
+        updateData.owners = snapshot?.owners ?? undefined;
+      }
+
+      await delegate.update({
+        where: { id: finding.id },
+        data: updateData,
+      });
+    }
 
     // Tambahkan baris COMPLETED baru untuk AP code yang punya Evidence publish,
     // tetapi belum pernah disimpan sebagai finding (tidak ada di readyFindings).
@@ -244,38 +326,37 @@ export async function PUT(req, { params }) {
     if (missingApCodes.length > 0 && apModel && parentModel && riskIdField) {
       for (const apCode of missingApCodes) {
         try {
-          const ap = await apModel.findFirst({
-            where: { ap_code: apCode },
-            include: {
-              [apMapping.relation]: true,
-            },
-          });
+          const snapshot = snapshotMap.get(String(apCode).trim()) || null;
 
-          const parent = ap ? ap[apMapping.relation] : null;
+          const createData = {
+            risk_id: snapshot?.risk_id ?? null,
+            risk_description: snapshot?.risk_description ?? null,
+            risk_details: snapshot?.risk_details ?? null,
+            ap_code: apCode,
+            substantive_test: snapshot?.substantive_test ?? null,
+            risk: null,
+            check_yn: null,
+            method: snapshot?.method ?? null,
+            preparer: null,
+            finding_result: null,
+            finding_description: null,
+            recommendation: null,
+            auditee: null,
+            completion_status: "COMPLETED",
+            completion_date: publishTimestamp,
+            updated_at: publishTimestamp,
+          };
+
+          if (canPersistSnapshot) {
+            createData.objective = snapshot?.objective ?? null;
+            createData.procedures = snapshot?.procedures ?? null;
+            createData.description = snapshot?.description ?? null;
+            createData.application = snapshot?.application ?? null;
+            createData.owners = snapshot?.owners ?? null;
+          }
 
           await delegate.create({
-            data: {
-              risk_id:
-                (parent?.risk_id_no != null && String(parent.risk_id_no).trim() !== "")
-                  ? String(parent.risk_id_no).trim()
-                  : parent?.risk_id != null
-                    ? String(parent.risk_id)
-                    : null,
-              risk_description: parent?.risk_description ?? null,
-              risk_details: parent?.risk_details ?? null,
-              ap_code: apCode,
-              substantive_test: ap?.substantive_test ?? null,
-              risk: null,
-              check_yn: null,
-              method: ap?.method ?? null,
-              preparer: null,
-              finding_result: null,
-              finding_description: null,
-              recommendation: null,
-              auditee: null,
-              completion_status: "COMPLETED",
-              completion_date: new Date(),
-            },
+            data: createData,
           });
         } catch (createErr) {
           console.error(`Failed to create COMPLETED finding for ${dept} ap_code=${apCode}:`, createErr);
@@ -430,8 +511,8 @@ export async function PUT(req, { params }) {
     return NextResponse.json(
       {
         success: true,
-        message: `Published ${updated.count} finding(s) for ${dept} based on Evidence.`,
-        count: updated.count,
+        message: `Published ${readyFindings.length} finding(s) for ${dept} based on Evidence.`,
+        count: readyFindings.length,
       },
       { status: 200 },
     );

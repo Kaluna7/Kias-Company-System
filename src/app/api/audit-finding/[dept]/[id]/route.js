@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
+import { PrismaClient, Prisma } from "@/generated/prisma";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -40,6 +40,16 @@ function getDelegate(dept) {
   return prisma[model];
 }
 
+function supportsFindingSnapshotFields(dept) {
+  const modelName = deptToModel[dept];
+  const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
+  if (!model) return false;
+  const fieldNames = new Set(model.fields.map((field) => field.name));
+  return ["objective", "procedures", "description", "application", "owners"].every((field) =>
+    fieldNames.has(field)
+  );
+}
+
 export async function GET(req, { params }) {
   try {
     const p = await Promise.resolve(params);
@@ -72,26 +82,36 @@ export async function PUT(req, { params }) {
 
     const body = await req.json();
 
+    const updateData = {
+      risk_id: body.riskId !== undefined ? truncateString(body.riskId, 50) : undefined,
+      risk_description: body.riskDescription ?? undefined,
+      risk_details: body.riskDetails ?? undefined,
+      ap_code: body.apCode !== undefined ? truncateString(body.apCode, 50) : undefined,
+      substantive_test: body.substantiveTest ?? undefined,
+      risk: body.risk !== undefined ? toIntOrNull(body.risk) : undefined,
+      check_yn: body.checkYN !== undefined ? truncateString(body.checkYN, 10) : undefined,
+      method: body.method !== undefined ? truncateString(body.method, 100) : undefined,
+      preparer: body.preparer !== undefined ? truncateString(body.preparer, 255) : undefined,
+      finding_result: body.findingResult !== undefined ? truncateString(body.findingResult, 100) : undefined,
+      finding_description: body.findingDescription ?? undefined,
+      recommendation: body.recommendation ?? undefined,
+      auditee: body.auditee !== undefined ? truncateString(body.auditee, 255) : undefined,
+      completion_status: body.completionStatus !== undefined ? truncateString(body.completionStatus, 50) : undefined,
+      completion_date: body.completionDate ? new Date(body.completionDate) : undefined,
+      updated_at: new Date(),
+    };
+
+    if (supportsFindingSnapshotFields(dept)) {
+      updateData.objective = body.objective ?? undefined;
+      updateData.procedures = body.procedures ?? undefined;
+      updateData.description = body.description ?? undefined;
+      updateData.application = body.application ?? undefined;
+      updateData.owners = body.owners !== undefined ? truncateString(body.owners, 35) : undefined;
+    }
+
     const updated = await delegate.update({
       where: { id },
-      data: {
-        risk_id: body.riskId !== undefined ? truncateString(body.riskId, 50) : undefined,
-        risk_description: body.riskDescription ?? undefined,
-        risk_details: body.riskDetails ?? undefined,
-        ap_code: body.apCode !== undefined ? truncateString(body.apCode, 50) : undefined,
-        substantive_test: body.substantiveTest ?? undefined,
-        risk: body.risk !== undefined ? toIntOrNull(body.risk) : undefined,
-        check_yn: body.checkYN !== undefined ? truncateString(body.checkYN, 10) : undefined,
-        method: body.method !== undefined ? truncateString(body.method, 100) : undefined,
-        preparer: body.preparer !== undefined ? truncateString(body.preparer, 255) : undefined,
-        finding_result: body.findingResult !== undefined ? truncateString(body.findingResult, 100) : undefined,
-        finding_description: body.findingDescription ?? undefined,
-        recommendation: body.recommendation ?? undefined,
-        auditee: body.auditee !== undefined ? truncateString(body.auditee, 255) : undefined,
-        completion_status: body.completionStatus !== undefined ? truncateString(body.completionStatus, 50) : undefined,
-        completion_date: body.completionDate ? new Date(body.completionDate) : undefined,
-        updated_at: new Date(),
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ data: updated }, { status: 200 });

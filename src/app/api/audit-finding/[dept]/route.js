@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
+import { PrismaClient, Prisma } from "@/generated/prisma";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -120,6 +120,16 @@ function getDelegate(dept) {
   return prisma[model];
 }
 
+function supportsFindingSnapshotFields(dept) {
+  const modelName = deptToModel[dept];
+  const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
+  if (!model) return false;
+  const fieldNames = new Set(model.fields.map((field) => field.name));
+  return ["objective", "procedures", "description", "application", "owners"].every((field) =>
+    fieldNames.has(field)
+  );
+}
+
 // Helper to get audit-program parent model
 function getAuditProgramParent(dept) {
   const mapping = {
@@ -160,6 +170,47 @@ function getAuditProgramAp(dept) {
   };
   const getter = mapping[dept];
   return getter ? getter() : null;
+}
+
+async function buildAuditProgramSnapshotMap(dept, apCodes = []) {
+  const mapping = deptToAuditProgram[dept];
+  const apModel = mapping ? getAuditProgramAp(dept) : null;
+  if (!mapping || !apModel || !Array.isArray(apCodes) || apCodes.length === 0) {
+    return new Map();
+  }
+
+  const normalizedCodes = Array.from(
+    new Set(
+      apCodes
+        .map((code) => (code != null ? String(code).trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (normalizedCodes.length === 0) return new Map();
+
+  const aps = await apModel.findMany({
+    where: { ap_code: { in: normalizedCodes } },
+    include: {
+      [mapping.relation]: true,
+    },
+  });
+
+  return new Map(
+    aps.map((ap) => {
+      const parent = ap?.[mapping.relation] ?? null;
+      return [
+        String(ap.ap_code).trim(),
+        {
+          objective: ap.objective ?? null,
+          procedures: ap.procedures ?? null,
+          description: ap.description ?? null,
+          application: ap.application ?? null,
+          owners: parent?.owners ?? null,
+        },
+      ];
+    })
+  );
 }
 
 export async function GET(req, { params }) {
@@ -248,7 +299,31 @@ export async function GET(req, { params }) {
         }),
         delegate.count({ where: whereFinding }),
       ]);
-      return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
+
+      // For completed rows, prefer snapshot fields stored on finding.
+      // If an older row does not have the snapshot yet and the source AP still exists,
+      // enrich the response from audit-program/risk-assessment as a best-effort fallback.
+      const snapshotMap =
+        includeCompleted && apMapping
+          ? await buildAuditProgramSnapshotMap(
+              dept,
+              findings.map((finding) => finding.ap_code)
+            )
+          : new Map();
+
+      const enrichedFindings = findings.map((finding) => {
+        const snapshot = snapshotMap.get(String(finding.ap_code ?? "").trim()) || null;
+        return {
+          ...finding,
+          objective: finding.objective ?? snapshot?.objective ?? null,
+          procedures: finding.procedures ?? snapshot?.procedures ?? null,
+          description: finding.description ?? snapshot?.description ?? null,
+          application: finding.application ?? snapshot?.application ?? null,
+          owners: finding.owners ?? snapshot?.owners ?? null,
+        };
+      });
+
+      return NextResponse.json({ data: enrichedFindings, meta: { total, page, pageSize } }, { status: 200 });
     }
 
     const apModel = getAuditProgramAp(dept);
@@ -371,11 +446,11 @@ export async function GET(req, { params }) {
                 completion_date: finding?.completion_date ?? null,
                 created_at: finding?.created_at ?? null,
                 updated_at: finding?.updated_at ?? null,
-                objective: ap.objective ?? null,
-                procedures: ap.procedures ?? null,
-                description: ap.description ?? null,
-                application: ap.application ?? null,
-                owners: p.owners ?? null,
+                objective: finding?.objective ?? ap.objective ?? null,
+                procedures: finding?.procedures ?? ap.procedures ?? null,
+                description: finding?.description ?? ap.description ?? null,
+                application: finding?.application ?? ap.application ?? null,
+                owners: finding?.owners ?? p.owners ?? null,
               };
             })
             .filter(Boolean)
@@ -427,24 +502,34 @@ export async function POST(req, { params }) {
     if (!delegate) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
 
     const body = await req.json();
+    const createData = {
+      risk_id: truncateString(body.riskId, 50),
+      risk_description: body.riskDescription ?? null,
+      risk_details: body.riskDetails ?? null,
+      ap_code: truncateString(body.apCode, 50),
+      substantive_test: body.substantiveTest ?? null,
+      risk: toIntOrNull(body.risk),
+      check_yn: truncateString(body.checkYN, 10),
+      method: truncateString(body.method, 100),
+      preparer: truncateString(body.preparer, 255),
+      finding_result: truncateString(body.findingResult, 100),
+      finding_description: body.findingDescription ?? null,
+      recommendation: body.recommendation ?? null,
+      auditee: truncateString(body.auditee, 255),
+      completion_status: truncateString(body.completionStatus, 50),
+      completion_date: body.completionDate ? new Date(body.completionDate) : null,
+    };
+
+    if (supportsFindingSnapshotFields(dept)) {
+      createData.objective = body.objective ?? null;
+      createData.procedures = body.procedures ?? null;
+      createData.description = body.description ?? null;
+      createData.application = body.application ?? null;
+      createData.owners = truncateString(body.owners, 35);
+    }
+
     const created = await delegate.create({
-      data: {
-        risk_id: truncateString(body.riskId, 50),
-        risk_description: body.riskDescription ?? null,
-        risk_details: body.riskDetails ?? null,
-        ap_code: truncateString(body.apCode, 50),
-        substantive_test: body.substantiveTest ?? null,
-        risk: toIntOrNull(body.risk),
-        check_yn: truncateString(body.checkYN, 10),
-        method: truncateString(body.method, 100),
-        preparer: truncateString(body.preparer, 255),
-        finding_result: truncateString(body.findingResult, 100),
-        finding_description: body.findingDescription ?? null,
-        recommendation: body.recommendation ?? null,
-        auditee: truncateString(body.auditee, 255),
-        completion_status: truncateString(body.completionStatus, 50),
-        completion_date: body.completionDate ? new Date(body.completionDate) : null,
-      },
+      data: createData,
     });
 
     return NextResponse.json({ data: created }, { status: 201 });

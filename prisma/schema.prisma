@@ -450,8 +450,13 @@ model audit_finding_accounting {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -474,8 +479,13 @@ model audit_finding_finance {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -497,8 +507,13 @@ model audit_finding_hrd {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -520,8 +535,13 @@ model audit_finding_ga {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -543,8 +563,13 @@ model audit_finding_sdp {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -566,8 +591,13 @@ model audit_finding_tax {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -589,8 +619,13 @@ model audit_finding_lp {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -612,8 +647,13 @@ model audit_finding_mis {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -635,8 +675,13 @@ model audit_finding_merch {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -658,8 +703,13 @@ model audit_finding_ops {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
@@ -681,8 +731,13 @@ model audit_finding_whs {
   risk_id             String?   @db.VarChar(50)
   risk_description    String?
   risk_details        String?
+  owners              String?   @db.VarChar(35)
   ap_code             String?   @db.VarChar(50)
   substantive_test    String?
+  objective           String?
+  procedures          String?
+  description         String?
+  application         String?
   risk                Int?
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
