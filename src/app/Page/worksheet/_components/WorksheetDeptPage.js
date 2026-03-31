@@ -244,7 +244,8 @@ export default function WorksheetDeptPage({
         const f = pickLatestRowFields(latest);
         if (!f) return;
         setStatusWP(f.statusWP);
-        setFilePath(f.filePath);
+        // Upload syncs file_path to DB; preload so reload and other roles see the same file.
+        setFilePath(f.filePath ? String(f.filePath) : "");
         setReviewer(f.reviewer);
         setReviewerDate(f.reviewerDate);
       } catch (_) {
@@ -368,8 +369,9 @@ export default function WorksheetDeptPage({
 
       const data = await response.json();
       if (data.success) {
-        showNotification("success", "Data has been saved successfully.");
+        showNotification("success", "Data has been saved. It appears in Report; the form is cleared for the next entry.");
         setAuditAreaModalOpen(false);
+        setFilePath("");
         await fetchPreparerFromSchedule();
         if (canEditReviewerFields) {
           setReviewer("");
