@@ -336,8 +336,14 @@ export async function GET(req, { params }) {
       return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
     }
 
-    // Always use audit program (published) as source of truth — same as evidence. Load all findings (unpublished) to merge.
-    const parentWhere = { status: "published" };
+    // Finding workspace should only read published audit-program data.
+    // Keep `null` as fallback for older rows that may not have status populated.
+    const parentWhere = {
+      OR: [
+        { status: "published" },
+        { status: null },
+      ],
+    };
     // Sama seperti di atas: hanya layar kerja yang dibatasi tahun di parent audit program.
     if (!includeCompleted && hasValidYear) {
       const pFrom = new Date(year, 0, 1);
