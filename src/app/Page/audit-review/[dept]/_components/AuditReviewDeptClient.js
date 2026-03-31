@@ -121,6 +121,49 @@ function normalizeKeyFindingRow(finding, idx) {
   };
 }
 
+function getFindingIdentity(finding) {
+  const riskId = String(finding?.riskId || finding?.risk_id || "").trim();
+  const apNo = String(finding?.apNo || finding?.ap_code || finding?.apCode || "").trim();
+  return `${riskId}::${apNo}`;
+}
+
+function mergeReviewFindings(latestFindings = [], savedReviewFindings = []) {
+  const normalizedLatest = Array.isArray(latestFindings)
+    ? latestFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx))
+    : [];
+  const normalizedSaved = Array.isArray(savedReviewFindings)
+    ? savedReviewFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx))
+    : [];
+
+  if (normalizedSaved.length === 0) return normalizedLatest;
+  if (normalizedLatest.length === 0) return normalizedSaved;
+
+  const savedMap = new Map(normalizedSaved.map((finding) => [getFindingIdentity(finding), finding]));
+  const merged = normalizedLatest.map((finding) => {
+    const saved = savedMap.get(getFindingIdentity(finding));
+    if (!saved) return finding;
+
+    return {
+      ...finding,
+      reviewNote: saved.reviewNote ?? "",
+      reviewStatus: normalizeReviewStatus(saved.reviewStatus),
+      preparerRespo: saved.preparerRespo ?? "",
+      referenceLink: saved.referenceLink ?? "",
+      followUpDueDate: saved.followUpDueDate ?? "",
+      timeline: saved.timeline ?? "",
+      followUpStatus: normalizeFollowUpStatus(saved.followUpStatus),
+    };
+  });
+
+  const latestKeys = new Set(normalizedLatest.map((finding) => getFindingIdentity(finding)));
+  const savedOnlyRows = normalizedSaved.filter((finding) => !latestKeys.has(getFindingIdentity(finding)));
+
+  return [...merged, ...savedOnlyRows].map((finding, idx) => ({
+    ...finding,
+    no: idx + 1,
+  }));
+}
+
 export default function AuditReviewDeptClient({
   apiPath,
   deptName,
@@ -260,10 +303,11 @@ export default function AuditReviewDeptClient({
     }
   }, [apiPath, initialExecutiveSummary, selectedYear]);
 
-  // Initialize findings from saved audit-review data first, fallback to audit-finding report.
+  // Initialize findings by merging the latest audit-finding rows with any saved
+  // audit-review fields so older saved review data does not hide newer findings.
   useEffect(() => {
     if (Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0) {
-      setKeyFindings(initialReviewedFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+      setKeyFindings(mergeReviewFindings(initialFindings, initialReviewedFindings));
       setHasSavedReviewFindings(true);
       return;
     }
