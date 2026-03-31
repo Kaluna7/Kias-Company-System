@@ -1,8 +1,18 @@
 // src/app/api/auth/[...nextauth]/route.js
 export const runtime = "nodejs";
 
-import NextAuth from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
+import * as NextAuthModule from "next-auth";
+import * as CredentialsProviderModule from "next-auth/providers/credentials";
+
+const NextAuth =
+  NextAuthModule?.default?.default ||
+  NextAuthModule?.default ||
+  NextAuthModule;
+
+const CredentialsProvider =
+  CredentialsProviderModule?.default?.default ||
+  CredentialsProviderModule?.default ||
+  CredentialsProviderModule;
 
 /**
  * Pool and bcrypt are lazy-loaded only in authorize() so GET /api/auth/session

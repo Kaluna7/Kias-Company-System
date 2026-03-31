@@ -36,9 +36,13 @@ function getTableName(dept) {
 
 export async function GET(req, { params }) {
   try {
-    const p = await Promise.resolve(params);
+    const p = await params;
     const dept = p?.dept;
     const tableName = getTableName(dept);
+    const url = new URL(req.url);
+    const yearParam = url.searchParams.get("year");
+    const year = yearParam ? parseInt(yearParam, 10) : null;
+    const hasValidYear = Number.isInteger(year);
     
     if (!tableName) {
       return NextResponse.json({ success: false, error: "Invalid department" }, { status: 400 });
@@ -59,10 +63,17 @@ export async function GET(req, { params }) {
         return NextResponse.json({ success: true, data: null }, { status: 200 });
       }
 
-      // Get the latest executive summary
-      const result = await client.query(`
-        SELECT * FROM ${tableName} ORDER BY id DESC LIMIT 1
+      await client.query(`
+        ALTER TABLE ${tableName}
+        ADD COLUMN IF NOT EXISTS audit_year INTEGER
       `);
+
+      const result = hasValidYear
+        ? await client.query(
+            `SELECT * FROM ${tableName} WHERE audit_year = $1 ORDER BY id DESC LIMIT 1`,
+            [year],
+          )
+        : await client.query(`SELECT * FROM ${tableName} ORDER BY id DESC LIMIT 1`);
 
       return NextResponse.json({ 
         success: true, 
@@ -85,7 +96,7 @@ export async function GET(req, { params }) {
 
 export async function POST(req, { params }) {
   try {
-    const p = await Promise.resolve(params);
+    const p = await params;
     const dept = p?.dept;
     const tableName = getTableName(dept);
     
@@ -94,6 +105,10 @@ export async function POST(req, { params }) {
     }
 
     const body = await req.json();
+    const auditYearRaw = body?.auditYear;
+    const auditYear = Number.isFinite(Number(auditYearRaw))
+      ? parseInt(String(auditYearRaw), 10)
+      : new Date().getFullYear();
     const client = await pool.connect();
     
     try {
@@ -101,6 +116,7 @@ export async function POST(req, { params }) {
       await client.query(`
         CREATE TABLE IF NOT EXISTS ${tableName} (
           id SERIAL PRIMARY KEY,
+          audit_year INTEGER,
           objective_of_audit TEXT,
           scope_areas_covered TEXT,
           scope_methodology TEXT,
@@ -119,27 +135,39 @@ export async function POST(req, { params }) {
         ALTER TABLE ${tableName}
         ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE
       `);
+      await client.query(`
+        ALTER TABLE ${tableName}
+        ADD COLUMN IF NOT EXISTS audit_year INTEGER
+      `);
+      await client.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS ${tableName}_audit_year_unique ON ${tableName}(audit_year)`
+      );
 
-      // Check if record exists
-      const existing = await client.query(`SELECT id FROM ${tableName} ORDER BY id DESC LIMIT 1`);
+      // Check if record exists for this audit year
+      const existing = await client.query(
+        `SELECT id FROM ${tableName} WHERE audit_year = $1 ORDER BY id DESC LIMIT 1`,
+        [auditYear],
+      );
       
       if (existing.rows.length > 0) {
         // Update existing record
         await client.query(`
           UPDATE ${tableName} SET
-            objective_of_audit = $1,
-            scope_areas_covered = $2,
-            scope_methodology = $3,
-            scope_timeframe_audit_period = $4,
-            scope_timeframe_fieldwork_dates = $5,
-            limitations_scope = $6,
-            limitations_time = $7,
-            limitations_resource = $8,
-            internal_audit_team = $9,
-            is_locked = $10,
+            audit_year = $1,
+            objective_of_audit = $2,
+            scope_areas_covered = $3,
+            scope_methodology = $4,
+            scope_timeframe_audit_period = $5,
+            scope_timeframe_fieldwork_dates = $6,
+            limitations_scope = $7,
+            limitations_time = $8,
+            limitations_resource = $9,
+            internal_audit_team = $10,
+            is_locked = $11,
             updated_at = NOW()
-          WHERE id = $11
+          WHERE id = $12
         `, [
+          auditYear,
           body.objectiveOfAudit || null,
           body.scopeAreasCovered || null,
           body.scopeMethodology || null,
@@ -159,6 +187,7 @@ export async function POST(req, { params }) {
         // Create new record
         const result = await client.query(`
           INSERT INTO ${tableName} (
+            audit_year,
             objective_of_audit,
             scope_areas_covered,
             scope_methodology,
@@ -169,9 +198,10 @@ export async function POST(req, { params }) {
             limitations_resource,
             internal_audit_team,
             is_locked
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           RETURNING *
         `, [
+          auditYear,
           body.objectiveOfAudit || null,
           body.scopeAreasCovered || null,
           body.scopeMethodology || null,

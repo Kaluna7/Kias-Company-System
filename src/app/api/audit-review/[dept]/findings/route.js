@@ -48,7 +48,7 @@ function parseRows(value) {
 
 export async function GET(req, { params }) {
   try {
-    const p = await Promise.resolve(params);
+    const p = await params;
     const dept = p?.dept;
     const tableName = getTableName(dept);
 
@@ -114,7 +114,7 @@ export async function GET(req, { params }) {
 
 export async function POST(req, { params }) {
   try {
-    const p = await Promise.resolve(params);
+    const p = await params;
     const dept = p?.dept;
     const tableName = getTableName(dept);
 

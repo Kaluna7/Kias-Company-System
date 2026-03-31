@@ -1,9 +1,14 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 
-export default function AuditReviewTemplatePage() {
+function AuditReviewTemplatePageContent() {
+  const searchParams = useSearchParams();
+  const yearParam = searchParams.get("year");
+  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
   const objectives = [
     { number: 1, title: "Risk Management", description: "Identify and assess risks." },
     { number: 2, title: "Control Evaluation", description: "Assess internal controls' effectiveness." },
@@ -97,7 +102,7 @@ export default function AuditReviewTemplatePage() {
 
         <div className="flex justify-end mb-4">
           <Link
-            href="/Page/audit-review/"
+            href={`/Page/audit-review${yearQuery}`}
             className="bg-white rounded-xl shadow px-4 py-2 border border-gray-200 hover:shadow-md transition text-sm font-semibold text-gray-800 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -360,5 +365,13 @@ export default function AuditReviewTemplatePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AuditReviewTemplatePage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading...</div>}>
+      <AuditReviewTemplatePageContent />
+    </Suspense>
   );
 }

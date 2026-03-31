@@ -455,7 +455,7 @@ model audit_finding_accounting {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -479,7 +479,7 @@ model audit_finding_finance {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -502,7 +502,7 @@ model audit_finding_hrd {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -525,7 +525,7 @@ model audit_finding_ga {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -548,7 +548,7 @@ model audit_finding_sdp {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -571,7 +571,7 @@ model audit_finding_tax {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -594,7 +594,7 @@ model audit_finding_lp {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -617,7 +617,7 @@ model audit_finding_mis {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -640,7 +640,7 @@ model audit_finding_merch {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -663,7 +663,7 @@ model audit_finding_ops {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)
@@ -686,7 +686,7 @@ model audit_finding_whs {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?   @db.VarChar(100)
+  finding_result      String?
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)

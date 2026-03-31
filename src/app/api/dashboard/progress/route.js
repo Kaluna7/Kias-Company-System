@@ -146,6 +146,56 @@ async function loadSopReviewScheduleByDept() {
 }
 
 /**
+ * Load schedule window (start_date, end_date) per department for a given module.
+ * Returns Map(deptKey -> { start_date, end_date }) for rows where is_configured = true.
+ */
+async function loadModuleScheduleByDept(moduleKey) {
+  const byDept = new Map();
+  const check = await schedulePool.query(
+    `SELECT EXISTS (
+       SELECT FROM information_schema.tables
+       WHERE table_schema='public' AND table_name='schedule_module_feedback'
+     ) AS exists`
+  );
+  if (!check?.rows?.[0]?.exists) return byDept;
+
+  const r = await schedulePool.query(
+    `SELECT department_id, start_date, end_date
+     FROM public.schedule_module_feedback
+     WHERE module_key = $1 AND is_configured = true
+     ORDER BY department_id`,
+    [moduleKey]
+  );
+  for (const row of r.rows || []) {
+    const deptKey = DEPT_KEY_BY_SCHEDULE_ID[String(row.department_id || "").trim()];
+    if (!deptKey || !row.start_date || !row.end_date) continue;
+    byDept.set(deptKey, {
+      start_date: row.start_date,
+      end_date: row.end_date,
+    });
+  }
+  return byDept;
+}
+
+function buildWindowFromSchedule(schedule, year) {
+  if (!schedule?.start_date || !schedule?.end_date) return null;
+
+  let start = schedule.start_date instanceof Date ? schedule.start_date : new Date(schedule.start_date);
+  let end = schedule.end_date instanceof Date ? schedule.end_date : new Date(schedule.end_date);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+
+  if (year) {
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+    if (end < yearStart || start > yearEnd) return null;
+    if (start < yearStart) start = yearStart;
+    if (end > yearEnd) end = yearEnd;
+  }
+
+  return { start, end };
+}
+
+/**
  * SOP Review "Done" = user clicked Publish in that department FOR THE CURRENT SCHEDULE only.
  * We require a publish whose published_at falls within the department's schedule window (start_date..end_date).
  * So: hanya setelah user click Publish di module/department yang dipilih di schedule, baru dianggap Done.
@@ -190,20 +240,28 @@ async function getSopReviewDoneSet(scheduleByDept) {
   }
 }
 
-async function getWorksheetDoneSet() {
-  // "Finish" = has at least 1 saved row with uploaded file
-  const rows = await prisma.worksheet_finance.findMany({
-    where: {
-      file_path: { not: null },
-    },
-    distinct: ["department"],
-    select: { department: true },
-  });
-  const doneDept = new Set((rows || []).map((r) => String(r.department || "").toUpperCase()));
+async function getWorksheetDoneSet(scheduleByDept, year) {
+  // "Finish" = current scheduled worksheet has a file and has been marked Checked.
+  const checks = await Promise.all(
+    DEPARTMENTS.map(async (d) => {
+      const window = buildWindowFromSchedule(scheduleByDept?.get(d.key), year);
+      if (!window) return { key: d.key, done: false };
 
+      const count = await prisma.worksheet_finance.count({
+        where: {
+          department: d.worksheetDept,
+          file_path: { not: null },
+          status_wp: { equals: "Checked", mode: "insensitive" },
+          updated_at: { gte: window.start, lte: window.end },
+        },
+      });
+
+      return { key: d.key, done: count > 0 };
+    })
+  );
   const done = new Set();
-  for (const d of DEPARTMENTS) {
-    if (doneDept.has(String(d.worksheetDept).toUpperCase())) done.add(d.key);
+  for (const row of checks) {
+    if (row.done) done.add(row.key);
   }
   return done;
 }
@@ -222,22 +280,34 @@ const auditFindingModelByDept = {
   whs: "audit_finding_whs",
 };
 
-async function getAuditFindingDoneSet() {
-  // "Done" = has at least 1 finding that has been published.
-  // Data publish finding disimpan sebagai COMPLETED.
+async function getAuditFindingDoneSet(scheduleByDept, year) {
+  // "Done" = current scheduled finding has been published (COMPLETED/COMPLETE) in the active schedule window.
   const counts = await Promise.all(
     DEPARTMENTS.map((d) => {
       const model = auditFindingModelByDept[d.auditFindingDept];
       const delegate = model ? prisma[model] : null;
       if (!delegate) return Promise.resolve({ key: d.key, count: 0 });
+
+      const window = buildWindowFromSchedule(scheduleByDept?.get(d.key), year);
+      if (!window) return Promise.resolve({ key: d.key, count: 0 });
+
+      const where = {
+        completion_status: {
+          in: ["COMPLETED", "COMPLETE"],
+          mode: "insensitive",
+        },
+        AND: [
+          {
+            OR: [
+              { completion_date: { gte: window.start, lte: window.end } },
+              { updated_at: { gte: window.start, lte: window.end } },
+            ],
+          },
+        ],
+      };
       return delegate
         .count({
-          where: {
-            completion_status: {
-              in: ["COMPLETED", "COMPLETE"],
-              mode: "insensitive",
-            },
-          },
+          where,
         })
         .then((count) => ({ key: d.key, count }));
     })
@@ -249,29 +319,28 @@ async function getAuditFindingDoneSet() {
   return done;
 }
 
-async function getEvidenceDoneSet(year) {
-  // "Done" = has at least 1 evidence row with file AND overall_status = COMPLETE (published)
-  const where = {
-    file_url: { not: null },
-    overall_status: { equals: "COMPLETE", mode: "insensitive" },
-  };
-  if (year) {
-    const from = new Date(year, 0, 1);
-    const to = new Date(year + 1, 0, 1);
-    // Gunakan updated_at sebagai tahun publish (bukan created_at),
-    // supaya progress mengikuti tahun ketika evidence dipublish.
-    where.updated_at = { gte: from, lt: to };
-  }
-  const rows = await prisma.evidence.findMany({
-    where,
-    distinct: ["department"],
-    select: { department: true },
-  });
-  const doneDept = new Set((rows || []).map((r) => String(r.department || "").toUpperCase()));
+async function getEvidenceDoneSet(scheduleByDept, year) {
+  // "Done" = current scheduled evidence has been published (COMPLETE + file) in the active schedule window.
+  const checks = await Promise.all(
+    DEPARTMENTS.map(async (d) => {
+      const window = buildWindowFromSchedule(scheduleByDept?.get(d.key), year);
+      if (!window) return { key: d.key, done: false };
 
+      const count = await prisma.evidence.count({
+        where: {
+          department: d.evidenceDept,
+          file_url: { not: null },
+          overall_status: { equals: "COMPLETE", mode: "insensitive" },
+          updated_at: { gte: window.start, lte: window.end },
+        },
+      });
+
+      return { key: d.key, done: count > 0 };
+    })
+  );
   const done = new Set();
-  for (const d of DEPARTMENTS) {
-    if (doneDept.has(String(d.evidenceDept).toUpperCase())) done.add(d.key);
+  for (const row of checks) {
+    if (row.done) done.add(row.key);
   }
   return done;
 }
@@ -456,16 +525,21 @@ export async function GET(req) {
     const yearParam = url.searchParams.get("year");
     const year = yearParam ? parseInt(yearParam, 10) : null;
 
-    const [assignments, archive, configuredByModule, sopScheduleByDept, worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
+    const [assignments, archive, configuredByModule, sopScheduleByDept, worksheetScheduleByDept, auditFindingScheduleByDept, evidenceScheduleByDept] = await Promise.all([
       loadAssignmentsByUser(userName || null),
       loadArchive(),
       loadConfiguredModules(),
       loadSopReviewScheduleByDept(),
-      getWorksheetDoneSet(),
-      getAuditFindingDoneSet(),
-      getEvidenceDoneSet(year),
+      loadModuleScheduleByDept("worksheet"),
+      loadModuleScheduleByDept("audit-finding"),
+      loadModuleScheduleByDept("evidence"),
     ]);
     const sopDone = await getSopReviewDoneSet(sopScheduleByDept);
+    const [worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
+      getWorksheetDoneSet(worksheetScheduleByDept, year),
+      getAuditFindingDoneSet(auditFindingScheduleByDept, year),
+      getEvidenceDoneSet(evidenceScheduleByDept, year),
+    ]);
 
     const sopAllowed = buildAllowedForModule({ moduleKey: "sop-review", ...assignments, configuredByModule });
     const wsAllowed = buildAllowedForModule({ moduleKey: "worksheet", ...assignments, configuredByModule });

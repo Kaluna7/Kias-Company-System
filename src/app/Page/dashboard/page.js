@@ -70,6 +70,14 @@ function DashboardPageContent() {
   const [progressUsers, setProgressUsers] = useState([]);
   const [progressUserName, setProgressUserName] = useState("");
   const [archivingModuleKey, setArchivingModuleKey] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    confirmLabel: "Confirm",
+    tone: "danger",
+  });
+  const confirmActionRef = useRef(null);
 
   const role = (session?.user?.role || "").toLowerCase();
   const isAdmin = role === "admin" || role === "reviewer";
@@ -220,46 +228,81 @@ function DashboardPageContent() {
   const toggleExpanded = useCallback((key) => {
     setExpandedModuleKey((prev) => (prev === key ? null : key));
   }, []);
+  const closeConfirmDialog = useCallback(() => {
+    confirmActionRef.current = null;
+    setConfirmDialog((prev) => ({ ...prev, open: false }));
+  }, []);
+  const openConfirmDialog = useCallback((options, onConfirm) => {
+    confirmActionRef.current = onConfirm;
+    setConfirmDialog({
+      open: true,
+      title: options?.title || "Please confirm",
+      message: options?.message || "",
+      confirmLabel: options?.confirmLabel || "Confirm",
+      tone: options?.tone || "danger",
+    });
+  }, []);
+  const handleConfirmDialogConfirm = useCallback(async () => {
+    const action = confirmActionRef.current;
+    closeConfirmDialog();
+    if (typeof action === "function") {
+      await action();
+    }
+  }, [closeConfirmDialog]);
 
   const archiveModule = useCallback(
     async (moduleKey) => {
-      if (!confirm(`Apakah Anda yakin ingin menyelesaikan dan menghapus schedule untuk ${moduleKey}? Semua schedule untuk module ini akan dihapus dari main schedule dan module schedule.`)) {
-        return;
-      }
-      try {
-        setArchivingModuleKey(moduleKey);
-        const res = await fetch("/api/schedule/archive", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ module_key: moduleKey, scope: "module" }),
-        });
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.success) {
-          toast.show("Gagal menyelesaikan: " + (json?.error || `HTTP ${res.status}`), "error");
-          return;
+      openConfirmDialog(
+        {
+          title: "Finish module?",
+          message: `This will mark "${moduleKey}" as finished and remove its schedules from both the main schedule and module schedule.`,
+          confirmLabel: "Finish module",
+          tone: "danger",
+        },
+        async () => {
+          try {
+            setArchivingModuleKey(moduleKey);
+            const res = await fetch("/api/schedule/archive", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ module_key: moduleKey, scope: "module" }),
+            });
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json?.success) {
+              toast.show(`Failed to finish module: ${json?.error || `HTTP ${res.status}`}`, "error");
+              return;
+            }
+            setProgress((p) => ({ ...p, loading: true }));
+            const roleNow = (session?.user?.role || "").toLowerCase();
+            const isAdminNow = roleNow === "admin" || roleNow === "reviewer";
+            const userName = (session?.user?.name || "").trim();
+            const effectiveUserName = isAdminNow ? progressUserName : userName;
+            const params = new URLSearchParams();
+            if (effectiveUserName) {
+              params.set("userName", effectiveUserName);
+            }
+            if (selectedYear) {
+              params.set("year", String(selectedYear));
+            }
+            const qs = params.toString() ? `?${params.toString()}` : "";
+            const r2 = await fetch(`/api/dashboard/progress${qs}`, { cache: "no-store" });
+            const j2 = await r2.json().catch(() => null);
+            if (r2.ok && j2?.success) {
+              const modules = Array.isArray(j2.modules) ? j2.modules : [];
+              setProgress({ loading: false, error: null, modules });
+            } else {
+              setProgress({ loading: false, error: j2?.error || `HTTP ${r2.status}`, modules: [] });
+            }
+            toast.show(`"${moduleKey}" was finished and its schedules were removed successfully.`, "success");
+          } catch (e) {
+            toast.show(`Failed to finish module: ${e?.message || String(e)}`, "error");
+          } finally {
+            setArchivingModuleKey("");
+          }
         }
-        setProgress((p) => ({ ...p, loading: true }));
-        const roleNow = (session?.user?.role || "").toLowerCase();
-        const isAdminNow = roleNow === "admin" || roleNow === "reviewer";
-        const userName = (session?.user?.name || "").trim();
-        const effectiveUserName = isAdminNow ? progressUserName : userName;
-        const qs = effectiveUserName ? `?userName=${encodeURIComponent(effectiveUserName)}` : "";
-        const r2 = await fetch(`/api/dashboard/progress${qs}`, { cache: "no-store" });
-        const j2 = await r2.json().catch(() => null);
-        if (r2.ok && j2?.success) {
-          const modules = Array.isArray(j2.modules) ? j2.modules : [];
-          setProgress({ loading: false, error: null, modules });
-        } else {
-          setProgress({ loading: false, error: j2?.error || `HTTP ${r2.status}`, modules: [] });
-        }
-        toast.show(`${moduleKey} berhasil diselesaikan dan schedule telah dihapus! Anda dapat membuat schedule baru untuk module ini.`, "success");
-      } catch (e) {
-        toast.show("Gagal menyelesaikan: " + (e?.message || String(e)), "error");
-      } finally {
-        setArchivingModuleKey("");
-      }
+      );
     },
-    [session?.user?.name, session?.user?.role, progressUserName, toast]
+    [openConfirmDialog, progressUserName, selectedYear, session?.user?.name, session?.user?.role, toast]
   );
 
   useEffect(() => {
@@ -395,31 +438,38 @@ function DashboardPageContent() {
   const handleDeleteUser = useCallback(
     async (user) => {
       if (!user?.id) return;
-      const ok = confirm(`Delete user "${user.name}" (${user.email})?`);
-      if (!ok) return;
+      openConfirmDialog(
+        {
+          title: "Delete user?",
+          message: `Delete "${user.name}" (${user.email})? This action cannot be undone.`,
+          confirmLabel: "Delete user",
+          tone: "danger",
+        },
+        async () => {
+          try {
+            setDeletingUserId(Number(user.id));
+            const res = await fetch("/api/users", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: user.id }),
+            });
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json?.success) {
+              toast.show(json?.error || `Failed to delete user (HTTP ${res.status})`, "error");
+              return;
+            }
 
-      try {
-        setDeletingUserId(Number(user.id));
-        const res = await fetch("/api/users", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: user.id }),
-        });
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.success) {
-          toast.show(json?.error || `Failed to delete user (HTTP ${res.status})`, "error");
-          return;
+            setProgressUsers((prev) => prev.filter((u) => Number(u?.id) !== Number(user.id)));
+            toast.show("User deleted successfully.", "success");
+          } catch (e) {
+            toast.show(e?.message || "Failed to delete user.", "error");
+          } finally {
+            setDeletingUserId(0);
+          }
         }
-
-        setProgressUsers((prev) => prev.filter((u) => Number(u?.id) !== Number(user.id)));
-        toast.show("User deleted successfully.", "success");
-      } catch (e) {
-        toast.show(e?.message || "Failed to delete user.", "error");
-      } finally {
-        setDeletingUserId(0);
-      }
+      );
     },
-    [toast]
+    [openConfirmDialog, toast]
   );
 
   // ---- UI (responsive: top bar with profile top-right on all screens)
@@ -916,6 +966,40 @@ function DashboardPageContent() {
                 disabled={isCreatingAccount}
               >
                 {isCreatingAccount ? "Creating..." : "Create Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDialog.open && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+            <div className="flex items-start gap-4">
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${confirmDialog.tone === "danger" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86l-7.14 12A2 2 0 004.86 19h14.28a2 2 0 001.71-3.14l-7.14-12a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-semibold text-slate-900">{confirmDialog.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{confirmDialog.message}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeConfirmDialog}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDialogConfirm}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed ${confirmDialog.tone === "danger" ? "bg-red-600 hover:bg-red-700" : "bg-[#141D38] hover:bg-[#0f1730]"}`}
+              >
+                {confirmDialog.confirmLabel}
               </button>
             </div>
           </div>
