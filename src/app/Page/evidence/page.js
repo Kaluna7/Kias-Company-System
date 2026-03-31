@@ -1,9 +1,13 @@
 // app/page.js
 import Link from 'next/link';
 import Image from 'next/image';
-import { headers } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
+import {
+  buildScheduleWindowsByUpperDeptName,
+  formatScheduleRange,
+} from "@/lib/scheduleCardHelpers";
 
 // Map department name to deptKey for user assignment checking
 function getDeptKeyFromDepartmentName(deptName) {
@@ -34,13 +38,9 @@ export default async function Evidence({ searchParams }) {
   // Get user assignments for Evidence module
   // Reviewer needs assignment like regular user, but can only edit reviewer fields
   let allowedDepartments = [];
-  if (!isAdmin && userName) {
+  if (!isAdmin && !isReviewer && userName) {
     try {
-      const headersList = await headers();
-      const host = headersList.get('host') || 'localhost:3000';
-      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-      const baseUrl = `${protocol}://${host}`;
-      
+      const baseUrl = getInternalFetchBaseUrl();
       const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=evidence`, {
         cache: "no-store",
       });
@@ -92,6 +92,18 @@ export default async function Evidence({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
   const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+
+  let scheduleByDept = {};
+  try {
+    const baseUrl = getInternalFetchBaseUrl();
+    const sr = await fetch(`${baseUrl}/api/schedule/module?module=evidence`, { cache: "no-store" });
+    const sj = await sr.json().catch(() => null);
+    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
+      scheduleByDept = buildScheduleWindowsByUpperDeptName(sj.rows);
+    }
+  } catch (e) {
+    console.warn("Failed to load evidence schedule dates:", e?.message);
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-3 sm:p-4 md:p-6">
@@ -197,7 +209,9 @@ export default async function Evidence({ searchParams }) {
               const deptPath = deptMap[evidence.id] || evidence.id.toLowerCase();
               const isEnabled = isDepartmentEnabled(evidence.department);
               const isDisabled = !isEnabled;
-              
+              const win = scheduleByDept[evidence.department];
+              const scheduleRange = win ? formatScheduleRange(win.start, win.end) : "";
+
               return isDisabled ? (
                 <div
                   key={evidence.id}
@@ -212,6 +226,10 @@ export default async function Evidence({ searchParams }) {
                       </svg>
                     </div>
                   </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    <span className="font-semibold text-slate-600">Schedule</span>
+                    <span className="block mt-0.5">{scheduleRange || "—"}</span>
+                  </p>
                 </div>
               ) : (
               <Link 
@@ -228,6 +246,10 @@ export default async function Evidence({ searchParams }) {
                     </svg>
                   </div>
                 </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  <span className="font-semibold text-slate-600">Schedule</span>
+                  <span className="block mt-0.5">{scheduleRange || "—"}</span>
+                </p>
               </Link>
               );
             })}
@@ -246,6 +268,10 @@ export default async function Evidence({ searchParams }) {
                   </svg>
                 </div>
               </div>
+              <p className="text-xs text-slate-500 mt-2">
+                <span className="font-semibold text-slate-600">Schedule</span>
+                <span className="block mt-0.5">—</span>
+              </p>
             </Link>
           </div>
         </div>

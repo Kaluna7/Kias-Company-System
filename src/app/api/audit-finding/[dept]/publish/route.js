@@ -65,6 +65,20 @@ function getDelegate(dept) {
   return prisma[model];
 }
 
+function parseSelectedYear(req) {
+  const { searchParams } = new URL(req.url);
+  const yearParam = searchParams.get("year");
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  return !Number.isNaN(year) && year ? year : null;
+}
+
+function alignDateToSelectedYear(dateValue, selectedYear) {
+  const date = new Date(dateValue);
+  if (!selectedYear || Number.isNaN(date.getTime())) return date;
+  date.setFullYear(selectedYear);
+  return date;
+}
+
 function supportsFindingSnapshotFields(dept) {
   const modelName = deptToModel[dept];
   const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
@@ -214,6 +228,7 @@ export async function PUT(req, { params }) {
     const p = await Promise.resolve(params);
     const dept = p?.dept;
     const delegate = getDelegate(dept);
+    const selectedYear = parseSelectedYear(req);
     
     if (!delegate) {
       return NextResponse.json({ error: "Invalid department" }, { status: 400 });
@@ -223,15 +238,21 @@ export async function PUT(req, { params }) {
     const evidenceDept = deptToEvidenceDept[dept];
     const readyApCodes = new Set();
     if (evidenceDept) {
-      const evidenceRows = await prisma.evidence.findMany({
-        where: {
-          department: evidenceDept,
-          file_url: { not: null },
-          overall_status: {
-            equals: "COMPLETE",
-            mode: "insensitive",
-          },
+      const evidenceWhere = {
+        department: evidenceDept,
+        file_url: { not: null },
+        overall_status: {
+          equals: "COMPLETE",
+          mode: "insensitive",
         },
+      };
+      if (selectedYear) {
+        const from = new Date(selectedYear, 0, 1);
+        const to = new Date(selectedYear + 1, 0, 1);
+        evidenceWhere.updated_at = { gte: from, lt: to };
+      }
+      const evidenceRows = await prisma.evidence.findMany({
+        where: evidenceWhere,
         select: { ap_code: true },
       });
       for (const ev of evidenceRows || []) {
@@ -253,18 +274,25 @@ export async function PUT(req, { params }) {
     }
 
     // Ambil semua finding yang punya ap_code di dalam set readyApCodes dan belum COMPLETED
-    const readyFindings = await delegate.findMany({
-      where: {
-        ap_code: {
-          in: Array.from(readyApCodes),
-        },
-        NOT: {
-          completion_status: {
-            equals: "COMPLETED",
-            mode: "insensitive",
-          },
+    const readyFindingsWhere = {
+      ap_code: {
+        in: Array.from(readyApCodes),
+      },
+      NOT: {
+        completion_status: {
+          equals: "COMPLETED",
+          mode: "insensitive",
         },
       },
+    };
+    if (selectedYear) {
+      readyFindingsWhere.created_at = {
+        gte: new Date(selectedYear, 0, 1),
+        lt: new Date(selectedYear + 1, 0, 1),
+      };
+    }
+    const readyFindings = await delegate.findMany({
+      where: readyFindingsWhere,
     });
 
     if (readyFindings.length === 0) {
@@ -276,7 +304,7 @@ export async function PUT(req, { params }) {
     }
 
     const snapshotMap = await buildAuditProgramSnapshotMap(dept, Array.from(readyApCodes));
-    const publishTimestamp = new Date();
+    const publishTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
     const canPersistSnapshot = supportsFindingSnapshotFields(dept);
 
     // Update findings: set completion_status to COMPLETED dan simpan snapshot
@@ -344,6 +372,7 @@ export async function PUT(req, { params }) {
             auditee: null,
             completion_status: "COMPLETED",
             completion_date: publishTimestamp,
+            created_at: publishTimestamp,
             updated_at: publishTimestamp,
           };
 
@@ -364,131 +393,7 @@ export async function PUT(req, { params }) {
       }
     }
 
-    // Get audit-program mapping for this department
-    const apMappingForCleanup = deptToAuditProgram[dept];
-    if (apMappingForCleanup) {
-      const apModel = getAuditProgramAp(dept);
-      const parentModel = getAuditProgramParent(dept);
-      const riskIdField = getApRiskIdField(dept);
-
-      if (apModel && parentModel && riskIdField) {
-        // Delete related audit-program data for each published finding
-        for (const finding of readyFindings) {
-          try {
-            let deletedAp = false;
-            let parentRiskId = null;
-
-            // Strategy 1: Delete by ap_code
-            if (finding.ap_code) {
-              const apCodeTrimmed = String(finding.ap_code).trim();
-              
-              // Find AP by ap_code
-              const ap = await apModel.findFirst({
-                where: {
-                  ap_code: apCodeTrimmed,
-                },
-                include: {
-                  [apMappingForCleanup.relation]: {
-                    select: {
-                      risk_id: true,
-                    },
-                  },
-                },
-              });
-
-              if (ap) {
-                parentRiskId = ap[apMappingForCleanup.relation]?.risk_id;
-                
-                // Delete the AP
-                await apModel.delete({
-                  where: { ap_id: ap.ap_id },
-                });
-                deletedAp = true;
-              }
-            }
-
-            // Strategy 2: Delete by risk_id or risk_id_no if ap_code didn't match or didn't find AP
-            if (!deletedAp && finding.risk_id) {
-              const riskIdTrimmed = String(finding.risk_id).trim();
-              
-              // Try to find parent by risk_id_no
-              const parent = await parentModel.findFirst({
-                where: {
-                  risk_id_no: riskIdTrimmed,
-                },
-                include: {
-                  aps: true,
-                },
-              });
-
-              if (parent) {
-                parentRiskId = parent.risk_id;
-                
-                // Delete all APs for this parent
-                await apModel.deleteMany({
-                  where: {
-                    [riskIdField]: parent.risk_id,
-                  },
-                });
-
-                // Delete the parent (risk-assessment)
-                await parentModel.delete({
-                  where: { risk_id: parent.risk_id },
-                });
-              } else {
-                // Try to find by risk_id (integer) if risk_id_no didn't match
-                const riskIdInt = parseInt(riskIdTrimmed, 10);
-                if (!isNaN(riskIdInt)) {
-                  const parentById = await parentModel.findFirst({
-                    where: {
-                      risk_id: riskIdInt,
-                    },
-                    include: {
-                      aps: true,
-                    },
-                  });
-
-                  if (parentById) {
-                    parentRiskId = parentById.risk_id;
-                    
-                    // Delete all APs for this parent
-                    await apModel.deleteMany({
-                      where: {
-                        [riskIdField]: parentById.risk_id,
-                      },
-                    });
-
-                    // Delete the parent (risk-assessment)
-                    await parentModel.delete({
-                      where: { risk_id: parentById.risk_id },
-                    });
-                  }
-                }
-              }
-            }
-
-            // If we deleted an AP but not the parent, check if parent has any other APs
-            if (deletedAp && parentRiskId) {
-              const remainingAps = await apModel.findMany({
-                where: {
-                  [riskIdField]: parentRiskId,
-                },
-              });
-
-              // If no other APs, delete the parent (risk-assessment)
-              if (remainingAps.length === 0) {
-                await parentModel.delete({
-                  where: { risk_id: parentRiskId },
-                });
-              }
-            }
-          } catch (err) {
-            // Log error but continue with other findings
-            console.error(`Error deleting audit-program data for finding ${finding.id}:`, err);
-          }
-        }
-      }
-    }
+    // Keep risk assessment and audit program source data after publish so only finding and evidence leave the workspace flow.
 
     // Reset all meta after publish: status and finding result/file so form is clean
     const slug = deptToSlug[dept?.toLowerCase()];

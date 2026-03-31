@@ -46,7 +46,6 @@ export default function ReportClient({ initialData = [] }) {
               <col style={{ width: "10%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
               <col style={{ width: "12%" }} />
             </colgroup>
 
@@ -59,7 +58,6 @@ export default function ReportClient({ initialData = [] }) {
                   "Reviewer",
                   "Preparer Date",
                   "Reviewer Date",
-                  "Status Documents",
                   "Status Worksheet",
                   "Status WP",
                   "Audit Area",
@@ -111,11 +109,6 @@ export default function ReportClient({ initialData = [] }) {
                       : row.date2 || "-"}
                   </td>
 
-                  {/* Status Documents */}
-                  <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                    {row.status_documents || row.statusDocuments || "-"}
-                  </td>
-
                   {/* Status Worksheet */}
                   <td
                     className={`p-1 text-xs text-center border border-gray-200 font-semibold ${
@@ -152,7 +145,7 @@ export default function ReportClient({ initialData = [] }) {
               ))}
               {data.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="p-4 text-center text-sm text-gray-600">
+                  <td colSpan={9} className="p-4 text-center text-sm text-gray-600">
                     Belum ada data worksheet yang disimpan. Silakan save data di worksheet terlebih dahulu.
                   </td>
                 </tr>
@@ -212,10 +205,6 @@ export default function ReportClient({ initialData = [] }) {
                         ? new Date(selectedRow.reviewer_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })
                         : selectedRow.date2 || "-"}
                     </div>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-700 text-xs">Status Documents</div>
-                    <div className="text-sm">{selectedRow.status_documents || selectedRow.statusDocuments || "-"}</div>
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Status Worksheet</div>

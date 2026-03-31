@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
@@ -11,7 +11,7 @@ export default function EvidenceDeptPage({
   dashboardLabel, // e.g. "Accounting"
 }) {
   const { data: session } = useSession();
-  const role = (session?.user?.role || "").toLowerCase();
+  const role = String(session?.user?.role || "").trim().toLowerCase();
   const isReviewer = role === "reviewer";
   const isAdmin = role === "admin";
   const canPublish = isAdmin || isReviewer;
@@ -24,7 +24,6 @@ export default function EvidenceDeptPage({
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [evidenceMeta, setEvidenceMeta] = useState(null);
-  const hasFetchedRef = useRef(false);
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
   const yearFilter = yearParam ? parseInt(yearParam, 10) : null;
@@ -48,8 +47,8 @@ export default function EvidenceDeptPage({
     return deptMap[deptLabel] || null;
   };
 
-  // Fetch preparer from schedule
-  const fetchPreparerFromSchedule = async () => {
+  // Fetch preparer from schedule (only when department/year context changes — not on pagination)
+  const fetchPreparerFromSchedule = useCallback(async () => {
     try {
       const scheduleDeptId = getScheduleDeptId(departmentLabel);
       if (!scheduleDeptId) {
@@ -59,20 +58,18 @@ export default function EvidenceDeptPage({
 
       const res = await fetch(`/api/schedule/module?module=evidence`);
       const result = await res.json().catch(() => ({}));
-      
+
       if (result.success && Array.isArray(result.rows)) {
-        // Find schedule row for this department
         const scheduleRow = result.rows.find(
-          row => row.department_id === scheduleDeptId && row.is_configured === true
+          (row) => row.department_id === scheduleDeptId && row.is_configured === true
         );
-        
+
         if (scheduleRow?.user_name) {
           setPreparer(scheduleRow.user_name);
           return scheduleRow.user_name;
         }
       }
-      
-      // If no schedule found, set preparer to empty
+
       setPreparer("");
       return null;
     } catch (error) {
@@ -80,18 +77,18 @@ export default function EvidenceDeptPage({
       setPreparer("");
       return null;
     }
-  };
+  }, [departmentLabel]);
+
+  useEffect(() => {
+    fetchPreparerFromSchedule();
+  }, [fetchPreparerFromSchedule, yearFilter]);
 
   const fetchApData = useCallback(async (page = 1) => {
     try {
       setLoading(true);
       setError("");
 
-      if (page === 1) {
-        await fetchPreparerFromSchedule();
-      }
-
-      const pageSize = evidenceMeta?.pageSize ?? 50;
+      const pageSize = 50;
       const params = new URLSearchParams({
         department: departmentLabel,
         page: String(page),
@@ -138,7 +135,8 @@ export default function EvidenceDeptPage({
       );
 
       if (result?.meta) {
-        if (result.meta.overall_status) setOverallStatus(result.meta.overall_status);
+        // Jangan pakai overall_status dari baris acak (evidenceRows[0] di API): bisa COMPLETE
+        // dari AP lain dan membuat UI terasa "sudah publish" padahal draft.
         const total = result.meta.total ?? rows.length;
         const pageSize = result.meta.pageSize ?? 50;
         setEvidenceMeta({ total, page: result.meta.page ?? page, pageSize });
@@ -150,15 +148,11 @@ export default function EvidenceDeptPage({
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPreparerFromSchedule stable, pageSize from meta
-  }, [departmentLabel, evidenceApiSlug, evidenceMeta?.pageSize, yearFilter]);
+  }, [departmentLabel, evidenceApiSlug, yearFilter]);
 
   useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
     fetchApData(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [departmentLabel, evidenceApiSlug, yearFilter, fetchApData]);
 
   const handleFileUpload = async (index, e) => {
     const file = e.target.files?.[0];
@@ -179,6 +173,7 @@ export default function EvidenceDeptPage({
       formData.append("ap_id", row.ap_id);
       formData.append("ap_code", row.ap_code);
       formData.append("department", departmentLabel);
+      if (yearParam) formData.append("year", yearParam);
 
       const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
       const result = await response.json();
@@ -230,6 +225,7 @@ export default function EvidenceDeptPage({
           ap_id: row.ap_id,
           ap_code: row.ap_code,
           fileUrl,
+          year: yearParam || null,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -285,8 +281,9 @@ export default function EvidenceDeptPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           department: departmentLabel, 
-          preparer: (preparer && preparer !== "Not Set") ? preparer : "", 
+          preparer: (preparer && preparer !== "Not Set") ? String(preparer).trim() : "", 
           overallStatus: overallStatus || "INCOMPLETE", 
+          year: yearParam || null,
           evidenceData: validEvidenceData 
         }),
       });
@@ -304,9 +301,7 @@ export default function EvidenceDeptPage({
       setSuccessMessage("Evidence data published successfully! Data is now available in Report.");
       setTimeout(() => setSuccessMessage(""), 4000);
       setOverallStatus("DRAFT");
-      hasFetchedRef.current = false;
       await fetchApData(1);
-      hasFetchedRef.current = true;
     } catch (error) {
       console.error("Error saving data:", error);
       setError(error.message || "Failed to save evidence data");
@@ -350,38 +345,40 @@ export default function EvidenceDeptPage({
         <div className="mb-3 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
           <div className="w-full lg:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm">
             <span className="font-semibold text-slate-700 sm:min-w-[80px]">Preparer:</span>
-            <div className="relative flex-1 sm:max-w-xs">
+            <div className="relative flex-1 sm:max-w-md flex flex-col gap-1">
               {preparer ? (
                 <input
                   type="text"
                   value={preparer}
-                  onChange={(e) => setPreparer(e.target.value)}
-                  className="w-full border border-blue-300 rounded-lg px-4 py-2.5 text-sm bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter preparer name"
-                  disabled={isReviewer}
+                  readOnly
+                  tabIndex={-1}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm bg-slate-50 text-gray-800 cursor-default"
+                  title="From Schedule → Evidence (not editable here)"
                 />
               ) : (
-                <div className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm bg-gray-50 text-gray-500 cursor-not-allowed flex items-center">
-                  <span className="text-gray-400 italic">Not Set</span>
+                <div className="w-full border border-amber-200 bg-amber-50 rounded-lg px-4 py-2.5 text-sm text-amber-800">
+                  Not set — assign the user in{" "}
+                  <span className="font-semibold">Schedule → Evidence</span> for this department.
                 </div>
               )}
+              <p className="text-xs text-slate-500">
+                Preparer name comes only from <span className="font-semibold">Schedule → Evidence</span> for this department.
+              </p>
             </div>
-            {!preparer && (
-              <span className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200 font-medium">
-                Set in schedule module
-              </span>
-            )}
           </div>
           <div className="w-full lg:w-auto flex flex-col sm:flex-row sm:items-center gap-2">
             <select
               value={overallStatus}
               onChange={(e) => setOverallStatus(e.target.value)}
-              disabled={!isAdmin && !isReviewer}
-              className="w-full sm:w-auto bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38]"
             >
               <option value="DRAFT">DRAFT</option>
               <option value="INCOMPLETE">INCOMPLETE</option>
-              {(isAdmin || isReviewer) && <option value="COMPLETE">COMPLETE</option>}
+              {(isAdmin || isReviewer) ? (
+                <option value="COMPLETE">COMPLETE</option>
+              ) : overallStatus === "COMPLETE" ? (
+                <option value="COMPLETE">COMPLETE</option>
+              ) : null}
             </select>
             <button
               onClick={handleSave}
@@ -473,7 +470,21 @@ export default function EvidenceDeptPage({
                           )}
                         </td>
                         <td className="border border-gray-200 px-2 sm:px-4 py-3 text-gray-800 text-sm">
-                          {row.file_name || "-"}
+                          {row.attachments && row.attachments.length > 0 ? (
+                            <div className="space-y-1">
+                              {row.attachments.map((file, fileIdx) => (
+                                <div
+                                  key={`filename-${file.url || `${row.ap_id}-${fileIdx}`}`}
+                                  className="truncate max-w-[150px] sm:max-w-[220px]"
+                                  title={file.name}
+                                >
+                                  {file.name || `Document ${fileIdx + 1}`}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            row.file_name || "-"
+                          )}
                         </td>
                         <td className="border border-gray-200 px-2 sm:px-4 py-3">
                           <label

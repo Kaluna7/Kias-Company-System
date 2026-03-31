@@ -33,21 +33,6 @@ const deptToFindingDelegate = {
   WAREHOUSE: "audit_finding_whs",
 };
 
-// Relasi ke tabel Risk Assessment/Audit Program parent di masing-masing *_ap model
-const deptToApParentRelation = {
-  FINANCE: "finance",
-  ACCOUNTING: "accounting",
-  "G&A": "general_affair",
-  HRD: "hrd",
-  "L&P": "lp",
-  MERCHANDISE: "merchandise",
-  MIS: "mis",
-  OPERATIONAL: "operational",
-  SDP: "sdp",
-  TAX: "tax",
-  WAREHOUSE: "warehouse",
-};
-
 function getApDelegate(department) {
   const key = String(department || "").toUpperCase();
   const delegateName = deptToApDelegate[key];
@@ -90,6 +75,29 @@ function parseAttachmentsField(fileUrl, fileName) {
   return [];
 }
 
+function parseSelectedYear(value) {
+  const year = value ? parseInt(String(value), 10) : null;
+  return !Number.isNaN(year) && year ? year : null;
+}
+
+function alignDateToSelectedYear(dateValue, selectedYear) {
+  const date = new Date(dateValue);
+  if (!selectedYear || Number.isNaN(date.getTime())) return date;
+  date.setFullYear(selectedYear);
+  return date;
+}
+
+function applyCreatedAtYearScope(where, selectedYear) {
+  if (!selectedYear) return where;
+  return {
+    ...where,
+    created_at: {
+      gte: new Date(selectedYear, 0, 1),
+      lt: new Date(selectedYear + 1, 0, 1),
+    },
+  };
+}
+
 export function makeEvidenceHandlers(defaultDepartment) {
   const POST = async (req) => {
     try {
@@ -98,6 +106,8 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const ap_id = formData.get("ap_id") || formData.get("risk_id"); // legacy compatibility
       const ap_code = formData.get("ap_code");
       const department = formData.get("department") || defaultDepartment;
+      const selectedYear = parseSelectedYear(formData.get("year"));
+      const requestTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
 
       if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
@@ -118,10 +128,10 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const apIdNum = ap_id ? parseInt(ap_id) : null;
 
       const existingEvidence = await prisma.evidence.findFirst({
-        where: {
+        where: applyCreatedAtYearScope({
           department: department.toUpperCase(),
           ...(apIdNum ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
-        },
+        }, selectedYear),
       });
 
       if (existingEvidence) {
@@ -134,19 +144,21 @@ export function makeEvidenceHandlers(defaultDepartment) {
         }
         const updatedAttachments = [
           ...currentAttachments,
-          { url: fileUrl, name: originalName, uploaded_at: new Date().toISOString() },
+          { url: fileUrl, name: originalName, uploaded_at: requestTimestamp.toISOString() },
         ];
         await prisma.evidence.update({
           where: { id: existingEvidence.id },
           data: {
             file_url: JSON.stringify(updatedAttachments),
             file_name: updatedAttachments[0]?.name || null,
-            updated_at: new Date(),
+            updated_at: requestTimestamp,
+            // Upload saja tidak boleh menyisakan COMPLETE: publish hanya lewat PUT (Publish).
+            overall_status: "IN PROGRESS",
           },
         });
       } else {
         const attachments = [
-          { url: fileUrl, name: originalName, uploaded_at: new Date().toISOString() },
+          { url: fileUrl, name: originalName, uploaded_at: requestTimestamp.toISOString() },
         ];
         await prisma.evidence.create({
           data: {
@@ -156,6 +168,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
             file_url: JSON.stringify(attachments),
             file_name: originalName,
             status: "IN PROGRESS",
+            overall_status: "IN PROGRESS",
+            created_at: requestTimestamp,
+            updated_at: requestTimestamp,
           },
         });
       }
@@ -175,7 +190,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
   const PUT = async (req) => {
     try {
       const body = await req.json();
-      const { department, preparer, overallStatus, evidenceData } = body;
+      const { department, preparer, overallStatus, evidenceData, year } = body;
+      const selectedYear = parseSelectedYear(year);
+      const requestTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
 
       if (!department) {
         return NextResponse.json({ success: false, error: "Department is required" }, { status: 400 });
@@ -198,10 +215,10 @@ export function makeEvidenceHandlers(defaultDepartment) {
         const overallUpper = String(overallStatus || "").toUpperCase().trim();
 
         const existingEvidence = await prisma.evidence.findFirst({
-          where: {
+          where: applyCreatedAtYearScope({
             department: department.toUpperCase(),
             ...(apIdNum ? { ap_id: apIdNum } : { ap_code: apCode || undefined }),
-          },
+          }, selectedYear),
           orderBy: { created_at: "desc" },
         });
 
@@ -218,7 +235,7 @@ export function makeEvidenceHandlers(defaultDepartment) {
               file_name: existingEvidence.file_name,
               status: evidence.status || existingEvidence.status || "IN PROGRESS",
               overall_status: overallUpper || "IN PROGRESS",
-              updated_at: new Date(),
+              updated_at: requestTimestamp,
             },
           });
         } else {
@@ -234,6 +251,8 @@ export function makeEvidenceHandlers(defaultDepartment) {
               file_name: null,
               status: evidence.status || "IN PROGRESS",
               overall_status: overallUpper || "IN PROGRESS",
+              created_at: requestTimestamp,
+              updated_at: requestTimestamp,
             },
           });
         }
@@ -279,16 +298,6 @@ export function makeEvidenceHandlers(defaultDepartment) {
         ...(ap_id ? { ap_id: parseInt(ap_id) } : {}),
       };
 
-      // Filter AP list berdasarkan tahun Risk Assessment/Audit Program parent (created_at)
-      if (hasValidYear) {
-        const parentRelation = deptToApParentRelation[upperDept];
-        if (parentRelation) {
-          const from = new Date(year, 0, 1);
-          const to = new Date(year + 1, 0, 1);
-          where[parentRelation] = { created_at: { gte: from, lt: to } };
-        }
-      }
-
       const excludePublished = searchParams.get("exclude_published") === "1" || searchParams.get("exclude_published") === "true";
       const apFetchSize = excludePublished ? 10000 : pageSize;
       const apFetchSkip = excludePublished ? 0 : skip;
@@ -322,12 +331,12 @@ export function makeEvidenceHandlers(defaultDepartment) {
 
       // Index evidence baik berdasarkan ap_id maupun ap_code,
       // karena ada departemen yang hanya mengisi ap_code tanpa ap_id.
+      // evidenceRows sudah orderBy updated_at desc → baris pertama per key = yang terbaru.
+      // is_published hanya boleh mengikuti baris TERBARU (base), bukan OR dengan baris lama COMPLETE,
+      // supaya draft + upload tidak dianggap publish hanya karena ada record tahun/lama lain.
       const evidenceByKey = {};
       for (const ev of evidenceRows) {
         const attachments = parseAttachmentsField(ev.file_url, ev.file_name);
-        const hasFile = attachments.length > 0;
-        const isComplete =
-          hasFile && (ev.overall_status || "").toUpperCase().trim() === "COMPLETE";
 
         const keys = [];
         if (ev.ap_id != null) {
@@ -344,7 +353,6 @@ export function makeEvidenceHandlers(defaultDepartment) {
             evidenceByKey[key] = {
               base: ev,
               attachments,
-              hasPublished: isComplete,
             };
           } else {
             // merge additional attachments (keep max 5 for response)
@@ -360,7 +368,6 @@ export function makeEvidenceHandlers(defaultDepartment) {
             evidenceByKey[key] = {
               base: existing.base, // pertahankan base sebelumnya (latest by updated_at)
               attachments: unique,
-              hasPublished: existing.hasPublished || isComplete,
             };
           }
         }
@@ -375,8 +382,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
           const base = evGroup?.base;
           const attachments = evGroup?.attachments || [];
           const primary = attachments[0] || null;
-          const hasFile = !!(primary?.url || base?.file_url);
-          const isPublished = evGroup?.hasPublished || false;
+          const isPublished =
+            attachments.length > 0 &&
+            (base?.overall_status || "").toUpperCase().trim() === "COMPLETE";
           return {
             id: base?.id ?? null,
             ap_id: ap.ap_id,
@@ -392,6 +400,48 @@ export function makeEvidenceHandlers(defaultDepartment) {
             _isPublished: isPublished,
           };
         });
+
+      // Pertahankan draft evidence yang sudah tersimpan walaupun source AP tidak
+      // lagi ikut terbaca dari Audit Program, supaya data yang belum publish
+      // tidak "hilang" dari halaman departemen.
+      const sourceKeySet = new Set();
+      for (const ap of apList) {
+        if (ap.ap_id != null) sourceKeySet.add(`ID:${ap.ap_id}`);
+        if (ap.ap_code) sourceKeySet.add(`CODE:${String(ap.ap_code).trim()}`);
+      }
+
+      const appendedEvidenceIds = new Set();
+      for (const ev of evidenceRows) {
+        const keys = [];
+        if (ev.ap_id != null) keys.push(`ID:${ev.ap_id}`);
+        if (ev.ap_code) keys.push(`CODE:${String(ev.ap_code).trim()}`);
+        if (keys.length === 0) continue;
+        if (keys.some((key) => sourceKeySet.has(key))) continue;
+
+        const dedupeId = ev.id != null ? `ID:${ev.id}` : keys[0];
+        if (appendedEvidenceIds.has(dedupeId)) continue;
+        appendedEvidenceIds.add(dedupeId);
+
+        const attachments = parseAttachmentsField(ev.file_url, ev.file_name);
+        const primary = attachments[0] || null;
+        const isPublished =
+          attachments.length > 0 && (ev.overall_status || "").toUpperCase().trim() === "COMPLETE";
+
+        merged.push({
+          id: ev.id ?? null,
+          ap_id: ev.ap_id ?? null,
+          ap_code: ev.ap_code || "",
+          substantive_test: ev.substantive_test || "",
+          attachment: primary?.url || "",
+          file_name: primary?.name || ev.file_name || "",
+          attachments,
+          status: ev.status || "",
+          overall_status: ev.overall_status ?? "",
+          created_at: ev.created_at ?? null,
+          updated_at: ev.updated_at ?? null,
+          _isPublished: isPublished,
+        });
+      }
 
       if (excludePublished) {
         merged = merged.filter((row) => !row._isPublished);
@@ -420,7 +470,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
   const DELETE = async (req) => {
     try {
       const body = await req.json();
-      const { department, ap_id, ap_code, fileUrl } = body || {};
+      const { department, ap_id, ap_code, fileUrl, year } = body || {};
+      const selectedYear = parseSelectedYear(year);
+      const requestTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
 
       const dept = (department || defaultDepartment || "").toUpperCase();
       if (!dept) {
@@ -436,7 +488,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
         ...(apIdNum ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
       };
 
-      const existingEvidence = await prisma.evidence.findFirst({ where });
+      const existingEvidence = await prisma.evidence.findFirst({
+        where: applyCreatedAtYearScope(where, selectedYear),
+      });
       if (!existingEvidence) {
         return NextResponse.json(
           { success: false, error: "Evidence record not found for this AP." },
@@ -481,7 +535,8 @@ export function makeEvidenceHandlers(defaultDepartment) {
         data: {
           file_url: remaining.length ? JSON.stringify(remaining) : null,
           file_name: remaining[0]?.name || null,
-          updated_at: new Date(),
+          updated_at: requestTimestamp,
+          overall_status: "IN PROGRESS",
         },
       });
 

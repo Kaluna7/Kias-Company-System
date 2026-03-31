@@ -1,7 +1,7 @@
 // src/app/Page/schedule/page.js
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import gsap from "gsap";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -351,6 +351,10 @@ export default function SchedulePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, router]); // Removed callback dependencies to prevent unnecessary reloads
+
+  useEffect(() => {
+    router.prefetch("/Page/dashboard");
+  }, [router]);
 
   useEffect(() => {
     if (headerRef.current) {
@@ -1590,12 +1594,9 @@ export default function SchedulePage() {
           <button
             type="button"
             onClick={() => {
-              if (typeof window === "undefined") return;
-              if (window.history.length > 1) {
-                window.history.back();
-                return;
-              }
-              window.location.href = "/Page/dashboard";
+              startTransition(() => {
+                router.push("/Page/dashboard");
+              });
             }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
           >

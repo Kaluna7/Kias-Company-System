@@ -3,9 +3,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { PrismaClient } from "@/generated/prisma";
 import { Suspense } from "react";
-import { headers } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
+import {
+  buildScheduleWindowsByUpperDeptName,
+  formatScheduleRange,
+} from "@/lib/scheduleCardHelpers";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -75,6 +79,14 @@ function getDeptKeyFromDepartmentName(deptName) {
   return deptMap[deptName] || null;
 }
 
+function worksheetAvailabilityStatus(row) {
+  if (!row) return "Not Available";
+  const hasFile = !!(row.file_path && String(row.file_path).trim());
+  const sw = String(row.status_worksheet || "").trim().toUpperCase();
+  if (hasFile || sw === "AVAILABLE") return "Available";
+  return "Not Available";
+}
+
 async function WorksheetContent({ yearParam }) {
   // Get user session and assignments
   const session = await getServerSession(authOptions);
@@ -86,13 +98,9 @@ async function WorksheetContent({ yearParam }) {
   // Get user assignments for Worksheet module
   // Reviewer needs assignment like regular user, but can only edit reviewer fields
   let allowedDepartments = [];
-  if (!isAdmin && userName) {
+  if (!isAdmin && !isReviewer && userName) {
     try {
-      const headersList = await headers();
-      const host = headersList.get('host') || 'localhost:3000';
-      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-      const baseUrl = `${protocol}://${host}`;
-      
+      const baseUrl = getInternalFetchBaseUrl();
       const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=worksheet`, {
         cache: "no-store",
       });
@@ -161,6 +169,7 @@ async function WorksheetContent({ yearParam }) {
       select: {
         department: true,
         status_wp: true,
+        status_worksheet: true,
         file_path: true,
         created_at: true,
       },
@@ -176,15 +185,29 @@ async function WorksheetContent({ yearParam }) {
     console.error("Failed to load worksheet summaries:", e);
   }
 
-  // Status worksheet di dashboard tidak diambil dari data tersimpan (supaya tidak tampil "Available" dari save lama); tampil "-"
+  let scheduleWindowByDept = {};
+  try {
+    const baseUrl = getInternalFetchBaseUrl();
+    const sr = await fetch(`${baseUrl}/api/schedule/module?module=worksheet`, { cache: "no-store" });
+    const sj = await sr.json().catch(() => null);
+    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
+      scheduleWindowByDept = buildScheduleWindowsByUpperDeptName(sj.rows);
+    }
+  } catch (e) {
+    console.warn("Failed to load worksheet schedule windows:", e?.message);
+  }
+
   const worksheets = baseWorksheets.map((base) => {
     const row = latestByDept[base.department];
-    const status = "";
+    const status = worksheetAvailabilityStatus(row);
     const statusWP = row?.status_wp ?? "";
+    const win = scheduleWindowByDept[base.department];
+    const scheduleRange = win ? formatScheduleRange(win.start, win.end) : "";
     return {
       ...base,
       status,
       statusWP,
+      scheduleRange,
     };
   });
 
@@ -268,12 +291,22 @@ async function WorksheetContent({ yearParam }) {
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="text-lg font-semibold text-gray-600">{worksheet.department}</h3>
                   </div>
+                  <p className="text-xs text-slate-500 mb-2">
+                    <span className="font-semibold text-slate-600">Schedule</span>
+                    <span className="block mt-0.5">{worksheet.scheduleRange || "—"}</span>
+                  </p>
                   <div className="flex justify-between items-center">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
-                      {worksheet.status || "-"}
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        worksheet.status === "Available"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-200 text-gray-600"
+                      }`}
+                    >
+                      {worksheet.status || "—"}
                     </span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
-                      {worksheet.statusWP || "-"}
+                      {worksheet.statusWP || "—"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-1">
@@ -294,14 +327,20 @@ async function WorksheetContent({ yearParam }) {
                 <div className="flex justify-between items-start mb-3">
                   <h3 className="text-lg font-semibold text-gray-800">{worksheet.department}</h3>
                 </div>
+                <p className="text-xs text-slate-500 mb-2">
+                  <span className="font-semibold text-slate-600">Schedule</span>
+                  <span className="block mt-0.5">{worksheet.scheduleRange || "—"}</span>
+                </p>
                 <div className="flex justify-between items-center">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    worksheet.status === 'Available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {worksheet.status || "-"}
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      worksheet.status === "Available" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                    }`}
+                  >
+                    {worksheet.status || "—"}
                   </span>
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                    {worksheet.statusWP || "-"}
+                    {worksheet.statusWP || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center mt-1">
@@ -331,6 +370,11 @@ async function WorksheetContent({ yearParam }) {
                 <span className="text-sm text-gray-500">All Departments</span>
                 <span className="text-sm font-medium text-gray-700">-</span>
               </div>
+
+              <p className="text-xs text-slate-500 mb-3">
+                <span className="font-semibold text-slate-600">Schedule</span>
+                <span className="block mt-0.5">—</span>
+              </p>
               
               <div className="flex justify-between items-center">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">

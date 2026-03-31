@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback, useDeferredValue } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import Pagination from "@/app/components/ui/Pagination";
 import { useToast } from "@/app/contexts/ToastContext";
 
@@ -52,6 +53,9 @@ export default function AuditFindingDeptClient({
   const isAdmin = role === "admin";
   const isUser = role === "user";
   const canPublish = isAdmin || isReviewer;
+  const canEditFinalStatus = isAdmin || isReviewer;
+  const searchParams = useSearchParams();
+  const yearParam = searchParams?.get("year");
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -272,6 +276,7 @@ export default function AuditFindingDeptClient({
           page: "1",
           pageSize: "1000",
         });
+        if (yearParam) params.set("year", String(yearParam));
         const res = await fetch(`/api/evidence/${encodeURIComponent(apiPath)}?${params.toString()}`);
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json?.data || !Array.isArray(json.data)) return;
@@ -314,7 +319,7 @@ export default function AuditFindingDeptClient({
     }
 
     syncCompletionStatusFromEvidence();
-  }, [apiPath]);
+  }, [apiPath, yearParam]);
 
   // Auto-save meta data to API
   const saveMetaData = useCallback(async () => {
@@ -465,6 +470,7 @@ export default function AuditFindingDeptClient({
       setLoading(true);
       setError(null);
       const params = new URLSearchParams({ page: String(pageNum), pageSize: String(pageSize) });
+      if (yearParam) params.set("year", String(yearParam));
       const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}?${params.toString()}`, { method: "GET" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to fetch data");
@@ -645,7 +651,8 @@ export default function AuditFindingDeptClient({
         const hasValidId = Number.isFinite(numericId) && numericId > 0;
         if (hasValidId) {
           // Update existing row
-          const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}`, {
+          const saveUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+          const promise = fetch(saveUrl, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -694,7 +701,8 @@ export default function AuditFindingDeptClient({
             row.recommendation ||
             row.auditee
           ) {
-            const promise = fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, {
+            const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+            const promise = fetch(createUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -881,7 +889,8 @@ export default function AuditFindingDeptClient({
       }
       
       // Publish only findings with COMPLETION STATUS = "Ready to Publish"
-      const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/publish`, {
+      const publishUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/publish${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+      const res = await fetch(publishUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
       });
@@ -918,7 +927,8 @@ export default function AuditFindingDeptClient({
 
       if (row.id) {
         // Update existing
-        const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}`, {
+        const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+        const res = await fetch(updateUrl, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -943,7 +953,8 @@ export default function AuditFindingDeptClient({
         if (!res.ok) throw new Error(json?.error || "Failed to update data");
       } else {
         // Create new
-        const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, {
+        const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+        const res = await fetch(createUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1010,8 +1021,9 @@ export default function AuditFindingDeptClient({
         const hasValidId = Number.isFinite(numericId) && numericId > 0;
         if (hasValidId) {
           // Update existing
+          const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
           const res = await fetch(
-            `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}`,
+            updateUrl,
             {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -1050,7 +1062,8 @@ export default function AuditFindingDeptClient({
           row.auditee
         ) {
           // Create new only if user has entered meaningful editable data.
-          const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}`, {
+          const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+          const res = await fetch(createUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1205,7 +1218,12 @@ export default function AuditFindingDeptClient({
                     <select
                       value={finalStatus}
                       onChange={(e) => setFinalStatus(e.target.value)}
-                      disabled={isReviewer}
+                      disabled={!canEditFinalStatus}
+                      title={
+                        !canEditFinalStatus
+                          ? "Hanya admin atau reviewer yang dapat mengubah Final Status"
+                          : undefined
+                      }
                       className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       {statusOptions.map((option) => (

@@ -40,6 +40,20 @@ function getDelegate(dept) {
   return prisma[model];
 }
 
+function parseSelectedYear(req) {
+  const { searchParams } = new URL(req.url);
+  const yearParam = searchParams.get("year");
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+  return !Number.isNaN(year) && year ? year : null;
+}
+
+function alignDateToSelectedYear(dateValue, selectedYear) {
+  const date = new Date(dateValue);
+  if (!selectedYear || Number.isNaN(date.getTime())) return date;
+  date.setFullYear(selectedYear);
+  return date;
+}
+
 function supportsFindingSnapshotFields(dept) {
   const modelName = deptToModel[dept];
   const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
@@ -81,6 +95,7 @@ export async function PUT(req, { params }) {
     if (Number.isNaN(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
     const body = await req.json();
+    const selectedYear = parseSelectedYear(req);
 
     const updateData = {
       risk_id: body.riskId !== undefined ? truncateString(body.riskId, 50) : undefined,
@@ -97,8 +112,10 @@ export async function PUT(req, { params }) {
       recommendation: body.recommendation ?? undefined,
       auditee: body.auditee !== undefined ? truncateString(body.auditee, 255) : undefined,
       completion_status: body.completionStatus !== undefined ? truncateString(body.completionStatus, 50) : undefined,
-      completion_date: body.completionDate ? new Date(body.completionDate) : undefined,
-      updated_at: new Date(),
+      completion_date: body.completionDate
+        ? alignDateToSelectedYear(new Date(body.completionDate), selectedYear)
+        : undefined,
+      updated_at: alignDateToSelectedYear(new Date(), selectedYear),
     };
 
     if (supportsFindingSnapshotFields(dept)) {
