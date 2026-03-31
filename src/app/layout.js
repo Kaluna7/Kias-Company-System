@@ -20,9 +20,11 @@ export const metadata = {
   title: "KIAS AUDIT SYSTEM",
   description: "Enjoy your work with this system & earn your money",
   icons: {
-    icon: "/images/kias-logo.png",
-    shortcut: "/images/kias-logo.png",
-    apple: "/images/kias-logo.png",
+    icon: [
+      { url: "/images/kias-logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    shortcut: [{ url: "/images/kias-logo.png", type: "image/png" }],
+    apple: [{ url: "/images/kias-logo.png", type: "image/png", sizes: "512x512" }],
   },
 };
 
