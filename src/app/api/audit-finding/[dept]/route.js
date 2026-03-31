@@ -120,6 +120,11 @@ function getDelegate(dept) {
   return prisma[model];
 }
 
+function qIdent(name) {
+  if (!/^[a-z0-9_]+$/i.test(name)) throw new Error(`Invalid identifier: ${name}`);
+  return name;
+}
+
 function supportsFindingSnapshotFields(dept) {
   const modelName = deptToModel[dept];
   const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
@@ -127,6 +132,123 @@ function supportsFindingSnapshotFields(dept) {
   const fieldNames = new Set(model.fields.map((field) => field.name));
   return ["objective", "procedures", "description", "application", "owners"].every((field) =>
     fieldNames.has(field)
+  );
+}
+
+function getFindingTableName(dept) {
+  const tableName = deptToModel[dept];
+  return tableName ? qIdent(tableName) : null;
+}
+
+async function getFindingTableColumns(dept) {
+  const tableName = getFindingTableName(dept);
+  if (!tableName) return new Set();
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+    `,
+    tableName
+  );
+  return new Set((rows || []).map((row) => row.column_name));
+}
+
+function buildFindingWhereSql({ includeCompleted, from, to }, params) {
+  const clauses = [];
+
+  if (includeCompleted) {
+    clauses.push(`UPPER(COALESCE(completion_status, '')) = 'COMPLETED'`);
+    if (from && to) {
+      const fromIdx = params.push(from);
+      const toIdx = params.push(to);
+      const fromIdx2 = params.push(from);
+      const toIdx2 = params.push(to);
+      const fromIdx3 = params.push(from);
+      const toIdx3 = params.push(to);
+      clauses.push(`(
+        (completion_date >= $${fromIdx} AND completion_date < $${toIdx})
+        OR (completion_date IS NULL AND updated_at >= $${fromIdx2} AND updated_at < $${toIdx2})
+        OR (completion_date IS NULL AND updated_at IS NULL AND created_at >= $${fromIdx3} AND created_at < $${toIdx3})
+      )`);
+    }
+  } else {
+    clauses.push(`UPPER(COALESCE(completion_status, '')) <> 'COMPLETED'`);
+    if (from && to) {
+      const fromIdx = params.push(from);
+      const toIdx = params.push(to);
+      clauses.push(`created_at >= $${fromIdx} AND created_at < $${toIdx}`);
+    }
+  }
+
+  return clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+}
+
+function buildFindingSelectSql(columns) {
+  const optionalTextColumn = (columnName) =>
+    columns.has(columnName)
+      ? `"${columnName}"`
+      : `NULL::text AS "${columnName}"`;
+
+  return [
+    `"id"`,
+    `"risk_id"`,
+    `"risk_description"`,
+    `"risk_details"`,
+    `"ap_code"`,
+    `"substantive_test"`,
+    optionalTextColumn("objective"),
+    optionalTextColumn("procedures"),
+    optionalTextColumn("description"),
+    optionalTextColumn("application"),
+    optionalTextColumn("owners"),
+    `"risk"`,
+    `"check_yn"`,
+    `"method"`,
+    `"preparer"`,
+    `"finding_result"`,
+    `"finding_description"`,
+    `"recommendation"`,
+    `"auditee"`,
+    `"completion_status"`,
+    `"completion_date"`,
+    `"created_at"`,
+    `"updated_at"`,
+  ].join(", ");
+}
+
+async function loadFindingsFromTable(dept, options) {
+  const tableName = getFindingTableName(dept);
+  if (!tableName) return { rows: [], total: 0 };
+
+  const params = [];
+  const whereSql = buildFindingWhereSql(options, params);
+  const columns = await getFindingTableColumns(dept);
+  const selectSql = buildFindingSelectSql(columns);
+
+  const pagingParams = [...params];
+  const offsetIdx = pagingParams.push(options.skip ?? 0);
+  const limitIdx = pagingParams.push(options.take ?? 50);
+
+  const rows = await prisma.$queryRawUnsafe(
+    `SELECT ${selectSql} FROM "${tableName}" ${whereSql} ORDER BY id DESC OFFSET $${offsetIdx} LIMIT $${limitIdx}`,
+    ...pagingParams
+  );
+
+  const countRows = await prisma.$queryRawUnsafe(
+    `SELECT COUNT(*)::int AS total FROM "${tableName}" ${whereSql}`,
+    ...params
+  );
+
+  return { rows, total: countRows?.[0]?.total ?? 0, columns };
+}
+
+async function loadCompletedFindingKeysFromTable(dept) {
+  const tableName = getFindingTableName(dept);
+  if (!tableName) return [];
+  return prisma.$queryRawUnsafe(
+    `SELECT risk_id, ap_code FROM "${tableName}" WHERE UPPER(COALESCE(completion_status, '')) = 'COMPLETED'`
   );
 }
 
@@ -286,19 +408,32 @@ export async function GET(req, { params }) {
       }
     }
 
+    const dbColumns = await getFindingTableColumns(dept);
+    const dbHasSnapshotFields = ["objective", "procedures", "description", "application", "owners"].every(
+      (field) => dbColumns.has(field)
+    );
+
     const apMapping = deptToAuditProgram[dept];
     // Jika include_completed=1, JANGAN lagi bergantung pada audit-program parents (karena setelah publish sudah dihapus).
     // Cukup pakai tabel audit_finding_* sebagai sumber data utama untuk report/review.
     if (includeCompleted || !apMapping) {
-      const [findings, total] = await Promise.all([
-        delegate.findMany({
-          where: whereFinding,
-          orderBy: { id: "desc" },
-          skip,
-          take: pageSize,
-        }),
-        delegate.count({ where: whereFinding }),
-      ]);
+      const { rows: findings, total } = dbHasSnapshotFields
+        ? await Promise.all([
+            delegate.findMany({
+              where: whereFinding,
+              orderBy: { id: "desc" },
+              skip,
+              take: pageSize,
+            }),
+            delegate.count({ where: whereFinding }),
+          ]).then(([rows, count]) => ({ rows, total: count }))
+        : await loadFindingsFromTable(dept, {
+            includeCompleted,
+            from,
+            to,
+            skip,
+            take: pageSize,
+          });
 
       // For completed rows, prefer snapshot fields stored on finding.
       // If an older row does not have the snapshot yet and the source AP still exists,
@@ -329,10 +464,18 @@ export async function GET(req, { params }) {
     const apModel = getAuditProgramAp(dept);
     const parentModel = getAuditProgramParent(dept);
     if (!apModel || !parentModel) {
-      const [findings, total] = await Promise.all([
-        delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
-        delegate.count({ where: whereFinding }),
-      ]);
+      const { rows: findings, total } = dbHasSnapshotFields
+        ? await Promise.all([
+            delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
+            delegate.count({ where: whereFinding }),
+          ]).then(([rows, count]) => ({ rows, total: count }))
+        : await loadFindingsFromTable(dept, {
+            includeCompleted,
+            from,
+            to,
+            skip,
+            take: pageSize,
+          });
       return NextResponse.json({ data: findings, meta: { total, page, pageSize } }, { status: 200 });
     }
 
@@ -357,19 +500,29 @@ export async function GET(req, { params }) {
         include: { aps: true },
         orderBy: { risk_id: "asc" },
       }),
-      delegate.findMany({ where: whereFinding, orderBy: { id: "desc" } }),
+      dbHasSnapshotFields
+        ? delegate.findMany({ where: whereFinding, orderBy: { id: "desc" } })
+        : loadFindingsFromTable(dept, {
+            includeCompleted: false,
+            from,
+            to,
+            skip: 0,
+            take: 10000,
+          }).then((result) => result.rows),
       // Temukan semua finding yang sudah COMPLETED untuk menyembunyikannya dari layar kerja (kecuali include_completed=true)
       includeCompleted
         ? Promise.resolve([])
-        : delegate.findMany({
-            where: {
-              completion_status: {
-                equals: "COMPLETED",
-                mode: "insensitive",
+        : dbHasSnapshotFields
+          ? delegate.findMany({
+              where: {
+                completion_status: {
+                  equals: "COMPLETED",
+                  mode: "insensitive",
+                },
               },
-            },
-            select: { risk_id: true, ap_code: true },
-          }),
+              select: { risk_id: true, ap_code: true },
+            })
+          : loadCompletedFindingKeysFromTable(dept),
     ]);
 
     const findingByKey = new Map();
