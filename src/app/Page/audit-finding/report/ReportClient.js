@@ -25,6 +25,32 @@ export default function ReportClient({ initialData = [] }) {
       return "-";
     }
   }, [dateFormatCache]);
+  const reportColumns = useMemo(
+    () => [
+      { key: "department", header: "Department", accessor: (row) => row.department || "-", align: "text-left", className: "whitespace-nowrap" },
+      { key: "risk_id", header: "Risk ID", accessor: (row) => row.risk_id || "-", align: "text-center", className: "whitespace-nowrap" },
+      { key: "risk_description", header: "Risk Description", accessor: (row) => row.risk_description || "-", align: "text-left", wrap: true },
+      { key: "risk_details", header: "Risk Details", accessor: (row) => row.risk_details || "-", align: "text-left", wrap: true },
+      { key: "owners", header: "Owner", accessor: (row) => row.owners || "-", align: "text-left", wrap: true },
+      { key: "ap_code", header: "AP Code", accessor: (row) => row.ap_code || "-", align: "text-center", className: "whitespace-nowrap" },
+      { key: "substantive_test", header: "Substantive Test", accessor: (row) => row.substantive_test || "-", align: "text-left", wrap: true },
+      { key: "objective", header: "Objective", accessor: (row) => row.objective || "-", align: "text-left", wrap: true },
+      { key: "procedures", header: "Procedures", accessor: (row) => row.procedures || "-", align: "text-left", wrap: true },
+      { key: "method", header: "Method", accessor: (row) => row.method || "-", align: "text-left", wrap: true },
+      { key: "description", header: "Description", accessor: (row) => row.description || "-", align: "text-left", wrap: true },
+      { key: "application", header: "Application", accessor: (row) => row.application || "-", align: "text-left", wrap: true },
+      { key: "risk", header: "Risk", accessor: (row) => (row.risk !== undefined && row.risk !== null && row.risk !== "" ? String(row.risk) : "-"), align: "text-center" },
+      { key: "check_yn", header: "Check (Y/N)", accessor: (row) => row.check_yn || "-", align: "text-center", className: "whitespace-nowrap" },
+      { key: "preparer", header: "Preparer", accessor: (row) => row.preparer || "-", align: "text-left", wrap: true },
+      { key: "finding_result", header: "Finding Result", accessor: (row) => row.finding_result || "-", align: "text-left", wrap: true },
+      { key: "finding_description", header: "Finding Description", accessor: (row) => row.finding_description || "-", align: "text-left", wrap: true },
+      { key: "recommendation", header: "Recommendation", accessor: (row) => row.recommendation || "-", align: "text-left", wrap: true },
+      { key: "auditee", header: "Auditee", accessor: (row) => row.auditee || "-", align: "text-left", wrap: true },
+      { key: "completion_status", header: "Completion Status", accessor: (row) => row.completion_status || "-", align: "text-left", className: "whitespace-nowrap" },
+      { key: "completion_date", header: "Completion Date", accessor: (row) => formatDate(row.completion_date), align: "text-center", className: "whitespace-nowrap" },
+    ],
+    [formatDate]
+  );
 
   // Group data by department (dan di dalamnya masih dipisah per audit period)
   const groupedByDepartment = useMemo(() => {
@@ -79,65 +105,23 @@ export default function ReportClient({ initialData = [] }) {
         key={`${row.department}-${row.id || idx}`}
         className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}
       >
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-          {formatDate(row.fieldwork_start)}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-          {formatDate(row.fieldwork_end)}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-          {formatDate(row.period_start)}
-        </td>
-        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-          {formatDate(row.period_end)}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left whitespace-nowrap">
-          {row.department || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-          {row.risk_id || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left align-top break-words" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
-          {row.risk_details || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center">
-          {row.risk || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-          {row.ap_code || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
-          {row.substantive_test || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-center">
-          {row.check_yn || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
-          {row.method || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">
-          {row.preparer || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left bg-green-50">
-          {row.finding_result || "-"}
-        </td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left bg-green-50">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left bg-yellow-50">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left bg-yellow-50">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left bg-yellow-50">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">-</td>
-        <td className="px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 text-left">
-          {row.completion_status || "-"}
-        </td>
+        {reportColumns.map((column) => (
+          <td
+            key={column.key}
+            className={`px-2.5 py-1.5 text-[11px] text-gray-800 border border-gray-200 align-top ${column.align || "text-left"} ${column.className || ""}`}
+            style={
+              column.wrap
+                ? { overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }
+                : undefined
+            }
+            title={column.wrap ? column.accessor(row) : undefined}
+          >
+            {column.accessor(row)}
+          </td>
+        ))}
       </tr>
     ));
-  }, [deferredSelectedRows, formatDate]);
+  }, [deferredSelectedRows, reportColumns]);
 
   const openModal = (deptName, periodKey) => {
     setSelectedGroup({ deptName, periodKey });
@@ -157,63 +141,14 @@ export default function ReportClient({ initialData = [] }) {
   }, []);
 
   const exportRowsToExcel = (rows, filenameSuffix = "All", periodStart = null, periodEnd = null) => {
-    const headers = [
-      "Audit Fieldwork Start",
-      "Audit Fieldwork End",
-      "Audit Period Start",
-      "Audit Period End",
-      "Department",
-      "Risk Sheet",
-      "Risk ID",
-      "Risk Detail",
-      "Risk Level",
-      "Risk Value",
-      "Audit Program Sheet",
-      "Audit Program No (AP No.)",
-      "Substantive Test Conduct",
-      "WP Sheet",
-      "Risk Audit Check",
-      "Sampling Method",
-      "Preparer",
-      "Finding Result",
-      "Finding Status",
-      "Working Paper Sheet Reference",
-      "Working Paper Status",
-      "Working Paper Date",
-      "Evidence Sheet Reference",
-      "Evidence Status",
-      "Reviewer Status",
-      "Follow Up Status",
-    ];
+    const headers = reportColumns.map((column) => column.header);
 
-    const excelRows = rows.map((row) => ({
-      "Audit Fieldwork Start": formatDate(row.fieldwork_start),
-      "Audit Fieldwork End": formatDate(row.fieldwork_end),
-      "Audit Period Start": formatDate(row.period_start),
-      "Audit Period End": formatDate(row.period_end),
-      Department: row.department || "-",
-      "Risk Sheet": "-",
-      "Risk ID": row.risk_id || "-",
-      "Risk Detail": row.risk_details || "-",
-      "Risk Level": "-",
-      "Risk Value": row.risk || "-",
-      "Audit Program Sheet": "-",
-      "Audit Program No (AP No.)": row.ap_code || "-",
-      "Substantive Test Conduct": row.substantive_test || "-",
-      "WP Sheet": "-",
-      "Risk Audit Check": row.check_yn || "-",
-      "Sampling Method": row.method || "-",
-      Preparer: row.preparer || "-",
-      "Finding Result": row.finding_result || "-",
-      "Finding Status": "-",
-      "Working Paper Sheet Reference": "-",
-      "Working Paper Status": "-",
-      "Working Paper Date": "-",
-      "Evidence Sheet Reference": "-",
-      "Evidence Status": "-",
-      "Reviewer Status": "-",
-      "Follow Up Status": row.completion_status || "-",
-    }));
+    const excelRows = rows.map((row) =>
+      reportColumns.reduce((acc, column) => {
+        acc[column.header] = column.accessor(row);
+        return acc;
+      }, {})
+    );
 
     // Gunakan util umum exportToStyledExcel (data, columns, status, componentName, date, periodStart, periodEnd)
     exportToStyledExcel(
@@ -246,19 +181,7 @@ export default function ReportClient({ initialData = [] }) {
 
     const headerHtml = `
       <tr>
-        <th>Audit Fieldwork Start</th>
-        <th>Audit Fieldwork End</th>
-        <th>Audit Period Start</th>
-        <th>Audit Period End</th>
-        <th>Department</th>
-        <th>Risk ID</th>
-        <th>Risk Detail</th>
-        <th>Risk Value</th>
-        <th>AP No.</th>
-        <th>Substantive Test Conduct</th>
-        <th>Preparer</th>
-        <th>Finding Result</th>
-        <th>Follow Up Status</th>
+        ${reportColumns.map((column) => `<th>${column.header}</th>`).join("")}
       </tr>
     `;
 
@@ -266,19 +189,7 @@ export default function ReportClient({ initialData = [] }) {
       .map((row) => {
         return `
           <tr>
-            <td>${formatDate(row.fieldwork_start)}</td>
-            <td>${formatDate(row.fieldwork_end)}</td>
-            <td>${formatDate(row.period_start)}</td>
-            <td>${formatDate(row.period_end)}</td>
-            <td>${row.department || "-"}</td>
-            <td>${row.risk_id || "-"}</td>
-            <td>${row.risk_details || "-"}</td>
-            <td>${row.risk ?? "-"}</td>
-            <td>${row.ap_code || "-"}</td>
-            <td>${row.substantive_test || "-"}</td>
-            <td>${row.preparer || "-"}</td>
-            <td>${row.finding_result || "-"}</td>
-            <td>${row.completion_status || "-"}</td>
+            ${reportColumns.map((column) => `<td>${column.accessor(row)}</td>`).join("")}
           </tr>
         `;
       })
@@ -328,7 +239,7 @@ export default function ReportClient({ initialData = [] }) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">AUDIT FINDING REPORT</h1>
-              <p className="text-gray-600 mt-1">Comprehensive audit finding report with 24 columns</p>
+              <p className="text-gray-600 mt-1">Report columns now follow the audit finding table data.</p>
             </div>
           </div>
         </div>
@@ -449,66 +360,23 @@ export default function ReportClient({ initialData = [] }) {
 
               {/* Modal Content */}
               <div className="flex-1 overflow-auto p-4 bg-slate-50">
+                <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                  <span className="font-semibold">Audit period:</span> {formatDate(periodGroup.period_start)} - {formatDate(periodGroup.period_end)}
+                  <span className="mx-2 text-blue-300">|</span>
+                  <span className="font-semibold">Published date:</span> {formatDate(periodGroup.data?.[0]?.fieldwork_end)}
+                </div>
                 <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <table className="min-w-[1300px] w-full border-collapse text-xs">
+                  <table className="min-w-[2200px] w-full border-collapse text-xs">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th colSpan={2} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">
-                          Audit Fieldwork
-                        </th>
-                        <th colSpan={2} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">
-                          Audit Period
-                        </th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Department</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Risk Sheet</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Risk ID</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200">Risk Detail</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Risk Level</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Risk Value</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Audit Program Sheet</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Audit Program No (AP No.)</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200">Substantive Test Conduct</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">WP Sheet</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Risk Audit Check</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Sampling Method</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200">Preparer</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 bg-green-50 whitespace-nowrap">Finding Result</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 bg-green-50 whitespace-nowrap">Finding Status</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 bg-yellow-50 whitespace-nowrap">Working Paper Sheet Reference</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 bg-yellow-50 whitespace-nowrap">Working Paper Status</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 bg-yellow-50 whitespace-nowrap">Working Paper Date</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Evidence Sheet Reference</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Evidence Status</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Reviewer Status</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">Follow Up Status</th>
-                      </tr>
-                      <tr className="bg-gray-100">
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">Start</th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">End</th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">Start</th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50">End</th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-green-50"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-green-50"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-yellow-50"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-yellow-50"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-yellow-50"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
-                        <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200"></th>
+                        {reportColumns.map((column) => (
+                          <th
+                            key={column.key}
+                            className="px-3 py-2 text-center text-[11px] font-semibold text-gray-700 border border-gray-200"
+                          >
+                            {column.header}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>{modalTableRows}</tbody>

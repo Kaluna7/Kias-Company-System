@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Prisma engine partial downloads (Windows)
+src/generated/prisma/*.tmp*

@@ -174,12 +174,12 @@ export default function MisClient({ initialData, initialSortBy = "risk_id_no", i
   };
 
   const listFormAp = [
-    { label: "Substantive Test", placeholder: "Masukkan tes substantif" },
-    { label: "Objective", placeholder: "Masukkan tujuan AP" },
-    { label: "Procedures", placeholder: "Jelaskan prosedur (bisa multiline)" },
-    { label: "Method", placeholder: "Metode sampling / pengujian" },
-    { label: "Description", placeholder: "Deskripsi singkat" },
-    { label: "Application", placeholder: "Aplikasi / sistem terkait" },
+    { label: "Substantive Test", placeholder: "Enter substantive test" },
+    { label: "Objective", placeholder: "Enter AP objective" },
+    { label: "Procedures", placeholder: "Describe procedures (multiline allowed)" },
+    { label: "Method", placeholder: "Sampling/testing method" },
+    { label: "Description", placeholder: "Short description" },
+    { label: "Application", placeholder: "Related application/system" },
   ];
 
   const labelToKeyAp = {
