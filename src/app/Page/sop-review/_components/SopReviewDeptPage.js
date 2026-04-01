@@ -173,6 +173,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const isSavingDraftRef = useRef(false);
   const lastSavedDataRef = useRef(null);
   const isPublishingRef = useRef(false);
+  /** Latest schedule fields for merging into meta on load — avoids refetch when schedule finishes after first paint (was clobbering preparer/reviewer edits). */
+  const scheduleForMergeRef = useRef({ name: "", date: "" });
+  useEffect(() => {
+    scheduleForMergeRef.current = {
+      name: schedulePreparerName || "",
+      date: schedulePreparerDate || "",
+    };
+  }, [schedulePreparerName, schedulePreparerDate]);
 
   const reindex = (list) => list.map((item, idx) => ({ ...item, no: idx + 1 }));
 
@@ -333,6 +341,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         }
 
         // Load and set meta data, then update lastSavedDataRef
+        const sch = scheduleForMergeRef.current;
         if (metaRes.ok && Array.isArray(metaJson?.rows) && metaJson.rows.length > 0) {
           const latest = metaJson.rows[0];
           if (mounted) {
@@ -342,16 +351,16 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             // Schedule data takes priority for preparer (already set in schedule useEffect)
             // IMPORTANT: Only use meta data if schedule data is NOT available
             // If schedule per module has start_date, it should always be used
-            if (!schedulePreparerName) {
+            if (!sch.name) {
               setPreparerName(latest.preparer_name || "");
             }
             // CRITICAL: Schedule per module start_date ALWAYS takes priority over meta data
             // Only use meta preparer_date if schedule per module doesn't have start_date
-            if (schedulePreparerDate) {
+            if (sch.date) {
               // Schedule per module has start_date, ALWAYS use it (override meta)
-              console.log(`[SOP Review] Schedule per module start_date found: ${schedulePreparerDate}, ALWAYS using it instead of meta`);
+              console.log(`[SOP Review] Schedule per module start_date found: ${sch.date}, ALWAYS using it instead of meta`);
               // Force update preparerDate from schedule per module
-              setPreparerDate(schedulePreparerDate);
+              setPreparerDate(sch.date);
             } else {
               // No schedule per module start_date, use meta as fallback
               let preparerDateStr = "";
@@ -386,8 +395,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           // Update last saved data reference after loading all data
           // This ensures auto-save doesn't trigger on initial load
           // IMPORTANT: Use schedule per module date if available (it takes priority)
-          const finalPreparerDate = schedulePreparerDate || (latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "");
-          const finalPreparerName = schedulePreparerName || latest.preparer_name || "";
+          const finalPreparerDate = sch.date || (latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "");
+          const finalPreparerName = sch.name || latest.preparer_name || "";
           const loadedData = {
             sopData: loadedSopData,
             reviewerStatus: latest.reviewer_status || "DRAFT",
@@ -403,8 +412,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           console.error("Load meta failed:", rawMeta);
           // Even if meta load fails, update lastSavedDataRef with current state
           // Use schedule per module date if available
-          const finalPreparerDate = schedulePreparerDate || "";
-          const finalPreparerName = schedulePreparerName || "";
+          const finalPreparerDate = sch.date || "";
+          const finalPreparerName = sch.name || "";
           const loadedData = {
             sopData: loadedSopData,
             reviewerStatus: "DRAFT",
@@ -425,17 +434,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         if (mounted) setIsLoading(false);
       }
     }
-    // Only fetch rows after schedule data is loaded (to ensure schedule takes priority)
-    // Add a small delay to ensure schedule useEffect has completed
-    const timeoutId = setTimeout(() => {
-      fetchRows();
-    }, 100);
-    
+    // Fetch once per dept/year. Do NOT depend on schedule fields — when schedule API
+    // resolved later it used to re-run this effect and reset preparer/reviewer status from stale DB.
+    fetchRows();
+
     return () => {
       mounted = false;
-      clearTimeout(timeoutId);
     };
-  }, [apiPath, schedulePreparerName, schedulePreparerDate, auditYear]);
+  }, [apiPath, auditYear]);
   
   // Ensure schedule per module date is always used (even after meta data loads or user tries to change it)
   // This useEffect runs whenever schedulePreparerDate changes and ensures it overrides any meta data or user changes
@@ -620,7 +626,18 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         clearTimeout(saveDraftTimeoutRef.current);
       }
     };
-  }, [deferredSopData, isLoading, saveDraft, reviewerStatus, reviewerName, reviewerDate, reviewerComment]);
+  }, [
+    deferredSopData,
+    isLoading,
+    saveDraft,
+    preparerStatus,
+    preparerName,
+    preparerDate,
+    reviewerStatus,
+    reviewerName,
+    reviewerDate,
+    reviewerComment,
+  ]);
 
   const handleSidebarSaveDraft = (sidebarData) => {
     try {
