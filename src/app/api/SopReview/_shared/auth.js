@@ -42,13 +42,45 @@ export async function requireReviewer() {
 }
 
 /**
+ * Publish SOP Review to the report: reviewer or admin only.
+ */
+export async function requireSopPublisher() {
+  try {
+    const session = await getServerSession(authOptions);
+    const role = (session?.user?.role || "").toLowerCase();
+
+    if (!session?.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
+    if (role !== "reviewer" && role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: only reviewer or admin can publish" },
+        { status: 403 },
+      );
+    }
+
+    return null;
+  } catch (err) {
+    console.error("requireSopPublisher error:", err);
+    return NextResponse.json(
+      { success: false, error: "Auth error" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
  * Allow SOP editors (preparer / reviewer / admin) to change drafts:
  * - role "user" (preparer)
  * - role "reviewer"
  * - role "admin"
  *
  * Used for: saving SOP steps, meta (preparer/reviewer), audit period, etc.
- * Final publish still uses requireReviewer().
+ * Final publish uses requireSopPublisher().
  */
 export async function requireSopEditor() {
   try {
