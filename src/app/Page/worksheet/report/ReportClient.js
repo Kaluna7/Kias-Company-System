@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { displayWorksheetAuditArea } from "@/app/data/worksheetAuditAreaTree";
 
 export default function ReportClient({ initialData = [] }) {
   const [data, setData] = useState(initialData);
@@ -128,8 +129,11 @@ export default function ReportClient({ initialData = [] }) {
                   </td>
 
                   {/* Audit Area */}
-                  <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                    {row.audit_area || row.auditArea || "-"}
+                  <td
+                    className="p-1 text-xs text-gray-800 border border-gray-200 text-center max-w-[140px] truncate align-top"
+                    title={row.audit_area || row.auditArea || ""}
+                  >
+                    {displayWorksheetAuditArea(row.audit_area || row.auditArea)}
                   </td>
 
                   {/* Action - View button */}
@@ -216,7 +220,9 @@ export default function ReportClient({ initialData = [] }) {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Audit Area</div>
-                    <div className="text-sm">{selectedRow.audit_area || selectedRow.auditArea || "-"}</div>
+                    <div className="text-sm break-words">
+                      {displayWorksheetAuditArea(selectedRow.audit_area || selectedRow.auditArea)}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -1,4 +1,9 @@
 import { PrismaClient } from "@/generated/prisma";
+import {
+  buildWorksheetFindManyWhere,
+  buildDraftWhereClause,
+  yearCreatedAtFilter,
+} from "../_shared/worksheetWhere";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -6,15 +11,7 @@ if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 export async function GET(req) {
   try {
     const url = new URL(req?.url || "", "http://localhost");
-    const yearParam = url.searchParams.get("year");
-    const year = yearParam ? parseInt(yearParam, 10) : null;
-
-    const where = { department: "OPERATIONAL" };
-    if (!Number.isNaN(year) && year) {
-      const from = new Date(year, 0, 1);
-      const to = new Date(year + 1, 0, 1);
-      where.created_at = { gte: from, lt: to };
-    }
+    const where = buildWorksheetFindManyWhere("OPERATIONAL", url.searchParams);
 
     const rows = await prisma.worksheet_finance.findMany({
       where,
@@ -45,11 +42,22 @@ export async function POST(req) {
         reviewer_date: body.reviewerDate ? new Date(body.reviewerDate) : null,
         status_documents: body.statusDocuments || null,
         status_worksheet: body.statusWorksheet || "IN PROGRESS",
-        status_wp: (body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null),
+        status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null,
         file_path: body.filePath || null,
         audit_area: body.auditArea || null,
+        published_to_report: true,
       },
     });
+
+    const yf = yearCreatedAtFilter(body.year);
+    const delWhere = {
+      department: created.department,
+      id: { not: created.id },
+      published_to_report: false,
+    };
+    if (yf) delWhere.created_at = yf;
+    await prisma.worksheet_finance.deleteMany({ where: delWhere });
+
     await prisma.worksheet_finance.update({
       where: { id: created.id },
       data: { status_wp: null },
@@ -70,8 +78,11 @@ export async function POST(req) {
 export async function PATCH(req) {
   try {
     const body = await req.json();
+    const url = new URL(req?.url || "", "http://localhost");
+    const draftWhere = buildDraftWhereClause("OPERATIONAL", url.searchParams.get("year"));
+
     const latest = await prisma.worksheet_finance.findFirst({
-      where: { department: "OPERATIONAL" },
+      where: draftWhere,
       orderBy: { created_at: "desc" },
     });
     if (latest) {
@@ -81,7 +92,11 @@ export async function PATCH(req) {
       });
     } else {
       await prisma.worksheet_finance.create({
-        data: { department: "OPERATIONAL", status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null },
+        data: {
+          department: "OPERATIONAL",
+          status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null,
+          published_to_report: false,
+        },
       });
     }
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -90,4 +105,3 @@ export async function PATCH(req) {
     return new Response(JSON.stringify({ success: false, error: err.message ?? "Server error" }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
-

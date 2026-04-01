@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import {
   WORKSHEET_AUDIT_AREA_TREE,
+  WORKSHEET_AUDIT_AREA_ALL_LABEL,
+  displayWorksheetAuditArea,
   flattenAuditAreaTree,
 } from "@/app/data/worksheetAuditAreaTree";
 
@@ -73,6 +75,7 @@ function pickLatestRowFields(latest) {
     reviewerDate: toDateInputValue(rr),
     statusWP: latest.status_wp ?? latest.statusWP ?? "",
     filePath: latest.file_path ?? latest.filePath ?? "",
+    auditAreaRaw: latest.audit_area ?? latest.auditArea ?? "",
   };
 }
 
@@ -135,12 +138,15 @@ export default function WorksheetDeptPage({
     allAuditPaths.length > 0 && allAuditPaths.every((p) => selectedAuditPaths.has(p));
 
   const auditAreaSerialized = useMemo(() => {
+    if (allAuditPaths.length > 0 && selectedAuditPaths.size === allAuditPaths.length) {
+      return WORKSHEET_AUDIT_AREA_ALL_LABEL;
+    }
     const labels = Array.from(selectedAuditPaths)
       .map((p) => pathToLabel.get(p))
       .filter(Boolean);
     labels.sort((a, b) => a.localeCompare(b));
     return labels.join("; ");
-  }, [selectedAuditPaths, pathToLabel]);
+  }, [selectedAuditPaths, pathToLabel, allAuditPaths.length, selectedAuditPaths.size]);
 
   const [auditAreaModalOpen, setAuditAreaModalOpen] = useState(false);
 
@@ -163,6 +169,9 @@ export default function WorksheetDeptPage({
   }, [auditAreaModalOpen]);
 
   const auditAreaTriggerLabel = useMemo(() => {
+    if (allAuditPaths.length > 0 && selectedAuditPaths.size === allAuditPaths.length) {
+      return WORKSHEET_AUDIT_AREA_ALL_LABEL;
+    }
     const n = selectedAuditPaths.size;
     if (n === 0) return "- Select audit area -";
     if (n === 1) {
@@ -170,7 +179,7 @@ export default function WorksheetDeptPage({
       return pathToLabel.get(only) || "- Select audit area -";
     }
     return `${n} areas selected`;
-  }, [selectedAuditPaths, pathToLabel]);
+  }, [selectedAuditPaths, pathToLabel, allAuditPaths.length]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingFile, setIsDeletingFile] = useState(false);
@@ -226,6 +235,7 @@ export default function WorksheetDeptPage({
     try {
       const url = new URL(apiPath, window.location.origin);
       if (yearParam) url.searchParams.set("year", yearParam);
+      url.searchParams.set("excludePublished", "1");
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) return null;
       const data = await res.json();
@@ -240,14 +250,27 @@ export default function WorksheetDeptPage({
     (async () => {
       try {
         const latest = await fetchLatestWorksheetRow();
-        if (!latest || cancelled) return;
+        if (cancelled) return;
+        if (!latest) {
+          setStatusWP("");
+          setFilePath("");
+          setReviewer("");
+          setReviewerDate("");
+          setSelectedAuditPaths(new Set());
+          return;
+        }
         const f = pickLatestRowFields(latest);
         if (!f) return;
         setStatusWP(f.statusWP);
-        // Upload syncs file_path to DB; preload so reload and other roles see the same file.
         setFilePath(f.filePath ? String(f.filePath) : "");
         setReviewer(f.reviewer);
         setReviewerDate(f.reviewerDate);
+        const ar = String(f.auditAreaRaw ?? "").trim();
+        if (ar && displayWorksheetAuditArea(ar) === WORKSHEET_AUDIT_AREA_ALL_LABEL) {
+          setSelectedAuditPaths(new Set(allAuditPaths));
+        } else {
+          setSelectedAuditPaths(new Set());
+        }
       } catch (_) {
         // Ignore initial load failures and keep the form usable.
       }
@@ -255,11 +278,13 @@ export default function WorksheetDeptPage({
     return () => {
       cancelled = true;
     };
-  }, [fetchLatestWorksheetRow]);
+  }, [fetchLatestWorksheetRow, allAuditPaths]);
 
   const saveStatusWP = async (value) => {
     try {
-      const res = await fetch(apiPath, {
+      const u = new URL(apiPath, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+      if (yearParam) u.searchParams.set("year", yearParam);
+      const res = await fetch(u.toString(), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ statusWP: value }),
@@ -364,6 +389,7 @@ export default function WorksheetDeptPage({
           statusWP,
           filePath,
           auditArea: auditAreaSerialized,
+          year: yearParam || null,
         }),
       });
 

@@ -28,6 +28,7 @@ async function loadWorksheetReportData(year) {
       try {
         const endpoint = departmentMap[dept];
         const url = new URL(`${baseUrl}${endpoint}`);
+        url.searchParams.set("publishedOnly", "1");
         if (!Number.isNaN(year) && year) {
           url.searchParams.set("year", String(year));
         }
