@@ -33,3 +33,8 @@ export async function requireWorksheetEditorSession() {
 export function isWorksheetPublisherRole(role) {
   return role === "reviewer" || role === "admin";
 }
+
+/** Reviewer name / date on worksheet: only reviewer or admin (PATCH or POST). */
+export function canEditWorksheetReviewerFields(role) {
+  return role === "reviewer" || role === "admin";
+}

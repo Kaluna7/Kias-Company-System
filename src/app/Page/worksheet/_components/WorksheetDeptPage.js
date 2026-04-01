@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
@@ -16,6 +16,18 @@ import {
   pathSetFromStoredWorksheetAuditArea,
   parseWorksheetCustomAuditAreasJson,
 } from "@/app/data/worksheetAuditAreaTree";
+import {
+  worksheetStatusWpAllowsPublish,
+  worksheetFilePathAllowsPublish,
+  worksheetAuditAreaAllowsPublish,
+  worksheetReviewerAllowsPublish,
+  worksheetReviewerDateAllowsPublish,
+  WORKSHEET_PUBLISH_REQUIRES_CHECKED_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_FILE_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_AUDIT_AREA_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_REVIEWER_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_REVIEWER_DATE_MESSAGE,
+} from "@/app/api/worksheet/_shared/worksheetPublishValidation";
 
 /** departmentValue from each worksheet page → department_id in schedule */
 const WORKSHEET_DEPT_TO_SCHEDULE_ID = {
@@ -121,6 +133,8 @@ export default function WorksheetDeptPage({
   const [customAuditEntries, setCustomAuditEntries] = useState([]);
   const [newCustomAreaInput, setNewCustomAreaInput] = useState("");
   const [isSavingCustomList, setIsSavingCustomList] = useState(false);
+  const reviewerSaveTimerRef = useRef(null);
+  const reviewerDraftRef = useRef({ reviewer: "", reviewerDate: "" });
   const auditAreaRows = useMemo(
     () => flattenAuditAreaTree(WORKSHEET_AUDIT_AREA_TREE),
     [],
@@ -174,6 +188,8 @@ export default function WorksheetDeptPage({
   }, [selectedAuditPaths, pathToLabel, allSelectablePaths]);
 
   const [auditAreaModalOpen, setAuditAreaModalOpen] = useState(false);
+  /** null = closed; blocks publish with a reason-specific dialog */
+  const [publishBlockedReason, setPublishBlockedReason] = useState(null);
 
   useEffect(() => {
     if (!auditAreaModalOpen) return;
@@ -192,6 +208,24 @@ export default function WorksheetDeptPage({
       document.body.style.overflow = prev;
     };
   }, [auditAreaModalOpen]);
+
+  useEffect(() => {
+    if (publishBlockedReason == null) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setPublishBlockedReason(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [publishBlockedReason]);
+
+  useEffect(() => {
+    if (publishBlockedReason == null) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [publishBlockedReason]);
 
   const auditAreaTriggerLabel = useMemo(() => {
     if (allSelectablePaths.length > 0 && selectedAuditPaths.size === allSelectablePaths.length) {
@@ -314,6 +348,73 @@ export default function WorksheetDeptPage({
       cancelled = true;
     };
   }, [fetchLatestWorksheetRow, auditAreaRows]);
+
+  useEffect(() => {
+    reviewerDraftRef.current = { reviewer, reviewerDate };
+  }, [reviewer, reviewerDate]);
+
+  useEffect(
+    () => () => {
+      if (reviewerSaveTimerRef.current) {
+        clearTimeout(reviewerSaveTimerRef.current);
+        reviewerSaveTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const saveReviewerFieldsPatch = useCallback(async () => {
+    if (!canEditReviewerFields) return;
+    const { reviewer: r, reviewerDate: d } = reviewerDraftRef.current;
+    try {
+      const u = new URL(apiPath, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+      u.searchParams.set("year", String(auditYear));
+      const res = await fetch(u.toString(), {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewer: r.trim() || null,
+          reviewerDate: d || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        showNotification("error", "Please sign in again to save reviewer details.");
+        return;
+      }
+      if (res.status === 403) {
+        showNotification("error", data?.error || "Access denied.");
+        return;
+      }
+      if (!data.success) {
+        showNotification("error", data?.error || "Failed to save reviewer details.");
+        return;
+      }
+      showNotification("success", "Reviewer and reviewer date saved.");
+    } catch {
+      showNotification("error", "Failed to save reviewer details.");
+    }
+  }, [canEditReviewerFields, apiPath, auditYear]);
+
+  const scheduleReviewerFieldsSave = useCallback(() => {
+    if (!canEditReviewerFields) return;
+    if (reviewerSaveTimerRef.current) clearTimeout(reviewerSaveTimerRef.current);
+    reviewerSaveTimerRef.current = setTimeout(() => {
+      reviewerSaveTimerRef.current = null;
+      saveReviewerFieldsPatch();
+    }, 550);
+  }, [canEditReviewerFields, saveReviewerFieldsPatch]);
+
+  /** If a debounced save is pending, run it immediately (avoids double PATCH when debounce already ran). */
+  const flushReviewerFieldsSave = useCallback(() => {
+    if (!canEditReviewerFields) return;
+    if (reviewerSaveTimerRef.current) {
+      clearTimeout(reviewerSaveTimerRef.current);
+      reviewerSaveTimerRef.current = null;
+      saveReviewerFieldsPatch();
+    }
+  }, [canEditReviewerFields, saveReviewerFieldsPatch]);
 
   const saveStatusWP = async (value) => {
     try {
@@ -612,6 +713,26 @@ export default function WorksheetDeptPage({
         showNotification("error", data?.error || "Access denied.");
         return;
       }
+      if (response.status === 400 && data?.error === WORKSHEET_PUBLISH_REQUIRES_FILE_MESSAGE) {
+        setPublishBlockedReason("no_file");
+        return;
+      }
+      if (response.status === 400 && data?.error === WORKSHEET_PUBLISH_REQUIRES_CHECKED_MESSAGE) {
+        setPublishBlockedReason("status_wp");
+        return;
+      }
+      if (response.status === 400 && data?.error === WORKSHEET_PUBLISH_REQUIRES_AUDIT_AREA_MESSAGE) {
+        setPublishBlockedReason("audit_area");
+        return;
+      }
+      if (response.status === 400 && data?.error === WORKSHEET_PUBLISH_REQUIRES_REVIEWER_MESSAGE) {
+        setPublishBlockedReason("reviewer");
+        return;
+      }
+      if (response.status === 400 && data?.error === WORKSHEET_PUBLISH_REQUIRES_REVIEWER_DATE_MESSAGE) {
+        setPublishBlockedReason("reviewer_date");
+        return;
+      }
       if (!data.success) {
         showNotification("error", `Publish failed: ${data.error || "Unknown error."}`);
         return;
@@ -631,6 +752,30 @@ export default function WorksheetDeptPage({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const onPublishClick = () => {
+    if (!worksheetFilePathAllowsPublish(filePath)) {
+      setPublishBlockedReason("no_file");
+      return;
+    }
+    if (!worksheetStatusWpAllowsPublish(statusWP)) {
+      setPublishBlockedReason("status_wp");
+      return;
+    }
+    if (!worksheetAuditAreaAllowsPublish(auditAreaSerialized)) {
+      setPublishBlockedReason("audit_area");
+      return;
+    }
+    if (!worksheetReviewerAllowsPublish(reviewer)) {
+      setPublishBlockedReason("reviewer");
+      return;
+    }
+    if (!worksheetReviewerDateAllowsPublish(reviewerDate)) {
+      setPublishBlockedReason("reviewer_date");
+      return;
+    }
+    void handlePublish();
   };
 
   return (
@@ -783,12 +928,21 @@ export default function WorksheetDeptPage({
                   <input
                     type="text"
                     value={reviewer}
-                    onChange={(e) => setReviewer(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setReviewer(v);
+                      reviewerDraftRef.current = { ...reviewerDraftRef.current, reviewer: v };
+                      scheduleReviewerFieldsSave();
+                    }}
+                    onBlur={flushReviewerFieldsSave}
                     className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter reviewer name"
                     disabled={!canEditReviewerFields}
                     title={!canEditReviewerFields ? "Only admin or reviewer can edit this field" : undefined}
                   />
+                  {canEditReviewerFields && (
+                    <p className="mt-1 text-xs text-slate-500">Saved automatically after you type or change the date.</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -830,7 +984,13 @@ export default function WorksheetDeptPage({
                     <input
                       type="date"
                       value={reviewerDate}
-                      onChange={(e) => setReviewerDate(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setReviewerDate(v);
+                        reviewerDraftRef.current = { ...reviewerDraftRef.current, reviewerDate: v };
+                        scheduleReviewerFieldsSave();
+                      }}
+                      onBlur={flushReviewerFieldsSave}
                       className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       disabled={!canEditReviewerFields}
                       title={!canEditReviewerFields ? "Only admin or reviewer can edit this field" : undefined}
@@ -912,7 +1072,7 @@ export default function WorksheetDeptPage({
                 {canPublish && (
                   <button
                     type="button"
-                    onClick={handlePublish}
+                    onClick={onPublishClick}
                     disabled={isSaving}
                     className="px-6 py-2.5 bg-[#141D38] hover:bg-[#141D38]/90 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
@@ -1059,6 +1219,74 @@ export default function WorksheetDeptPage({
                 className="flex-1 rounded-lg bg-[#141D38] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#141D38]/90 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSavingAuditArea ? "Saving…" : "Done"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {publishBlockedReason != null && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="publish-blocked-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
+            onClick={() => setPublishBlockedReason(null)}
+            aria-label="Close dialog"
+          />
+          <div className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:rounded-xl">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+              <h2
+                id="publish-blocked-title"
+                className="text-base font-bold uppercase tracking-wide text-gray-900"
+              >
+                Cannot publish
+              </h2>
+              <button
+                type="button"
+                onClick={() => setPublishBlockedReason(null)}
+                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-slate-100 hover:text-gray-800"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-4 py-4 text-sm text-gray-700">
+              {publishBlockedReason === "no_file" && (
+                <p>{WORKSHEET_PUBLISH_REQUIRES_FILE_MESSAGE}</p>
+              )}
+              {publishBlockedReason === "status_wp" && (
+                <>
+                  <p className="mb-3">{WORKSHEET_PUBLISH_REQUIRES_CHECKED_MESSAGE}</p>
+                  <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-800">
+                    <span className="font-semibold text-slate-600">Current Status WP:</span>{" "}
+                    {String(statusWP ?? "").trim() ? statusWP : "(empty)"}
+                  </p>
+                </>
+              )}
+              {publishBlockedReason === "audit_area" && (
+                <p>{WORKSHEET_PUBLISH_REQUIRES_AUDIT_AREA_MESSAGE}</p>
+              )}
+              {publishBlockedReason === "reviewer" && (
+                <p>{WORKSHEET_PUBLISH_REQUIRES_REVIEWER_MESSAGE}</p>
+              )}
+              {publishBlockedReason === "reviewer_date" && (
+                <p>{WORKSHEET_PUBLISH_REQUIRES_REVIEWER_DATE_MESSAGE}</p>
+              )}
+            </div>
+            <div className="flex shrink-0 border-t border-gray-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => setPublishBlockedReason(null)}
+                className="flex-1 rounded-lg bg-[#141D38] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#141D38]/90"
+              >
+                OK
               </button>
             </div>
           </div>

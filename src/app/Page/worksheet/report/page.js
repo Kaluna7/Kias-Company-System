@@ -1,6 +1,25 @@
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import ReportClient from "./ReportClient";
 
+export const dynamic = "force-dynamic";
+
+async function loadWorksheetScheduleModule(baseUrl, year) {
+  try {
+    const url = new URL(`${baseUrl}/api/schedule/module`);
+    url.searchParams.set("module", "worksheet");
+    if (year != null && !Number.isNaN(year)) {
+      url.searchParams.set("year", String(year));
+    }
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    const json = await res.json().catch(() => ({}));
+    if (json.success && Array.isArray(json.rows)) return json.rows;
+    return [];
+  } catch (err) {
+    console.warn("Worksheet report: schedule module fetch failed:", err?.message);
+    return [];
+  }
+}
+
 async function loadWorksheetReportData(year) {
   try {
     const baseUrl = getInternalFetchBaseUrl();
@@ -87,8 +106,18 @@ export default async function WorksheetReportPage({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
   const year = yearParam ? parseInt(yearParam, 10) : null;
+  const baseUrl = getInternalFetchBaseUrl();
 
-  const initialData = await loadWorksheetReportData(year);
-  
-  return <ReportClient initialData={initialData} />;
+  const [initialData, scheduleRows] = await Promise.all([
+    loadWorksheetReportData(year),
+    loadWorksheetScheduleModule(baseUrl, year),
+  ]);
+
+  return (
+    <ReportClient
+      initialData={initialData}
+      scheduleRows={scheduleRows}
+      selectedYear={year}
+    />
+  );
 }
