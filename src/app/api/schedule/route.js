@@ -37,8 +37,8 @@ async function ensureModuleTable(client) {
       module_key VARCHAR(32) NOT NULL,
       department_id VARCHAR(20) NOT NULL,
       department_name VARCHAR(255),
-      user_id VARCHAR(64),
-      user_name VARCHAR(255),
+      user_id TEXT,
+      user_name TEXT,
       is_configured BOOLEAN NOT NULL DEFAULT FALSE,
       start_date DATE NOT NULL,
       end_date DATE NOT NULL,
@@ -49,6 +49,12 @@ async function ensureModuleTable(client) {
     );
   `);
   await client.query(`ALTER TABLE public.schedule_module_feedback ADD COLUMN IF NOT EXISTS is_configured BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await client.query(
+    `ALTER TABLE public.schedule_module_feedback ALTER COLUMN user_id TYPE TEXT USING (user_id::text)`
+  );
+  await client.query(
+    `ALTER TABLE public.schedule_module_feedback ALTER COLUMN user_name TYPE TEXT USING (user_name::text)`
+  );
 }
 
 async function migrateLegacyIfNeeded(client) {
