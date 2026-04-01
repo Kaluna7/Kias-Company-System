@@ -233,8 +233,9 @@ async function SopReviewGrid({ yearParam }) {
 
   const isDepartmentEnabled = (deptName) => {
     if (deptName === "Report") return true;
+    if (isAdmin) return true;
     if (!hasSopScheduleForCard(deptName)) return false;
-    if (isPrivileged) return true;
+    if (isReviewer) return true;
     if (allowedDepartments.length === 0) return false;
     // Normalize department name for matching
     const normalized = normalizeDeptName(deptName);

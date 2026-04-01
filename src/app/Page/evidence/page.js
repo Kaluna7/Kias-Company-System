@@ -97,8 +97,9 @@ export default async function Evidence({ searchParams }) {
   };
 
   const isDepartmentEnabled = (deptName) => {
+    if (isAdmin) return true;
     if (!hasEvidenceScheduleForDept(deptName)) return false;
-    if (isAdmin || isReviewer) return true;
+    if (isReviewer) return true;
     if (allowedDepartments.length === 0) return false;
     const deptKey = getDeptKeyFromDepartmentName(deptName);
     return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));

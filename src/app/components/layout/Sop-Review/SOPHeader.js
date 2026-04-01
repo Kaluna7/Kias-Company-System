@@ -760,7 +760,8 @@ export default function SOPHeader({
                       className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={reviewerStatus}
                       onChange={(e) => onReviewerStatusChange?.(e.target.value)}
-                      disabled={isAdmin || isUser}
+                      // Reviewer + admin can edit; only preparer (user) is read-only here
+                      disabled={isUser}
                       suppressHydrationWarning
                     >
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -774,7 +775,7 @@ export default function SOPHeader({
                       placeholder="Name"
                       value={reviewerName}
                       onChange={(e) => onReviewerNameChange?.(e.target.value)}
-                      disabled={isAdmin || isUser}
+                      disabled={isUser}
                       readOnly={isUser}
                       suppressHydrationWarning
                     />
@@ -783,7 +784,7 @@ export default function SOPHeader({
                       className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={reviewerDate}
                       onChange={(e) => onReviewerDateChange?.(e.target.value)}
-                      disabled={isAdmin || isUser}
+                      disabled={isUser}
                       suppressHydrationWarning
                       readOnly={isUser}
                     />
@@ -794,7 +795,7 @@ export default function SOPHeader({
                     placeholder="Review comments..."
                     value={reviewerComment}
                     onChange={(e) => onReviewerCommentChange?.(e.target.value)}
-                    disabled={isAdmin || isUser}
+                    disabled={isUser}
                     readOnly={isUser}
                     suppressHydrationWarning
                   />
