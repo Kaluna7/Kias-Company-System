@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import { resolveSopDept } from "@/app/api/SopReview/_shared/dept";
-import { requireReviewer } from "@/app/api/SopReview/_shared/auth";
+import { requireSopPublisher } from "@/app/api/SopReview/_shared/auth";
 
 // Map apiPath to schedule department_id
 const API_PATH_TO_SCHEDULE_ID = {
@@ -124,8 +124,8 @@ async function ensureReportTables(client, slug, departmentName) {
 
 export async function POST(req, { params }) {
   try {
-    // Hanya reviewer yang boleh melakukan Publish SOP
-    const authError = await requireReviewer();
+    // Reviewer atau admin boleh Publish SOP ke Report
+    const authError = await requireSopPublisher();
     if (authError) return authError;
 
     const p = await Promise.resolve(params);

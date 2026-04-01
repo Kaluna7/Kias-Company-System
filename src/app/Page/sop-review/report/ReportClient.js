@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { jsPDF } from "jspdf";
@@ -8,7 +8,6 @@ import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { useToast } from "@/app/contexts/ToastContext";
 
 const STEP_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED"];
-const HEADER_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED", "COMPLETED"];
 
 function deepClone(obj) {
   try {
@@ -16,24 +15,6 @@ function deepClone(obj) {
   } catch {
     return obj;
   }
-}
-
-function toDateInputValue(v) {
-  if (v == null || v === "" || v === "#####" || v === "no-period") return "";
-  const s = String(v);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  if (s.includes("T")) return s.slice(0, 10);
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function groupAuditToIso(raw) {
-  if (raw == null || raw === "" || raw === "#####" || raw === "no-period") return "";
-  return toDateInputValue(raw);
 }
 
 export default function ReportClient({ initialRows = [], initialScheduleData = [], selectedYear = null }) {
@@ -56,7 +37,6 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
   const [editSnapshot, setEditSnapshot] = useState(null);
   const [savingPublished, setSavingPublished] = useState(false);
   const [deletingPublished, setDeletingPublished] = useState(false);
-  const auditInitialRef = useRef({ start: "", end: "" });
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const [periodDatePickerOpen, setPeriodDatePickerOpen] = useState(false);
@@ -285,12 +265,6 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       ...it,
       _pendingDeletedStepIds: [],
     }));
-    snap._auditPeriodStart = groupAuditToIso(snap.audit_period_start);
-    snap._auditPeriodEnd = groupAuditToIso(snap.audit_period_end);
-    auditInitialRef.current = {
-      start: snap._auditPeriodStart,
-      end: snap._auditPeriodEnd,
-    };
     setEditSnapshot(snap);
     setDetailEditing(true);
   };
@@ -299,21 +273,6 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     setDetailEditing(false);
     setEditSnapshot(null);
   };
-
-  const patchEditItemMeta = useCallback((itemIdx, patch) => {
-    setEditSnapshot((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it, i) => {
-        if (i !== itemIdx) return it;
-        const meta = { ...(it._detail?.meta || {}), ...patch };
-        return {
-          ...it,
-          _detail: { ...it._detail, meta },
-        };
-      });
-      return { ...prev, items };
-    });
-  }, []);
 
   const patchEditStep = useCallback((itemIdx, stepIdx, patch) => {
     setEditSnapshot((prev) => {
@@ -324,18 +283,6 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
         if (!steps[stepIdx]) return it;
         steps[stepIdx] = { ...steps[stepIdx], ...patch };
         return { ...it, _detail: { ...it._detail, steps } };
-      });
-      return { ...prev, items };
-    });
-  }, []);
-
-  const patchEditItemDepartment = useCallback((itemIdx, department) => {
-    setEditSnapshot((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it, i) => {
-        if (i !== itemIdx) return it;
-        const meta = { ...(it._detail?.meta || {}), department_name: department };
-        return { ...it, department, _detail: { ...it._detail, meta } };
       });
       return { ...prev, items };
     });
@@ -421,24 +368,6 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     }
     setSavingPublished(true);
     try {
-      const start = editSnapshot._auditPeriodStart || "";
-      const end = editSnapshot._auditPeriodEnd || "";
-      const init = auditInitialRef.current;
-      if (start && end && (start !== init.start || end !== init.end)) {
-        const apRes = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/audit-period`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audit_period_start: start, audit_period_end: end }),
-        });
-        const apJson = await apRes.json().catch(() => ({}));
-        if (!apRes.ok || !apJson.success) {
-          toast.show("Failed to save audit period: " + (apJson.error || apRes.status), "error");
-          setSavingPublished(false);
-          return;
-        }
-      }
-
       const updates = editSnapshot.items.map((item) => {
         const meta = { ...(item._detail?.meta || {}) };
         const metaId = meta.id;
@@ -1178,39 +1107,10 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
             <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-sm text-slate-800">
               {detailEditing && editSnapshot && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
-                  Edit mode: adjust audit period (if needed), header fields, and SOP step rows. Use <strong>Remove</strong> on a
-                  row to delete that step (saved when you click <strong>Save</strong>). Use <strong>Delete published record</strong>{" "}
-                  on a block to remove the entire publication. Click <strong>Save</strong> to apply step and header changes.
-                </div>
-              )}
-              {detailEditing && editSnapshot && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Audit Period Start</label>
-                    <input
-                      type="date"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                      value={editSnapshot._auditPeriodStart || ""}
-                      onChange={(e) =>
-                        setEditSnapshot((prev) =>
-                          prev ? { ...prev, _auditPeriodStart: e.target.value } : prev
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Audit Period End</label>
-                    <input
-                      type="date"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                      value={editSnapshot._auditPeriodEnd || ""}
-                      onChange={(e) =>
-                        setEditSnapshot((prev) =>
-                          prev ? { ...prev, _auditPeriodEnd: e.target.value } : prev
-                        )
-                      }
-                    />
-                  </div>
+                  Edit mode: only the <strong>SOP steps table</strong> below can be changed (row fields and{" "}
+                  <strong>Remove</strong> for a step). Header and audit period are read-only here; use the report list to
+                  adjust audit period if needed. Click <strong>Save</strong> to apply table changes.{" "}
+                  <strong>Delete published record</strong> removes the entire publication.
                 </div>
               )}
               {!modalDetail?.items || modalDetail.items.length === 0 ? (
@@ -1265,126 +1165,47 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 bg-white rounded-lg border border-slate-100 p-3 sm:p-4">
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Department</div>
-                              {ed ? (
-                                <input
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={item.department || ""}
-                                  onChange={(e) => patchEditItemDepartment(itemIdx, e.target.value)}
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900">{item.department || "-"}</div>
-                              )}
+                              <div className="text-sm text-slate-900">{item.department || "-"}</div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Preparer</div>
-                              {ed ? (
-                                <input
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={itemMeta.preparer_name ?? ""}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { preparer_name: e.target.value })}
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900">{itemPreparer}</div>
-                              )}
+                              <div className="text-sm text-slate-900">{itemPreparer}</div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Reviewer</div>
-                              {ed ? (
-                                <input
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={itemMeta.reviewer_name ?? ""}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_name: e.target.value })}
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900">{itemReviewer}</div>
-                              )}
+                              <div className="text-sm text-slate-900">{itemReviewer}</div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
                                 Preparer Completion Date
                               </div>
-                              {ed ? (
-                                <input
-                                  type="date"
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={toDateInputValue(itemMeta.preparer_date)}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { preparer_date: e.target.value || null })}
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900">
-                                  {item.preparer_completion_date !== "-"
-                                    ? item.preparer_completion_date
-                                    : "-"}
-                                </div>
-                              )}
+                              <div className="text-sm text-slate-900">
+                                {item.preparer_completion_date !== "-"
+                                  ? item.preparer_completion_date
+                                  : "-"}
+                              </div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">SOP Preparer Status</div>
-                              {ed ? (
-                                <select
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={itemMeta.preparer_status || "DRAFT"}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { preparer_status: e.target.value })}
-                                >
-                                  {HEADER_STATUS_OPTIONS.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <div className="text-sm text-slate-900">{itemMeta.preparer_status || "DRAFT"}</div>
-                              )}
+                              <div className="text-sm text-slate-900">{itemMeta.preparer_status || "DRAFT"}</div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">SOP Reviewer Status</div>
-                              {ed ? (
-                                <select
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={itemMeta.reviewer_status || "DRAFT"}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_status: e.target.value })}
-                                >
-                                  {HEADER_STATUS_OPTIONS.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <div className="text-sm text-slate-900">{itemMeta.reviewer_status || "DRAFT"}</div>
-                              )}
+                              <div className="text-sm text-slate-900">{itemMeta.reviewer_status || "DRAFT"}</div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Reviewer Date</div>
-                              {ed ? (
-                                <input
-                                  type="date"
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={toDateInputValue(itemMeta.reviewer_date)}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_date: e.target.value || null })}
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900">
-                                  {item.reviewer_date !== "-" ? item.reviewer_date : "-"}
-                                </div>
-                              )}
+                              <div className="text-sm text-slate-900">
+                                {item.reviewer_date !== "-" ? item.reviewer_date : "-"}
+                              </div>
                             </div>
                             <div className="md:col-span-2">
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
                                 Reviewer Comments
                               </div>
-                              {ed ? (
-                                <textarea
-                                  rows={2}
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={itemMeta.reviewer_comment ?? ""}
-                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_comment: e.target.value })}
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900 whitespace-pre-wrap">
-                                  {item.reviewer_comments || itemMeta.reviewer_comment || ""}
-                                </div>
-                              )}
+                              <div className="text-sm text-slate-900 whitespace-pre-wrap">
+                                {item.reviewer_comments || itemMeta.reviewer_comment || ""}
+                              </div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
@@ -1395,9 +1216,6 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                                   ? item.audit_period_start
                                   : "-"}
                               </div>
-                              {ed && (
-                                <p className="text-[10px] text-slate-500 mt-1">Use the Audit Period fields above to change these.</p>
-                              )}
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Audit Period End</div>
@@ -1411,50 +1229,24 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
                                 Audit Fieldwork Start
                               </div>
-                              {ed ? (
-                                <input
-                                  type="date"
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={toDateInputValue(itemMeta.audit_fieldwork_start_date)}
-                                  onChange={(e) =>
-                                    patchEditItemMeta(itemIdx, {
-                                      audit_fieldwork_start_date: e.target.value || null,
-                                    })
-                                  }
-                                />
-                              ) : (
-                                <div className="text-sm text-slate-900">
-                                  {item.audit_fieldwork_start !== "#####"
-                                    ? item.audit_fieldwork_start
-                                    : "-"}
-                                </div>
-                              )}
+                              <div className="text-sm text-slate-900">
+                                {item.audit_fieldwork_start !== "#####"
+                                  ? item.audit_fieldwork_start
+                                  : "-"}
+                              </div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Audit Fieldwork End</div>
-                              {ed ? (
-                                <input
-                                  type="date"
-                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                                  value={toDateInputValue(itemMeta.audit_fieldwork_end_date)}
-                                  onChange={(e) =>
-                                    patchEditItemMeta(itemIdx, {
-                                      audit_fieldwork_end_date: e.target.value || null,
-                                    })
-                                  }
-                                />
-                              ) : (
-                                <div
-                                  className={`text-sm ${
-                                    item.exceeds_audit_period ? "text-red-600 font-semibold" : "text-slate-900"
-                                  }`}
-                                >
-                                  {item.audit_fieldwork_end !== "#####"
-                                    ? item.audit_fieldwork_end
-                                    : "-"}
-                                  {item.exceeds_audit_period ? " ⚠️" : ""}
-                                </div>
-                              )}
+                              <div
+                                className={`text-sm ${
+                                  item.exceeds_audit_period ? "text-red-600 font-semibold" : "text-slate-900"
+                                }`}
+                              >
+                                {item.audit_fieldwork_end !== "#####"
+                                  ? item.audit_fieldwork_end
+                                  : "-"}
+                                {item.exceeds_audit_period ? " ⚠️" : ""}
+                              </div>
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Published At</div>
