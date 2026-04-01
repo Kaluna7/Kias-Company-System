@@ -56,6 +56,13 @@ export default function AuditFindingDeptClient({
   const canEditFinalStatus = isAdmin || isReviewer;
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
+  const auditYear = useMemo(() => {
+    if (yearParam != null && String(yearParam).trim() !== "") {
+      const p = parseInt(String(yearParam), 10);
+      if (Number.isFinite(p)) return p;
+    }
+    return new Date().getFullYear();
+  }, [yearParam]);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -276,7 +283,7 @@ export default function AuditFindingDeptClient({
           page: "1",
           pageSize: "1000",
         });
-        if (yearParam) params.set("year", String(yearParam));
+        params.set("year", String(auditYear));
         const res = await fetch(`/api/evidence/${encodeURIComponent(apiPath)}?${params.toString()}`);
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json?.data || !Array.isArray(json.data)) return;
@@ -319,7 +326,7 @@ export default function AuditFindingDeptClient({
     }
 
     syncCompletionStatusFromEvidence();
-  }, [apiPath, yearParam]);
+  }, [apiPath, auditYear]);
 
   // Auto-save meta data to API
   const saveMetaData = useCallback(async () => {
@@ -470,7 +477,7 @@ export default function AuditFindingDeptClient({
       setLoading(true);
       setError(null);
       const params = new URLSearchParams({ page: String(pageNum), pageSize: String(pageSize) });
-      if (yearParam) params.set("year", String(yearParam));
+      params.set("year", String(auditYear));
       const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}?${params.toString()}`, { method: "GET" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to fetch data");
@@ -524,7 +531,10 @@ export default function AuditFindingDeptClient({
           return;
         }
 
-        const res = await fetch(`/api/schedule/module?module=audit-finding`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/schedule/module?module=audit-finding&year=${encodeURIComponent(String(auditYear))}`,
+          { cache: "no-store" }
+        );
         const data = await res.json();
         
         if (data.success && Array.isArray(data.rows)) {
@@ -622,7 +632,7 @@ export default function AuditFindingDeptClient({
     return () => {
       mounted = false;
     };
-  }, [apiPath]);
+  }, [apiPath, auditYear]);
 
   useEffect(() => {
     // keep client in sync if server data changes / refresh
@@ -651,7 +661,7 @@ export default function AuditFindingDeptClient({
         const hasValidId = Number.isFinite(numericId) && numericId > 0;
         if (hasValidId) {
           // Update existing row
-          const saveUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+          const saveUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}?year=${encodeURIComponent(String(auditYear))}`;
           const promise = fetch(saveUrl, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -701,7 +711,7 @@ export default function AuditFindingDeptClient({
             row.recommendation ||
             row.auditee
           ) {
-            const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+            const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}?year=${encodeURIComponent(String(auditYear))}`;
             const promise = fetch(createUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -859,9 +869,12 @@ export default function AuditFindingDeptClient({
 
         const deptId = apiPathToDeptId[apiPath];
         if (deptId) {
-          const scheduleRes = await fetch(`/api/schedule/module?module=audit-finding`, {
+          const scheduleRes = await fetch(
+            `/api/schedule/module?module=audit-finding&year=${encodeURIComponent(String(auditYear))}`,
+            {
             next: { revalidate: 0 },
-          });
+            }
+          );
 
           if (scheduleRes.ok) {
             const scheduleJson = await scheduleRes.json();
@@ -889,7 +902,7 @@ export default function AuditFindingDeptClient({
       }
       
       // Publish only findings with COMPLETION STATUS = "Ready to Publish"
-      const publishUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/publish${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+      const publishUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/publish?year=${encodeURIComponent(String(auditYear))}`;
       const res = await fetch(publishUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -927,7 +940,7 @@ export default function AuditFindingDeptClient({
 
       if (row.id) {
         // Update existing
-        const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+        const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${row.id}?year=${encodeURIComponent(String(auditYear))}`;
         const res = await fetch(updateUrl, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -953,7 +966,7 @@ export default function AuditFindingDeptClient({
         if (!res.ok) throw new Error(json?.error || "Failed to update data");
       } else {
         // Create new
-        const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+        const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}?year=${encodeURIComponent(String(auditYear))}`;
         const res = await fetch(createUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1021,7 +1034,7 @@ export default function AuditFindingDeptClient({
         const hasValidId = Number.isFinite(numericId) && numericId > 0;
         if (hasValidId) {
           // Update existing
-          const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+          const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}?year=${encodeURIComponent(String(auditYear))}`;
           const res = await fetch(
             updateUrl,
             {
@@ -1062,7 +1075,7 @@ export default function AuditFindingDeptClient({
           row.auditee
         ) {
           // Create new only if user has entered meaningful editable data.
-          const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+          const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}?year=${encodeURIComponent(String(auditYear))}`;
           const res = await fetch(createUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

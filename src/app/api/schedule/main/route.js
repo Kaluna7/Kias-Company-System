@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { buildWindowFromSchedule, dateToLocalYmd } from "@/lib/scheduleYearWindow";
 import pkg from "pg";
 const { Pool } = pkg;
 
@@ -47,8 +48,68 @@ async function ensureTable(client) {
   await client.query(`ALTER TABLE schedule_main ALTER COLUMN end_date DROP NOT NULL;`);
 }
 
-export async function GET() {
+function toYmd(v) {
+  if (v == null || v === "") return "";
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, "0");
+    const d = String(v.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(v).trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
+function clipMainRowForYear(row, filterYear) {
+  if (filterYear == null) return row;
+  const out = { ...row };
+  const sd = toYmd(out.start_date);
+  const ed = toYmd(out.end_date);
+  if (sd && ed) {
+    const w = buildWindowFromSchedule({ start_date: sd, end_date: ed }, filterYear);
+    if (!w) {
+      out.start_date = null;
+      out.end_date = null;
+      out.days = null;
+    } else {
+      out.start_date = dateToLocalYmd(w.start);
+      out.end_date = dateToLocalYmd(w.end);
+      out.days = Math.ceil((w.end - w.start) / (1000 * 60 * 60 * 24)) + 1;
+    }
+  }
+  let md = out.module_dates;
+  if (md != null) {
+    if (typeof md === "string") {
+      try {
+        md = JSON.parse(md);
+      } catch {
+        md = {};
+      }
+    }
+    if (md && typeof md === "object" && !Array.isArray(md)) {
+      const next = {};
+      for (const [k, v] of Object.entries(md)) {
+        if (!v || typeof v !== "object") continue;
+        const ms = toYmd(v.start_date);
+        const me = toYmd(v.end_date);
+        if (!ms || !me) continue;
+        const w = buildWindowFromSchedule({ start_date: ms, end_date: me }, filterYear);
+        if (!w) continue;
+        next[k] = { ...v, start_date: dateToLocalYmd(w.start), end_date: dateToLocalYmd(w.end) };
+      }
+      out.module_dates = next;
+    }
+  }
+  return out;
+}
+
+export async function GET(req) {
   try {
+    const url = new URL(req.url);
+    const yearParam = url.searchParams.get("year");
+    const parsedYear = yearParam ? parseInt(yearParam, 10) : null;
+    const filterYear = parsedYear != null && Number.isFinite(parsedYear) ? parsedYear : null;
+
     const client = await pool.connect();
     try {
       // If table doesn't exist, return empty
@@ -64,7 +125,11 @@ export async function GET() {
       }
 
       const r = await client.query(`SELECT ${SELECT_COLUMNS} FROM public.schedule_main ORDER BY department_name ASC`);
-      return NextResponse.json({ success: true, rows: r.rows || [] }, { status: 200 });
+      let rows = r.rows || [];
+      if (filterYear != null) {
+        rows = rows.map((row) => clipMainRowForYear(row, filterYear));
+      }
+      return NextResponse.json({ success: true, rows }, { status: 200 });
     } finally {
       client.release();
     }
