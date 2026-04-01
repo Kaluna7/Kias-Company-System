@@ -155,7 +155,10 @@ async function WorksheetContent({ yearParam }) {
 
   let latestByDept = {};
   try {
-    const where = { department: { in: departments } };
+    const where = {
+      department: { in: departments },
+      published_to_report: false,
+    };
     if (!Number.isNaN(year) && year) {
       const from = new Date(year, 0, 1);
       const to = new Date(year + 1, 0, 1);

@@ -49433,6 +49433,7 @@ export namespace Prisma {
     status_wp: string | null
     file_path: string | null
     audit_area: string | null
+    published_to_report: boolean | null
     created_at: Date | null
     updated_at: Date | null
   }
@@ -49449,6 +49450,7 @@ export namespace Prisma {
     status_wp: string | null
     file_path: string | null
     audit_area: string | null
+    published_to_report: boolean | null
     created_at: Date | null
     updated_at: Date | null
   }
@@ -49465,6 +49467,7 @@ export namespace Prisma {
     status_wp: number
     file_path: number
     audit_area: number
+    published_to_report: number
     created_at: number
     updated_at: number
     _all: number
@@ -49491,6 +49494,7 @@ export namespace Prisma {
     status_wp?: true
     file_path?: true
     audit_area?: true
+    published_to_report?: true
     created_at?: true
     updated_at?: true
   }
@@ -49507,6 +49511,7 @@ export namespace Prisma {
     status_wp?: true
     file_path?: true
     audit_area?: true
+    published_to_report?: true
     created_at?: true
     updated_at?: true
   }
@@ -49523,6 +49528,7 @@ export namespace Prisma {
     status_wp?: true
     file_path?: true
     audit_area?: true
+    published_to_report?: true
     created_at?: true
     updated_at?: true
     _all?: true
@@ -49626,6 +49632,7 @@ export namespace Prisma {
     status_wp: string | null
     file_path: string | null
     audit_area: string | null
+    published_to_report: boolean
     created_at: Date | null
     updated_at: Date | null
     _count: Worksheet_financeCountAggregateOutputType | null
@@ -49661,6 +49668,7 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
   }, ExtArgs["result"]["worksheet_finance"]>
@@ -49677,6 +49685,7 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
   }, ExtArgs["result"]["worksheet_finance"]>
@@ -49693,6 +49702,7 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
   }, ExtArgs["result"]["worksheet_finance"]>
@@ -49709,11 +49719,12 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
   }
 
-  export type worksheet_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "department" | "preparer" | "reviewer" | "preparer_date" | "reviewer_date" | "status_documents" | "status_worksheet" | "status_wp" | "file_path" | "audit_area" | "created_at" | "updated_at", ExtArgs["result"]["worksheet_finance"]>
+  export type worksheet_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "department" | "preparer" | "reviewer" | "preparer_date" | "reviewer_date" | "status_documents" | "status_worksheet" | "status_wp" | "file_path" | "audit_area" | "published_to_report" | "created_at" | "updated_at", ExtArgs["result"]["worksheet_finance"]>
 
   export type $worksheet_financePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "worksheet_finance"
@@ -49730,6 +49741,7 @@ export namespace Prisma {
       status_wp: string | null
       file_path: string | null
       audit_area: string | null
+      published_to_report: boolean
       created_at: Date | null
       updated_at: Date | null
     }, ExtArgs["result"]["worksheet_finance"]>
@@ -50166,6 +50178,7 @@ export namespace Prisma {
     readonly status_wp: FieldRef<"worksheet_finance", 'String'>
     readonly file_path: FieldRef<"worksheet_finance", 'String'>
     readonly audit_area: FieldRef<"worksheet_finance", 'String'>
+    readonly published_to_report: FieldRef<"worksheet_finance", 'Boolean'>
     readonly created_at: FieldRef<"worksheet_finance", 'DateTime'>
     readonly updated_at: FieldRef<"worksheet_finance", 'DateTime'>
   }
@@ -52473,6 +52486,7 @@ export namespace Prisma {
     status_wp: 'status_wp',
     file_path: 'file_path',
     audit_area: 'audit_area',
+    published_to_report: 'published_to_report',
     created_at: 'created_at',
     updated_at: 'updated_at'
   };
@@ -52566,6 +52580,13 @@ export namespace Prisma {
    * Reference to a field of type 'DateTime[]'
    */
   export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Boolean'
+   */
+  export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
     
 
 
@@ -56573,6 +56594,7 @@ export namespace Prisma {
     status_wp?: StringNullableFilter<"worksheet_finance"> | string | null
     file_path?: StringNullableFilter<"worksheet_finance"> | string | null
     audit_area?: StringNullableFilter<"worksheet_finance"> | string | null
+    published_to_report?: BoolFilter<"worksheet_finance"> | boolean
     created_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
   }
@@ -56589,6 +56611,7 @@ export namespace Prisma {
     status_wp?: SortOrderInput | SortOrder
     file_path?: SortOrderInput | SortOrder
     audit_area?: SortOrderInput | SortOrder
+    published_to_report?: SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
   }
@@ -56608,6 +56631,7 @@ export namespace Prisma {
     status_wp?: StringNullableFilter<"worksheet_finance"> | string | null
     file_path?: StringNullableFilter<"worksheet_finance"> | string | null
     audit_area?: StringNullableFilter<"worksheet_finance"> | string | null
+    published_to_report?: BoolFilter<"worksheet_finance"> | boolean
     created_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
   }, "id">
@@ -56624,6 +56648,7 @@ export namespace Prisma {
     status_wp?: SortOrderInput | SortOrder
     file_path?: SortOrderInput | SortOrder
     audit_area?: SortOrderInput | SortOrder
+    published_to_report?: SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
     _count?: worksheet_financeCountOrderByAggregateInput
@@ -56648,6 +56673,7 @@ export namespace Prisma {
     status_wp?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
     file_path?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
     audit_area?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
+    published_to_report?: BoolWithAggregatesFilter<"worksheet_finance"> | boolean
     created_at?: DateTimeNullableWithAggregatesFilter<"worksheet_finance"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"worksheet_finance"> | Date | string | null
   }
@@ -61423,6 +61449,7 @@ export namespace Prisma {
     status_wp?: string | null
     file_path?: string | null
     audit_area?: string | null
+    published_to_report?: boolean
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -61439,6 +61466,7 @@ export namespace Prisma {
     status_wp?: string | null
     file_path?: string | null
     audit_area?: string | null
+    published_to_report?: boolean
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -61454,6 +61482,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -61470,6 +61499,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -61486,6 +61516,7 @@ export namespace Prisma {
     status_wp?: string | null
     file_path?: string | null
     audit_area?: string | null
+    published_to_report?: boolean
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -61501,6 +61532,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -61517,6 +61549,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -64372,6 +64405,11 @@ export namespace Prisma {
     risk?: SortOrder
   }
 
+  export type BoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
   export type worksheet_financeCountOrderByAggregateInput = {
     id?: SortOrder
     department?: SortOrder
@@ -64384,6 +64422,7 @@ export namespace Prisma {
     status_wp?: SortOrder
     file_path?: SortOrder
     audit_area?: SortOrder
+    published_to_report?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -64404,6 +64443,7 @@ export namespace Prisma {
     status_wp?: SortOrder
     file_path?: SortOrder
     audit_area?: SortOrder
+    published_to_report?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -64420,12 +64460,21 @@ export namespace Prisma {
     status_wp?: SortOrder
     file_path?: SortOrder
     audit_area?: SortOrder
+    published_to_report?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
 
   export type worksheet_financeSumOrderByAggregateInput = {
     id?: SortOrder
+  }
+
+  export type BoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
   }
 
   export type evidenceCountOrderByAggregateInput = {
@@ -65127,6 +65176,10 @@ export namespace Prisma {
     set?: string
   }
 
+  export type BoolFieldUpdateOperationsInput = {
+    set?: boolean
+  }
+
   export type NestedIntFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -65288,6 +65341,19 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedStringFilter<$PrismaModel>
     _max?: NestedStringFilter<$PrismaModel>
+  }
+
+  export type NestedBoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
+  export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
   }
 
   export type FinanceApCreateWithoutFinanceInput = {

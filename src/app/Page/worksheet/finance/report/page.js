@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
+import { displayWorksheetAuditArea } from "@/app/data/worksheetAuditAreaTree";
 
 function WorksheetFinanceReportPageContent() {
   const [data, setData] = useState([]);
@@ -19,7 +20,10 @@ function WorksheetFinanceReportPageContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/worksheet/finance");
+      const u = new URL("/api/worksheet/finance", window.location.origin);
+      u.searchParams.set("publishedOnly", "1");
+      if (yearParam) u.searchParams.set("year", yearParam);
+      const res = await fetch(u.toString(), { cache: "no-store" });
       const json = await res.json();
       if (res.ok && json.success && Array.isArray(json.rows)) {
         setData(json.rows);
@@ -34,7 +38,7 @@ function WorksheetFinanceReportPageContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [yearParam]);
 
   useEffect(() => {
     loadData();
@@ -146,8 +150,11 @@ function WorksheetFinanceReportPageContent() {
                   </td>
 
                   {/* Audit Area */}
-                  <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                    {row.audit_area || "-"}
+                  <td
+                    className="p-1 text-xs text-gray-800 border border-gray-200 text-center max-w-[140px] truncate align-top"
+                    title={row.audit_area || ""}
+                  >
+                    {displayWorksheetAuditArea(row.audit_area)}
                   </td>
 
                   {/* Action - View button */}
@@ -234,7 +241,7 @@ function WorksheetFinanceReportPageContent() {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Audit Area</div>
-                    <div className="text-sm">{selectedRow.audit_area || "-"}</div>
+                    <div className="text-sm break-words">{displayWorksheetAuditArea(selectedRow.audit_area)}</div>
                   </div>
                 </div>
               </div>

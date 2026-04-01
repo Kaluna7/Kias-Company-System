@@ -1,76 +1,77 @@
+-- Snapshot fields for audit finding tables (idempotent: safe if columns already exist e.g. after db push)
 ALTER TABLE "audit_finding_accounting"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_finance"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_hrd"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_ga"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_sdp"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_tax"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_lp"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_mis"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_merch"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_ops"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;
 
 ALTER TABLE "audit_finding_whs"
-ADD COLUMN "owners" VARCHAR(35),
-ADD COLUMN "objective" TEXT,
-ADD COLUMN "procedures" TEXT,
-ADD COLUMN "description" TEXT,
-ADD COLUMN "application" TEXT;
+ADD COLUMN IF NOT EXISTS "owners" VARCHAR(35),
+ADD COLUMN IF NOT EXISTS "objective" TEXT,
+ADD COLUMN IF NOT EXISTS "procedures" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "application" TEXT;

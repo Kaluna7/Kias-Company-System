@@ -764,9 +764,10 @@ model worksheet_finance {
   status_worksheet String?   @default("IN PROGRESS") @db.Text
   status_wp        String?   @default("Not Checked") @db.Text
   file_path        String?   @db.Text
-  audit_area       String?   @db.Text
-  created_at       DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime? @updatedAt @db.Timestamptz(6)
+  audit_area            String?   @db.Text
+  published_to_report   Boolean   @default(false)
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @updatedAt @db.Timestamptz(6)
 
   @@map("worksheet")
 }

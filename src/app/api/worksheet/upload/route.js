@@ -54,23 +54,28 @@ function getYearRange(year) {
 
 async function syncWorksheetFilePath({ department, year, fileUrl }) {
   const yearRange = getYearRange(year);
-  const where = { department };
-
+  const baseWhere = { department };
   if (yearRange) {
-    where.created_at = { gte: yearRange.start, lt: yearRange.end };
+    baseWhere.created_at = { gte: yearRange.start, lt: yearRange.end };
   }
 
-  const latest = await prisma.worksheet_finance.findFirst({
-    where,
+  const draftWhere = {
+    ...baseWhere,
+    published_to_report: false,
+  };
+
+  const latestDraft = await prisma.worksheet_finance.findFirst({
+    where: draftWhere,
     orderBy: [{ created_at: "desc" }, { id: "desc" }],
   });
 
-  if (latest) {
+  if (latestDraft) {
     return prisma.worksheet_finance.update({
-      where: { id: latest.id },
+      where: { id: latestDraft.id },
       data: {
         file_path: fileUrl || null,
         status_worksheet: fileUrl ? "Available" : "Not Available",
+        published_to_report: false,
       },
     });
   }
@@ -81,10 +86,10 @@ async function syncWorksheetFilePath({ department, year, fileUrl }) {
 
   const createData = {
     department,
-    file_path: fileUrl || null,
-    status_worksheet: fileUrl ? "Available" : "Not Available",
+    file_path: fileUrl,
+    status_worksheet: "Available",
+    published_to_report: false,
   };
-
   if (yearRange) {
     createData.created_at = yearRange.start;
   }

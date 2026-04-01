@@ -2,6 +2,10 @@
  * Hierarki AUDIT AREA untuk worksheet (multi-checkbox).
  * Label mengikuti screenshot user (uppercase).
  */
+
+/** Disimpan di DB dan ditampilkan di UI/report bila semua leaf area terpilih (bukan daftar panjang). */
+export const WORKSHEET_AUDIT_AREA_ALL_LABEL = "All area";
+
 export const WORKSHEET_AUDIT_AREA_TREE = [
   {
     label: "INDONESIA",
@@ -150,4 +154,28 @@ export function flattenAuditAreaTree(nodes, parentPath = "") {
     }
   });
   return rows;
+}
+
+let _sortedAllAuditLabels;
+function getSortedAllAuditLabels() {
+  if (!_sortedAllAuditLabels) {
+    const rows = flattenAuditAreaTree(WORKSHEET_AUDIT_AREA_TREE);
+    _sortedAllAuditLabels = rows.map((r) => r.label).sort((a, b) => a.localeCompare(b));
+  }
+  return _sortedAllAuditLabels;
+}
+
+/** Tampilan singkat di report: "All area" jika nilai tersimpan adalah token khusus atau daftar lengkap semua leaf (legacy). */
+export function displayWorksheetAuditArea(storedValue) {
+  const s = String(storedValue ?? "").trim();
+  if (!s) return "-";
+  if (s === WORKSHEET_AUDIT_AREA_ALL_LABEL) return WORKSHEET_AUDIT_AREA_ALL_LABEL;
+  const all = getSortedAllAuditLabels();
+  const parts = s
+    .split(";")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  if (parts.length === all.length && parts.every((p, i) => p === all[i])) return WORKSHEET_AUDIT_AREA_ALL_LABEL;
+  return s;
 }
