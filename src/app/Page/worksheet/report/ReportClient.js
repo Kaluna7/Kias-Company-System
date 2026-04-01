@@ -1,6 +1,11 @@
 "use client";
 import { useState } from "react";
 import { displayWorksheetAuditArea } from "@/app/data/worksheetAuditAreaTree";
+import {
+  displayWorksheetStatusLabel,
+  worksheetStatusReportCellClass,
+} from "@/lib/worksheetStatusDisplay";
+import { worksheetStatusWpBadgeClass } from "@/lib/worksheetStatusWpDisplay";
 
 export default function ReportClient({ initialData = [] }) {
   const [data, setData] = useState(initialData);
@@ -112,20 +117,20 @@ export default function ReportClient({ initialData = [] }) {
 
                   {/* Status Worksheet */}
                   <td
-                    className={`p-1 text-xs text-center border border-gray-200 font-semibold ${
-                      row.status_worksheet === "COMPLETED" || row.statusWorksheet === "COMPLETED"
-                        ? "bg-green-100 text-green-800"
-                        : row.status_worksheet === "IN PROGRESS" || row.statusWorksheet === "IN PROGRESS"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
+                    className={`p-1 text-xs text-center border border-gray-200 font-semibold ${worksheetStatusReportCellClass(
+                      row.status_worksheet ?? row.statusWorksheet,
+                    )}`}
                   >
-                    {row.status_worksheet || row.statusWorksheet || "-"}
+                    {displayWorksheetStatusLabel(row.status_worksheet ?? row.statusWorksheet)}
                   </td>
 
                   {/* Status WP */}
-                  <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                    {row.status_wp || row.statusWP || "-"}
+                  <td className="p-1 text-xs border border-gray-200 text-center whitespace-nowrap align-middle">
+                    <span
+                      className={`inline-flex min-w-[4.5rem] justify-center px-2 py-0.5 rounded-md text-[11px] leading-tight ${worksheetStatusWpBadgeClass(row.status_wp ?? row.statusWP)}`}
+                    >
+                      {row.status_wp || row.statusWP || "-"}
+                    </span>
                   </td>
 
                   {/* Audit Area */}
@@ -150,7 +155,7 @@ export default function ReportClient({ initialData = [] }) {
               {data.length === 0 && (
                 <tr>
                   <td colSpan={9} className="p-4 text-center text-sm text-gray-600">
-                    Belum ada data worksheet yang disimpan. Silakan save data di worksheet terlebih dahulu.
+                    No worksheet data saved yet. Save data from the worksheet page first.
                   </td>
                 </tr>
               )}
@@ -212,11 +217,19 @@ export default function ReportClient({ initialData = [] }) {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Status Worksheet</div>
-                    <div className="text-sm">{selectedRow.status_worksheet || selectedRow.statusWorksheet || "-"}</div>
+                    <div className="text-sm">
+                      {displayWorksheetStatusLabel(selectedRow.status_worksheet ?? selectedRow.statusWorksheet)}
+                    </div>
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Status WP</div>
-                    <div className="text-sm">{selectedRow.status_wp || selectedRow.statusWP || "-"}</div>
+                    <div className="text-sm mt-0.5">
+                      <span
+                        className={`inline-flex px-2.5 py-1 rounded-md text-xs ${worksheetStatusWpBadgeClass(selectedRow.status_wp ?? selectedRow.statusWP)}`}
+                      >
+                        {selectedRow.status_wp || selectedRow.statusWP || "-"}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Audit Area</div>

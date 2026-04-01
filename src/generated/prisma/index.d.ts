@@ -49433,6 +49433,7 @@ export namespace Prisma {
     status_wp: string | null
     file_path: string | null
     audit_area: string | null
+    custom_audit_areas: string | null
     published_to_report: boolean | null
     created_at: Date | null
     updated_at: Date | null
@@ -49450,6 +49451,7 @@ export namespace Prisma {
     status_wp: string | null
     file_path: string | null
     audit_area: string | null
+    custom_audit_areas: string | null
     published_to_report: boolean | null
     created_at: Date | null
     updated_at: Date | null
@@ -49467,6 +49469,7 @@ export namespace Prisma {
     status_wp: number
     file_path: number
     audit_area: number
+    custom_audit_areas: number
     published_to_report: number
     created_at: number
     updated_at: number
@@ -49494,6 +49497,7 @@ export namespace Prisma {
     status_wp?: true
     file_path?: true
     audit_area?: true
+    custom_audit_areas?: true
     published_to_report?: true
     created_at?: true
     updated_at?: true
@@ -49511,6 +49515,7 @@ export namespace Prisma {
     status_wp?: true
     file_path?: true
     audit_area?: true
+    custom_audit_areas?: true
     published_to_report?: true
     created_at?: true
     updated_at?: true
@@ -49528,6 +49533,7 @@ export namespace Prisma {
     status_wp?: true
     file_path?: true
     audit_area?: true
+    custom_audit_areas?: true
     published_to_report?: true
     created_at?: true
     updated_at?: true
@@ -49632,6 +49638,7 @@ export namespace Prisma {
     status_wp: string | null
     file_path: string | null
     audit_area: string | null
+    custom_audit_areas: string | null
     published_to_report: boolean
     created_at: Date | null
     updated_at: Date | null
@@ -49668,6 +49675,7 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    custom_audit_areas?: boolean
     published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
@@ -49685,6 +49693,7 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    custom_audit_areas?: boolean
     published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
@@ -49702,6 +49711,7 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    custom_audit_areas?: boolean
     published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
@@ -49719,12 +49729,13 @@ export namespace Prisma {
     status_wp?: boolean
     file_path?: boolean
     audit_area?: boolean
+    custom_audit_areas?: boolean
     published_to_report?: boolean
     created_at?: boolean
     updated_at?: boolean
   }
 
-  export type worksheet_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "department" | "preparer" | "reviewer" | "preparer_date" | "reviewer_date" | "status_documents" | "status_worksheet" | "status_wp" | "file_path" | "audit_area" | "published_to_report" | "created_at" | "updated_at", ExtArgs["result"]["worksheet_finance"]>
+  export type worksheet_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "department" | "preparer" | "reviewer" | "preparer_date" | "reviewer_date" | "status_documents" | "status_worksheet" | "status_wp" | "file_path" | "audit_area" | "custom_audit_areas" | "published_to_report" | "created_at" | "updated_at", ExtArgs["result"]["worksheet_finance"]>
 
   export type $worksheet_financePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "worksheet_finance"
@@ -49741,6 +49752,10 @@ export namespace Prisma {
       status_wp: string | null
       file_path: string | null
       audit_area: string | null
+      /**
+       * JSON array: [{ "id": string, "label": string }] — user-added audit areas (checkboxes)
+       */
+      custom_audit_areas: string | null
       published_to_report: boolean
       created_at: Date | null
       updated_at: Date | null
@@ -50178,6 +50193,7 @@ export namespace Prisma {
     readonly status_wp: FieldRef<"worksheet_finance", 'String'>
     readonly file_path: FieldRef<"worksheet_finance", 'String'>
     readonly audit_area: FieldRef<"worksheet_finance", 'String'>
+    readonly custom_audit_areas: FieldRef<"worksheet_finance", 'String'>
     readonly published_to_report: FieldRef<"worksheet_finance", 'Boolean'>
     readonly created_at: FieldRef<"worksheet_finance", 'DateTime'>
     readonly updated_at: FieldRef<"worksheet_finance", 'DateTime'>
@@ -52486,6 +52502,7 @@ export namespace Prisma {
     status_wp: 'status_wp',
     file_path: 'file_path',
     audit_area: 'audit_area',
+    custom_audit_areas: 'custom_audit_areas',
     published_to_report: 'published_to_report',
     created_at: 'created_at',
     updated_at: 'updated_at'
@@ -56594,6 +56611,7 @@ export namespace Prisma {
     status_wp?: StringNullableFilter<"worksheet_finance"> | string | null
     file_path?: StringNullableFilter<"worksheet_finance"> | string | null
     audit_area?: StringNullableFilter<"worksheet_finance"> | string | null
+    custom_audit_areas?: StringNullableFilter<"worksheet_finance"> | string | null
     published_to_report?: BoolFilter<"worksheet_finance"> | boolean
     created_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
@@ -56611,6 +56629,7 @@ export namespace Prisma {
     status_wp?: SortOrderInput | SortOrder
     file_path?: SortOrderInput | SortOrder
     audit_area?: SortOrderInput | SortOrder
+    custom_audit_areas?: SortOrderInput | SortOrder
     published_to_report?: SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
@@ -56631,6 +56650,7 @@ export namespace Prisma {
     status_wp?: StringNullableFilter<"worksheet_finance"> | string | null
     file_path?: StringNullableFilter<"worksheet_finance"> | string | null
     audit_area?: StringNullableFilter<"worksheet_finance"> | string | null
+    custom_audit_areas?: StringNullableFilter<"worksheet_finance"> | string | null
     published_to_report?: BoolFilter<"worksheet_finance"> | boolean
     created_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"worksheet_finance"> | Date | string | null
@@ -56648,6 +56668,7 @@ export namespace Prisma {
     status_wp?: SortOrderInput | SortOrder
     file_path?: SortOrderInput | SortOrder
     audit_area?: SortOrderInput | SortOrder
+    custom_audit_areas?: SortOrderInput | SortOrder
     published_to_report?: SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
@@ -56673,6 +56694,7 @@ export namespace Prisma {
     status_wp?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
     file_path?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
     audit_area?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
+    custom_audit_areas?: StringNullableWithAggregatesFilter<"worksheet_finance"> | string | null
     published_to_report?: BoolWithAggregatesFilter<"worksheet_finance"> | boolean
     created_at?: DateTimeNullableWithAggregatesFilter<"worksheet_finance"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"worksheet_finance"> | Date | string | null
@@ -61449,6 +61471,7 @@ export namespace Prisma {
     status_wp?: string | null
     file_path?: string | null
     audit_area?: string | null
+    custom_audit_areas?: string | null
     published_to_report?: boolean
     created_at?: Date | string | null
     updated_at?: Date | string | null
@@ -61466,6 +61489,7 @@ export namespace Prisma {
     status_wp?: string | null
     file_path?: string | null
     audit_area?: string | null
+    custom_audit_areas?: string | null
     published_to_report?: boolean
     created_at?: Date | string | null
     updated_at?: Date | string | null
@@ -61482,6 +61506,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    custom_audit_areas?: NullableStringFieldUpdateOperationsInput | string | null
     published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -61499,6 +61524,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    custom_audit_areas?: NullableStringFieldUpdateOperationsInput | string | null
     published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -61516,6 +61542,7 @@ export namespace Prisma {
     status_wp?: string | null
     file_path?: string | null
     audit_area?: string | null
+    custom_audit_areas?: string | null
     published_to_report?: boolean
     created_at?: Date | string | null
     updated_at?: Date | string | null
@@ -61532,6 +61559,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    custom_audit_areas?: NullableStringFieldUpdateOperationsInput | string | null
     published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -61549,6 +61577,7 @@ export namespace Prisma {
     status_wp?: NullableStringFieldUpdateOperationsInput | string | null
     file_path?: NullableStringFieldUpdateOperationsInput | string | null
     audit_area?: NullableStringFieldUpdateOperationsInput | string | null
+    custom_audit_areas?: NullableStringFieldUpdateOperationsInput | string | null
     published_to_report?: BoolFieldUpdateOperationsInput | boolean
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -64422,6 +64451,7 @@ export namespace Prisma {
     status_wp?: SortOrder
     file_path?: SortOrder
     audit_area?: SortOrder
+    custom_audit_areas?: SortOrder
     published_to_report?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
@@ -64443,6 +64473,7 @@ export namespace Prisma {
     status_wp?: SortOrder
     file_path?: SortOrder
     audit_area?: SortOrder
+    custom_audit_areas?: SortOrder
     published_to_report?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
@@ -64460,6 +64491,7 @@ export namespace Prisma {
     status_wp?: SortOrder
     file_path?: SortOrder
     audit_area?: SortOrder
+    custom_audit_areas?: SortOrder
     published_to_report?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder

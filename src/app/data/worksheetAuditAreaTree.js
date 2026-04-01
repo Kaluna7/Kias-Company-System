@@ -179,3 +179,74 @@ export function displayWorksheetAuditArea(storedValue) {
   if (parts.length === all.length && parts.every((p, i) => p === all[i])) return WORKSHEET_AUDIT_AREA_ALL_LABEL;
   return s;
 }
+
+/** @typedef {{ id: string, label: string }} WorksheetCustomAuditEntry */
+
+/**
+ * Parse `custom_audit_areas` column (JSON) from API/DB.
+ * @param {string|null|undefined|unknown} raw
+ * @returns {WorksheetCustomAuditEntry[]}
+ */
+export function parseWorksheetCustomAuditAreasJson(raw) {
+  if (raw == null || raw === "") return [];
+  try {
+    const v = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(v)) return [];
+    const out = [];
+    for (const x of v) {
+      if (x && typeof x === "object") {
+        const id = String(x.id ?? "").trim();
+        let label = String(x.label ?? "").trim();
+        if (id && label) {
+          label = label.toLocaleUpperCase("en-US");
+          out.push({ id, label });
+        }
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Restore selected paths from DB (`audit_area`) + optional custom entries.
+ * Custom paths use `custom:<id>`.
+ * @param {string|null|undefined} storedValue
+ * @param {{ path: string, label: string }[]} flatRows from flattenAuditAreaTree(...)
+ * @param {WorksheetCustomAuditEntry[]} [customEntries]
+ * @returns {Set<string>}
+ */
+export function pathSetFromStoredWorksheetAuditArea(storedValue, flatRows, customEntries = []) {
+  const s = String(storedValue ?? "").trim();
+  const builtinPaths = flatRows.map((r) => r.path);
+  const customPaths = customEntries.map((e) => `custom:${e.id}`);
+  const allPaths = [...builtinPaths, ...customPaths];
+
+  if (!s) return new Set();
+
+  if (s === WORKSHEET_AUDIT_AREA_ALL_LABEL) return new Set(allPaths);
+
+  const displayed = displayWorksheetAuditArea(s);
+  if (displayed === WORKSHEET_AUDIT_AREA_ALL_LABEL) return new Set(allPaths);
+
+  const labelToPath = new Map();
+  for (const row of flatRows) {
+    if (!labelToPath.has(row.label)) labelToPath.set(row.label, row.path);
+  }
+  for (const e of customEntries) {
+    const L = String(e.label || "").trim();
+    if (L && !labelToPath.has(L)) labelToPath.set(L, `custom:${e.id}`);
+  }
+
+  const parts = s
+    .split(";")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const paths = new Set();
+  for (const part of parts) {
+    const p = labelToPath.get(part);
+    if (p != null) paths.add(p);
+  }
+  return paths;
+}

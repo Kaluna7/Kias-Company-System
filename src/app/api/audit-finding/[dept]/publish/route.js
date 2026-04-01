@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@/generated/prisma";
 import { pool } from "@/app/api/SopReview/_shared/pool";
+import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
 
 const prisma = globalThis.prisma || new PrismaClient();
 
@@ -23,6 +24,11 @@ const deptToSlug = {
 function qIdent(name) {
   if (!/^[a-z0-9_]+$/i.test(name)) throw new Error(`Invalid identifier: ${name}`);
   return name;
+}
+
+function isHeaderStatusComplete(value) {
+  const s = String(value ?? "").trim().toUpperCase();
+  return s === "COMPLETED" || s === "COMPLETE";
 }
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -89,27 +95,6 @@ function supportsFindingSnapshotFields(dept) {
   );
 }
 
-// Helper to get audit-program parent model
-function getAuditProgramParent(dept) {
-  const mapping = {
-    accounting: () => prisma.accounting,
-    finance: () => prisma.finance,
-    hrd: () => prisma.hrd,
-    "g&a": () => prisma.general_affair,
-    ga: () => prisma.general_affair,
-    sdp: () => prisma.sdp,
-    tax: () => prisma.tax,
-    "l&p": () => prisma.lp,
-    lp: () => prisma.lp,
-    mis: () => prisma.mis,
-    merch: () => prisma.merchandise,
-    ops: () => prisma.operational,
-    whs: () => prisma.warehouse,
-  };
-  const getter = mapping[dept];
-  return getter ? getter() : null;
-}
-
 // Helper to get audit-program AP model
 function getAuditProgramAp(dept) {
   const mapping = {
@@ -129,26 +114,6 @@ function getAuditProgramAp(dept) {
   };
   const getter = mapping[dept];
   return getter ? getter() : null;
-}
-
-// Helper to get the foreign key field name for AP model
-function getApRiskIdField(dept) {
-  const mapping = {
-    accounting: "accounting_risk_id",
-    finance: "finance_risk_id",
-    hrd: "hrd_risk_id",
-    "g&a": "general_affair_risk_id",
-    ga: "general_affair_risk_id",
-    sdp: "sdp_risk_id",
-    tax: "tax_risk_id",
-    "l&p": "lp_risk_id",
-    lp: "lp_risk_id",
-    mis: "mis_risk_id",
-    merch: "merchandise_risk_id",
-    ops: "operational_risk_id",
-    whs: "warehouse_risk_id",
-  };
-  return mapping[dept] || null;
 }
 
 async function buildAuditProgramSnapshotMap(dept, apCodes = []) {
@@ -202,27 +167,9 @@ async function buildAuditProgramSnapshotMap(dept, apCodes = []) {
   );
 }
 
-// Map audit-finding dept slug to Evidence department name (uppercase)
-const deptToEvidenceDept = {
-  accounting: "ACCOUNTING",
-  finance: "FINANCE",
-  hrd: "HRD",
-  "g&a": "G&A",
-  ga: "G&A",
-  sdp: "DESIGN STORE PLANNER",
-  tax: "TAX",
-  "l&p": "SECURITY L&P",
-  lp: "SECURITY L&P",
-  mis: "MIS",
-  merch: "MERCHANDISE",
-  ops: "OPERATIONAL",
-  whs: "WAREHOUSE",
-};
-
 // Publish findings for a department:
-// - "Ready" ditentukan dari Evidence: ada file + overall_status = COMPLETE untuk AP-code tsb.
-// - Semua finding dengan ap_code di set tersebut dan belum COMPLETED akan di-set ke COMPLETED.
-// - Setelah itu Audit Program terkait dihapus seperti sebelumnya.
+// - Baris dengan CHECK (Y/N) = Yes dan belum COMPLETED dipublikasikan ke Audit Review.
+// - Snapshot dari Audit Program tetap disimpan seperti sebelumnya.
 export async function PUT(req, { params }) {
   try {
     const p = await Promise.resolve(params);
@@ -234,50 +181,37 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: "Invalid department" }, { status: 400 });
     }
 
-    // Cari AP code yang sudah publish di Evidence (overall_status = COMPLETE + ada file)
-    const evidenceDept = deptToEvidenceDept[dept];
-    const readyApCodes = new Set();
-    if (evidenceDept) {
-      const evidenceWhere = {
-        department: evidenceDept,
-        file_url: { not: null },
-        overall_status: {
-          equals: "COMPLETE",
-          mode: "insensitive",
-        },
-      };
-      if (selectedYear) {
-        const from = new Date(selectedYear, 0, 1);
-        const to = new Date(selectedYear + 1, 0, 1);
-        evidenceWhere.updated_at = { gte: from, lt: to };
-      }
-      const evidenceRows = await prisma.evidence.findMany({
-        where: evidenceWhere,
-        select: { ap_code: true },
-      });
-      for (const ev of evidenceRows || []) {
-        if (!ev.ap_code) continue;
-        const code = String(ev.ap_code).trim();
-        if (code) readyApCodes.add(code);
+    const slug = deptToSlug[dept?.toLowerCase()];
+    if (slug) {
+      const metaTable = qIdent(`audit_finding_meta_${slug}`);
+      const metaClient = await pool.connect();
+      try {
+        // Sama seperti GET /meta tanpa year: baris terbaru saja. POST meta memakai INSERT dengan
+        // created_at = NOW(); filter tahun audit di sini membuat baris baru (tahun kalender berbeda
+        // dari ?year=...) tidak ketemu → false 403 walau UI sudah COMPLETE.
+        const metaRes = await metaClient.query(
+          `SELECT preparer_status, final_status FROM ${metaTable}
+           ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`,
+        );
+        const metaRow = metaRes.rows?.[0];
+        const prep = metaRow?.preparer_status;
+        const fin = metaRow?.final_status;
+        if (!isHeaderStatusComplete(prep) || !isHeaderStatusComplete(fin)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Publish requires both Preparer Status and Final Status to be COMPLETE. Save the header on Audit Finding first.",
+            },
+            { status: 403 },
+          );
+        }
+      } finally {
+        metaClient.release();
       }
     }
 
-    if (readyApCodes.size === 0) {
-      return NextResponse.json(
-        {
-          success: true,
-          message: `No AP codes with published Evidence to publish for ${dept}`,
-          count: 0,
-        },
-        { status: 200 },
-      );
-    }
-
-    // Ambil semua finding yang punya ap_code di dalam set readyApCodes dan belum COMPLETED
-    const readyFindingsWhere = {
-      ap_code: {
-        in: Array.from(readyApCodes),
-      },
+    const candidatesWhere = {
       NOT: {
         completion_status: {
           equals: "COMPLETED",
@@ -286,22 +220,32 @@ export async function PUT(req, { params }) {
       },
     };
     if (selectedYear) {
-      readyFindingsWhere.created_at = {
+      candidatesWhere.created_at = {
         gte: new Date(selectedYear, 0, 1),
         lt: new Date(selectedYear + 1, 0, 1),
       };
     }
-    const readyFindings = await delegate.findMany({
-      where: readyFindingsWhere,
+    const candidates = await delegate.findMany({
+      where: candidatesWhere,
     });
+    const readyFindings = (candidates || []).filter((f) => isAuditFindingCheckYes(f.check_yn));
 
     if (readyFindings.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: `No findings with published Evidence to publish for ${dept}`,
-        count: 0 
-      }, { status: 200 });
+      return NextResponse.json(
+        {
+          success: true,
+          message: `No findings with CHECK (Y/N) = Yes to publish for ${dept}. Set CHECK to Yes in Audit Finding first.`,
+          count: 0,
+        },
+        { status: 200 },
+      );
     }
+
+    const readyApCodes = new Set(
+      readyFindings
+        .map((f) => (f.ap_code != null ? String(f.ap_code).trim() : ""))
+        .filter(Boolean),
+    );
 
     const snapshotMap = await buildAuditProgramSnapshotMap(dept, Array.from(readyApCodes));
     const publishTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
@@ -337,66 +281,9 @@ export async function PUT(req, { params }) {
       });
     }
 
-    // Tambahkan baris COMPLETED baru untuk AP code yang punya Evidence publish,
-    // tetapi belum pernah disimpan sebagai finding (tidak ada di readyFindings).
-    const existingApCodes = new Set(
-      readyFindings
-        .map((f) => (f.ap_code != null ? String(f.ap_code).trim() : ""))
-        .filter(Boolean),
-    );
-    const missingApCodes = Array.from(readyApCodes).filter((code) => !existingApCodes.has(code));
-
-    const apMapping = deptToAuditProgram[dept];
-    const apModel = apMapping ? getAuditProgramAp(dept) : null;
-    const parentModel = apMapping ? getAuditProgramParent(dept) : null;
-    const riskIdField = apMapping ? getApRiskIdField(dept) : null;
-
-    if (missingApCodes.length > 0 && apModel && parentModel && riskIdField) {
-      for (const apCode of missingApCodes) {
-        try {
-          const snapshot = snapshotMap.get(String(apCode).trim()) || null;
-
-          const createData = {
-            risk_id: snapshot?.risk_id ?? null,
-            risk_description: snapshot?.risk_description ?? null,
-            risk_details: snapshot?.risk_details ?? null,
-            ap_code: apCode,
-            substantive_test: snapshot?.substantive_test ?? null,
-            risk: null,
-            check_yn: null,
-            method: snapshot?.method ?? null,
-            preparer: null,
-            finding_result: null,
-            finding_description: null,
-            recommendation: null,
-            auditee: null,
-            completion_status: "COMPLETED",
-            completion_date: publishTimestamp,
-            created_at: publishTimestamp,
-            updated_at: publishTimestamp,
-          };
-
-          if (canPersistSnapshot) {
-            createData.objective = snapshot?.objective ?? null;
-            createData.procedures = snapshot?.procedures ?? null;
-            createData.description = snapshot?.description ?? null;
-            createData.application = snapshot?.application ?? null;
-            createData.owners = snapshot?.owners ?? null;
-          }
-
-          await delegate.create({
-            data: createData,
-          });
-        } catch (createErr) {
-          console.error(`Failed to create COMPLETED finding for ${dept} ap_code=${apCode}:`, createErr);
-        }
-      }
-    }
-
     // Keep risk assessment and audit program source data after publish so only finding and evidence leave the workspace flow.
 
     // Reset all meta after publish: status and finding result/file so form is clean
-    const slug = deptToSlug[dept?.toLowerCase()];
     if (slug) {
       try {
         const metaTable = qIdent(`audit_finding_meta_${slug}`);
@@ -416,7 +303,7 @@ export async function PUT(req, { params }) {
     return NextResponse.json(
       {
         success: true,
-        message: `Published ${readyFindings.length} finding(s) for ${dept} based on Evidence.`,
+        message: `Published ${readyFindings.length} finding(s) for ${dept} (CHECK (Y/N) = Yes).`,
         count: readyFindings.length,
       },
       { status: 200 },

@@ -568,7 +568,7 @@ export default function SOPHeader({
         <button
           onClick={onToggleCollapse}
           className="w-11 h-9 flex items-center justify-center rounded-full shadow-md border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700"
-          title={isCollapsed ? "Tampilkan header" : "Sembunyikan header"}
+          title={isCollapsed ? "Show header" : "Hide header"}
           suppressHydrationWarning
         >
           {isCollapsed ? "▼" : "▲"}

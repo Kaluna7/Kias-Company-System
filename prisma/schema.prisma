@@ -766,6 +766,8 @@ model worksheet_finance {
   status_wp        String?   @default("Not Checked") @db.Text
   file_path        String?   @db.Text
   audit_area            String?   @db.Text
+  /// JSON array: [{ "id": string, "label": string }] — user-added audit areas (checkboxes)
+  custom_audit_areas    String?   @db.Text
   published_to_report   Boolean   @default(false)
   created_at            DateTime? @default(now()) @db.Timestamptz(6)
   updated_at            DateTime? @updatedAt @db.Timestamptz(6)

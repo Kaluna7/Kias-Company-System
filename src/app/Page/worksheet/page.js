@@ -10,6 +10,7 @@ import {
   buildScheduleWindowsByUpperDeptName,
   formatScheduleRange,
 } from "@/lib/scheduleCardHelpers";
+import { worksheetStatusWpBadgeClass } from "@/lib/worksheetStatusWpDisplay";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -83,7 +84,7 @@ function worksheetAvailabilityStatus(row) {
   if (!row) return "Not Available";
   const hasFile = !!(row.file_path && String(row.file_path).trim());
   const sw = String(row.status_worksheet || "").trim().toUpperCase();
-  if (hasFile || sw === "AVAILABLE") return "Available";
+  if (hasFile || sw === "AVAILABLE" || sw === "COMPLETED" || sw === "COMPLETE") return "Available";
   return "Not Available";
 }
 
@@ -319,7 +320,9 @@ async function WorksheetContent({ yearParam }) {
                     >
                       {worksheet.status || "—"}
                     </span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs ${worksheetStatusWpBadgeClass(worksheet.statusWP)}`}
+                    >
                       {worksheet.statusWP || "—"}
                     </span>
                   </div>
@@ -353,7 +356,9 @@ async function WorksheetContent({ yearParam }) {
                   >
                     {worksheet.status || "—"}
                   </span>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs ${worksheetStatusWpBadgeClass(worksheet.statusWP)}`}
+                  >
                     {worksheet.statusWP || "—"}
                   </span>
                 </div>

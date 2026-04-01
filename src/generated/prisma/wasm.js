@@ -810,6 +810,7 @@ exports.Prisma.Worksheet_financeScalarFieldEnum = {
   status_wp: 'status_wp',
   file_path: 'file_path',
   audit_area: 'audit_area',
+  custom_audit_areas: 'custom_audit_areas',
   published_to_report: 'published_to_report',
   created_at: 'created_at',
   updated_at: 'updated_at'

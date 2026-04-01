@@ -1,17 +1,62 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { jsPDF } from "jspdf";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { useToast } from "@/app/contexts/ToastContext";
 
+const STEP_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED"];
+const HEADER_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED", "COMPLETED"];
+
+function deepClone(obj) {
+  try {
+    return obj == null ? obj : JSON.parse(JSON.stringify(obj));
+  } catch {
+    return obj;
+  }
+}
+
+function toDateInputValue(v) {
+  if (v == null || v === "" || v === "#####" || v === "no-period") return "";
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (s.includes("T")) return s.slice(0, 10);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function groupAuditToIso(raw) {
+  if (raw == null || raw === "" || raw === "#####" || raw === "no-period") return "";
+  return toDateInputValue(raw);
+}
+
 export default function ReportClient({ initialRows = [], initialScheduleData = [], selectedYear = null }) {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const role = (session?.user?.role || "").toLowerCase();
+  const canEditPublished = role === "reviewer" || role === "admin";
+
   const [rows, setRows] = useState(initialRows);
   const [scheduleData] = useState(initialScheduleData);
   const toast = useToast();
 
+  useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
+
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [detailEditing, setDetailEditing] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState(null);
+  const [savingPublished, setSavingPublished] = useState(false);
+  const [deletingPublished, setDeletingPublished] = useState(false);
+  const auditInitialRef = useRef({ start: "", end: "" });
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const [periodDatePickerOpen, setPeriodDatePickerOpen] = useState(false);
@@ -97,6 +142,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     try {
       const res = await fetch(`/api/SopReview/${selectedApiPath}/audit-period`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ audit_period_start: tempPeriodStartDate, audit_period_end: tempPeriodEndDate }),
       });
@@ -124,8 +170,8 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
   const [currentPage, setCurrentPage] = useState(1);
 
   const groupedData = useMemo(() => {
-    // rows dari backend SUDAH difilter tahun di loadReportData.
-    // Di sini kita hanya grouping & tidak memfilter lagi, supaya tidak ada data yang hilang karena mismatch format tanggal.
+    // Rows from the server are already year-filtered in loadReportData.
+    // Only group here; do not filter again (avoids losing rows due to date format mismatches).
     const effectiveRows = rows || [];
 
     console.log("[SOP-REPORT-CLIENT] initialRows", {
@@ -227,8 +273,238 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       return;
     }
     setSelectedDetail(group);
+    setDetailEditing(false);
+    setEditSnapshot(null);
     setViewOpen(true);
   };
+
+  const beginDetailEdit = () => {
+    if (!selectedDetail) return;
+    const snap = deepClone(selectedDetail);
+    snap.items = (snap.items || []).map((it) => ({
+      ...it,
+      _pendingDeletedStepIds: [],
+    }));
+    snap._auditPeriodStart = groupAuditToIso(snap.audit_period_start);
+    snap._auditPeriodEnd = groupAuditToIso(snap.audit_period_end);
+    auditInitialRef.current = {
+      start: snap._auditPeriodStart,
+      end: snap._auditPeriodEnd,
+    };
+    setEditSnapshot(snap);
+    setDetailEditing(true);
+  };
+
+  const cancelDetailEdit = () => {
+    setDetailEditing(false);
+    setEditSnapshot(null);
+  };
+
+  const patchEditItemMeta = useCallback((itemIdx, patch) => {
+    setEditSnapshot((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((it, i) => {
+        if (i !== itemIdx) return it;
+        const meta = { ...(it._detail?.meta || {}), ...patch };
+        return {
+          ...it,
+          _detail: { ...it._detail, meta },
+        };
+      });
+      return { ...prev, items };
+    });
+  }, []);
+
+  const patchEditStep = useCallback((itemIdx, stepIdx, patch) => {
+    setEditSnapshot((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((it, i) => {
+        if (i !== itemIdx) return it;
+        const steps = [...(it._detail?.steps || [])];
+        if (!steps[stepIdx]) return it;
+        steps[stepIdx] = { ...steps[stepIdx], ...patch };
+        return { ...it, _detail: { ...it._detail, steps } };
+      });
+      return { ...prev, items };
+    });
+  }, []);
+
+  const patchEditItemDepartment = useCallback((itemIdx, department) => {
+    setEditSnapshot((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((it, i) => {
+        if (i !== itemIdx) return it;
+        const meta = { ...(it._detail?.meta || {}), department_name: department };
+        return { ...it, department, _detail: { ...it._detail, meta } };
+      });
+      return { ...prev, items };
+    });
+  }, []);
+
+  const removeEditStep = useCallback((itemIdx, stepIdx) => {
+    setEditSnapshot((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((it, i) => {
+        if (i !== itemIdx) return it;
+        const steps = [...(it._detail?.steps || [])];
+        const removed = steps.splice(stepIdx, 1)[0];
+        const pending = [...(it._pendingDeletedStepIds || [])];
+        const rid = removed?.id != null ? Number(removed.id) : NaN;
+        if (Number.isFinite(rid) && rid > 0) pending.push(rid);
+        return {
+          ...it,
+          _pendingDeletedStepIds: pending,
+          _detail: { ...it._detail, steps },
+        };
+      });
+      return { ...prev, items };
+    });
+  }, []);
+
+  const deletePublishedRecord = async (metaId) => {
+    const mid = Number(metaId);
+    if (!Number.isFinite(mid) || mid <= 0) return;
+    const group = editSnapshot || selectedDetail;
+    const apiPath = group?.items?.[0]?.apiPath;
+    if (!apiPath) {
+      toast.show("Missing department for delete.", "error");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Delete this published record and all of its SOP steps? This cannot be undone.",
+      )
+    ) {
+      return;
+    }
+    setDeletingPublished(true);
+    try {
+      const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meta_ids: [mid] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        toast.show("Please sign in as Reviewer or Admin.", "error");
+        return;
+      }
+      if (res.status === 403) {
+        toast.show(data?.error || "Only Reviewer or Admin can delete published data.", "error");
+        return;
+      }
+      if (!res.ok || !data.success) {
+        toast.show("Delete failed: " + (data.error || res.status), "error");
+        return;
+      }
+      toast.show("Published record deleted.", "success");
+      setViewOpen(false);
+      setSelectedDetail(null);
+      setDetailEditing(false);
+      setEditSnapshot(null);
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      toast.show("Error: " + (e?.message || ""), "error");
+    } finally {
+      setDeletingPublished(false);
+    }
+  };
+
+  const savePublishedEdits = async () => {
+    if (!editSnapshot?.items?.length) return;
+    const apiPath = editSnapshot.items[0]?.apiPath;
+    if (!apiPath) {
+      toast.show("Missing department (apiPath) for save.", "error");
+      return;
+    }
+    setSavingPublished(true);
+    try {
+      const start = editSnapshot._auditPeriodStart || "";
+      const end = editSnapshot._auditPeriodEnd || "";
+      const init = auditInitialRef.current;
+      if (start && end && (start !== init.start || end !== init.end)) {
+        const apRes = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/audit-period`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audit_period_start: start, audit_period_end: end }),
+        });
+        const apJson = await apRes.json().catch(() => ({}));
+        if (!apRes.ok || !apJson.success) {
+          toast.show("Failed to save audit period: " + (apJson.error || apRes.status), "error");
+          setSavingPublished(false);
+          return;
+        }
+      }
+
+      const updates = editSnapshot.items.map((item) => {
+        const meta = { ...(item._detail?.meta || {}) };
+        const metaId = meta.id;
+        const steps = (item._detail?.steps || []).map((s) => ({
+          id: s.id,
+          no: s.no,
+          sop_related: s.sop_related,
+          status: s.status,
+          comment: s.comment,
+          reviewer_feedback: s.reviewer_feedback,
+          reviewer: s.reviewer,
+        }));
+        return {
+          meta_id: metaId,
+          deleted_step_ids: item._pendingDeletedStepIds || [],
+          meta: {
+            department_name: item.department || meta.department_name,
+            preparer_name: meta.preparer_name,
+            preparer_date: meta.preparer_date,
+            reviewer_name: meta.reviewer_name,
+            reviewer_date: meta.reviewer_date,
+            reviewer_comment: meta.reviewer_comment,
+            preparer_status: meta.preparer_status,
+            reviewer_status: meta.reviewer_status,
+            audit_fieldwork_start_date: meta.audit_fieldwork_start_date,
+            audit_fieldwork_end_date: meta.audit_fieldwork_end_date,
+          },
+          steps,
+        };
+      });
+
+      const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        toast.show("Please sign in as Reviewer or Admin.", "error");
+        return;
+      }
+      if (res.status === 403) {
+        toast.show(data?.error || "Only Reviewer or Admin can edit published data.", "error");
+        return;
+      }
+      if (!res.ok || !data.success) {
+        toast.show("Save failed: " + (data.error || res.status), "error");
+        return;
+      }
+
+      toast.show("Changes saved.", "success");
+      setDetailEditing(false);
+      setEditSnapshot(null);
+      setViewOpen(false);
+      setSelectedDetail(null);
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      toast.show("Error: " + (e?.message || ""), "error");
+    } finally {
+      setSavingPublished(false);
+    }
+  };
+
+  const modalDetail = detailEditing && editSnapshot ? editSnapshot : selectedDetail;
 
   const handleExportExcel = (group) => {
     if (!group?.items || group.items.length === 0) {
@@ -817,24 +1093,55 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
         </div>
       </div>
 
-      {viewOpen && selectedDetail && (
+      {viewOpen && modalDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-3 sm:px-4">
           <div className="bg-white rounded-2xl shadow-2xl w-[min(960px,100vw)] max-h-[88vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-slate-50/70">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900">
-                SOP Review Data Detail — {selectedDetail?.department || "Department"}
+            <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-slate-50/70">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 min-w-0 truncate">
+                SOP Review Data Detail — {modalDetail?.department || "Department"}
               </h3>
-              <div className="flex items-center gap-2">
-                {selectedDetail?.items?.length > 0 && (
+              <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+                {canEditPublished && !detailEditing && modalDetail?.items?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={beginDetailEdit}
+                    className="px-2.5 py-1.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-full text-[11px] font-medium hover:bg-indigo-100"
+                  >
+                    Edit
+                  </button>
+                )}
+                {detailEditing && (
                   <>
                     <button
-                      onClick={() => handleExportExcel(selectedDetail)}
+                      type="button"
+                      onClick={cancelDetailEdit}
+                      disabled={savingPublished || deletingPublished}
+                      className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-medium hover:bg-slate-200 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={savePublishedEdits}
+                      disabled={savingPublished || deletingPublished}
+                      className="px-2.5 py-1.5 bg-blue-600 text-white border border-blue-700 rounded-full text-[11px] font-medium hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingPublished ? "Saving..." : "Save"}
+                    </button>
+                  </>
+                )}
+                {modalDetail?.items?.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleExportExcel(modalDetail)}
                       className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-medium hover:bg-emerald-100"
                     >
                       Export Excel
                     </button>
                     <button
-                      onClick={() => handleExportPDF(selectedDetail)}
+                      type="button"
+                      onClick={() => handleExportPDF(modalDetail)}
                       disabled={isExportingPDF}
                       className={`px-2.5 py-1.5 rounded-full text-[11px] font-medium border ${
                         isExportingPDF
@@ -847,10 +1154,13 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                   </>
                 )}
                 <button
+                  type="button"
                   className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
                   onClick={() => {
                     setViewOpen(false);
                     setSelectedDetail(null);
+                    setDetailEditing(false);
+                    setEditSnapshot(null);
                   }}
                   aria-label="Close"
                 >
@@ -866,7 +1176,44 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
               </div>
             </div>
             <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-sm text-slate-800">
-              {!selectedDetail?.items || selectedDetail.items.length === 0 ? (
+              {detailEditing && editSnapshot && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
+                  Edit mode: adjust audit period (if needed), header fields, and SOP step rows. Use <strong>Remove</strong> on a
+                  row to delete that step (saved when you click <strong>Save</strong>). Use <strong>Delete published record</strong>{" "}
+                  on a block to remove the entire publication. Click <strong>Save</strong> to apply step and header changes.
+                </div>
+              )}
+              {detailEditing && editSnapshot && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Audit Period Start</label>
+                    <input
+                      type="date"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={editSnapshot._auditPeriodStart || ""}
+                      onChange={(e) =>
+                        setEditSnapshot((prev) =>
+                          prev ? { ...prev, _auditPeriodStart: e.target.value } : prev
+                        )
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Audit Period End</label>
+                    <input
+                      type="date"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={editSnapshot._auditPeriodEnd || ""}
+                      onChange={(e) =>
+                        setEditSnapshot((prev) =>
+                          prev ? { ...prev, _auditPeriodEnd: e.target.value } : prev
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+              {!modalDetail?.items || modalDetail.items.length === 0 ? (
                 <div className="text-center py-10 px-2">
                   <p className="text-slate-600">
                     No data yet. Please publish data first on the relevant SOP Review department page.
@@ -874,12 +1221,13 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                 </div>
               ) : (
                 <>
-                  {selectedDetail.items.map((item, itemIdx) => {
-                    if (!item._detail?.steps || item._detail.steps.length === 0) return null;
+                  {modalDetail.items.map((item, itemIdx) => {
+                    const stepRows = item._detail?.steps || [];
+                    if (!detailEditing && stepRows.length === 0) return null;
                     const itemMeta = item._detail?.meta || {};
                     const itemPreparer = itemMeta.preparer_name || item.preparer || "-";
                     const itemReviewer = itemMeta.reviewer_name || item.reviewer || "-";
-                    const itemPublishedAt = itemMeta.published_at || selectedDetail.published_at;
+                    const itemPublishedAt = itemMeta.published_at || modalDetail.published_at;
                     const getStatusBadge = (status) => {
                       const s = (status || "DRAFT").toUpperCase();
                       if (s === "APPROVED") return "bg-green-50 text-green-800 ring-1 ring-inset ring-green-200";
@@ -887,48 +1235,156 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                       if (s === "IN REVIEW") return "bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200";
                       return "bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-200";
                     };
+                    const ed = detailEditing;
                     return (
                       <div
                         key={itemMeta.id ?? `item-${itemIdx}`}
                         className="mb-6 sm:mb-8 space-y-3 sm:space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4"
                       >
                         <div className="mb-2 sm:mb-3">
-                          <h4 className="font-semibold text-slate-800 mb-1.5 text-sm sm:text-base">
-                            Data Publish — {item.department}{" "}
-                            <span className="text-xs sm:text-sm font-normal text-slate-500">
-                              (tanggal:{" "}
-                              {itemPublishedAt ? String(itemPublishedAt).slice(0, 19) : "-"}
-                              )
-                            </span>
-                          </h4>
+                          <div className="flex flex-wrap items-start justify-between gap-2 mb-1.5">
+                            <h4 className="font-semibold text-slate-800 text-sm sm:text-base">
+                              Published data — {item.department}{" "}
+                              <span className="text-xs sm:text-sm font-normal text-slate-500">
+                                (published:{" "}
+                                {itemPublishedAt ? String(itemPublishedAt).slice(0, 19) : "-"}
+                                )
+                              </span>
+                            </h4>
+                            {ed && itemMeta.id != null && (
+                              <button
+                                type="button"
+                                onClick={() => deletePublishedRecord(itemMeta.id)}
+                                disabled={deletingPublished || savingPublished}
+                                className="shrink-0 px-2.5 py-1.5 rounded-full text-[11px] font-medium border border-red-200 bg-red-50 text-red-800 hover:bg-red-100 disabled:opacity-50"
+                              >
+                                {deletingPublished ? "Deleting..." : "Delete published record"}
+                              </button>
+                            )}
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 bg-white rounded-lg border border-slate-100 p-3 sm:p-4">
                             <div>
-                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
-                                Department
-                              </div>
-                              <div className="text-sm text-slate-900">{item.department || "-"}</div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Department</div>
+                              {ed ? (
+                                <input
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={item.department || ""}
+                                  onChange={(e) => patchEditItemDepartment(itemIdx, e.target.value)}
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900">{item.department || "-"}</div>
+                              )}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
-                                Preparer
-                              </div>
-                              <div className="text-sm text-slate-900">{itemPreparer}</div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Preparer</div>
+                              {ed ? (
+                                <input
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={itemMeta.preparer_name ?? ""}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { preparer_name: e.target.value })}
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900">{itemPreparer}</div>
+                              )}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
-                                Reviewer
-                              </div>
-                              <div className="text-sm text-slate-900">{itemReviewer}</div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Reviewer</div>
+                              {ed ? (
+                                <input
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={itemMeta.reviewer_name ?? ""}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_name: e.target.value })}
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900">{itemReviewer}</div>
+                              )}
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
                                 Preparer Completion Date
                               </div>
-                              <div className="text-sm text-slate-900">
-                                {item.preparer_completion_date !== "-"
-                                  ? item.preparer_completion_date
-                                  : "-"}
+                              {ed ? (
+                                <input
+                                  type="date"
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={toDateInputValue(itemMeta.preparer_date)}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { preparer_date: e.target.value || null })}
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900">
+                                  {item.preparer_completion_date !== "-"
+                                    ? item.preparer_completion_date
+                                    : "-"}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">SOP Preparer Status</div>
+                              {ed ? (
+                                <select
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={itemMeta.preparer_status || "DRAFT"}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { preparer_status: e.target.value })}
+                                >
+                                  {HEADER_STATUS_OPTIONS.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div className="text-sm text-slate-900">{itemMeta.preparer_status || "DRAFT"}</div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">SOP Reviewer Status</div>
+                              {ed ? (
+                                <select
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={itemMeta.reviewer_status || "DRAFT"}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_status: e.target.value })}
+                                >
+                                  {HEADER_STATUS_OPTIONS.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div className="text-sm text-slate-900">{itemMeta.reviewer_status || "DRAFT"}</div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Reviewer Date</div>
+                              {ed ? (
+                                <input
+                                  type="date"
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={toDateInputValue(itemMeta.reviewer_date)}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_date: e.target.value || null })}
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900">
+                                  {item.reviewer_date !== "-" ? item.reviewer_date : "-"}
+                                </div>
+                              )}
+                            </div>
+                            <div className="md:col-span-2">
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
+                                Reviewer Comments
                               </div>
+                              {ed ? (
+                                <textarea
+                                  rows={2}
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={itemMeta.reviewer_comment ?? ""}
+                                  onChange={(e) => patchEditItemMeta(itemIdx, { reviewer_comment: e.target.value })}
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900 whitespace-pre-wrap">
+                                  {item.reviewer_comments || itemMeta.reviewer_comment || ""}
+                                </div>
+                              )}
                             </div>
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
@@ -939,11 +1395,12 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                                   ? item.audit_period_start
                                   : "-"}
                               </div>
+                              {ed && (
+                                <p className="text-[10px] text-slate-500 mt-1">Use the Audit Period fields above to change these.</p>
+                              )}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
-                                Audit Period End
-                              </div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Audit Period End</div>
                               <div className="text-sm text-slate-900">
                                 {item.audit_period_end !== "#####"
                                   ? item.audit_period_end
@@ -954,31 +1411,53 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
                                 Audit Fieldwork Start
                               </div>
-                              <div className="text-sm text-slate-900">
-                                {item.audit_fieldwork_start !== "#####"
-                                  ? item.audit_fieldwork_start
-                                  : "-"}
-                              </div>
+                              {ed ? (
+                                <input
+                                  type="date"
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={toDateInputValue(itemMeta.audit_fieldwork_start_date)}
+                                  onChange={(e) =>
+                                    patchEditItemMeta(itemIdx, {
+                                      audit_fieldwork_start_date: e.target.value || null,
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <div className="text-sm text-slate-900">
+                                  {item.audit_fieldwork_start !== "#####"
+                                    ? item.audit_fieldwork_start
+                                    : "-"}
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
-                                Audit Fieldwork End
-                              </div>
-                              <div
-                                className={`text-sm ${
-                                  item.exceeds_audit_period ? "text-red-600 font-semibold" : "text-slate-900"
-                                }`}
-                              >
-                                {item.audit_fieldwork_end !== "#####"
-                                  ? item.audit_fieldwork_end
-                                  : "-"}
-                                {item.exceeds_audit_period ? " ⚠️" : ""}
-                              </div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Audit Fieldwork End</div>
+                              {ed ? (
+                                <input
+                                  type="date"
+                                  className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                                  value={toDateInputValue(itemMeta.audit_fieldwork_end_date)}
+                                  onChange={(e) =>
+                                    patchEditItemMeta(itemIdx, {
+                                      audit_fieldwork_end_date: e.target.value || null,
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <div
+                                  className={`text-sm ${
+                                    item.exceeds_audit_period ? "text-red-600 font-semibold" : "text-slate-900"
+                                  }`}
+                                >
+                                  {item.audit_fieldwork_end !== "#####"
+                                    ? item.audit_fieldwork_end
+                                    : "-"}
+                                  {item.exceeds_audit_period ? " ⚠️" : ""}
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">
-                                Published At
-                              </div>
+                              <div className="font-semibold text-slate-600 text-[11px] mb-0.5">Published At</div>
                               <div className="text-sm text-slate-900">
                                 {itemPublishedAt ? String(itemPublishedAt).slice(0, 19) : "-"}
                               </div>
@@ -988,10 +1467,10 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
 
                         <div>
                           <h4 className="font-semibold text-slate-800 mb-2 sm:mb-3">
-                            SOP Steps ({item._detail.steps.length} items)
+                            SOP Steps ({stepRows.length} items)
                           </h4>
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                            <table className="min-w-[840px] w-full text-xs border-collapse">
+                            <table className={`w-full text-xs border-collapse ${ed ? "min-w-[920px]" : "min-w-[840px]"}`}>
                               <thead>
                                 <tr className="bg-slate-50 text-slate-700">
                                   <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
@@ -1012,43 +1491,150 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                                   <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
                                     Reviewer Feedback
                                   </th>
+                                  {ed && (
+                                    <th className="px-2.5 py-2 text-center font-semibold text-slate-700 border border-slate-200 w-24">
+                                      Actions
+                                    </th>
+                                  )}
                                 </tr>
                               </thead>
                               <tbody>
-                                {item._detail.steps.map((step, idx) => (
+                                {stepRows.map((step, idx) => (
                                   <tr
-                                    key={`${itemMeta.id}-step-${idx}`}
+                                    key={`${itemMeta.id}-step-${step.id ?? idx}`}
                                     className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}
                                   >
-                                    <td className="px-2.5 py-2 border border-slate-200">
-                                      {step.no || idx + 1}
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                      {ed ? (
+                                        <input
+                                          type="number"
+                                          className="w-14 border border-slate-300 rounded px-1 py-1"
+                                          value={step.no ?? idx + 1}
+                                          onChange={(e) =>
+                                            patchEditStep(itemIdx, idx, {
+                                              no: e.target.value === "" ? null : Number(e.target.value),
+                                            })
+                                          }
+                                        />
+                                      ) : (
+                                        step.no || idx + 1
+                                      )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200">
-                                      {step.sop_related || "-"}
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                      {ed ? (
+                                        <textarea
+                                          rows={2}
+                                          className="w-full min-w-[120px] border border-slate-300 rounded px-1 py-1 text-xs"
+                                          value={step.sop_related ?? ""}
+                                          onChange={(e) =>
+                                            patchEditStep(itemIdx, idx, { sop_related: e.target.value })
+                                          }
+                                        />
+                                      ) : (
+                                        step.sop_related || "-"
+                                      )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200">
-                                      <span
-                                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusBadge(
-                                          step.status
-                                        )}`}
-                                      >
-                                        {step.status || "DRAFT"}
-                                      </span>
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                      {ed ? (
+                                        <select
+                                          className="w-full min-w-[100px] border border-slate-300 rounded px-1 py-1"
+                                          value={step.status || "DRAFT"}
+                                          onChange={(e) =>
+                                            patchEditStep(itemIdx, idx, { status: e.target.value })
+                                          }
+                                        >
+                                          {STEP_STATUS_OPTIONS.map((o) => (
+                                            <option key={o} value={o}>
+                                              {o}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusBadge(
+                                            step.status
+                                          )}`}
+                                        >
+                                          {step.status || "DRAFT"}
+                                        </span>
+                                      )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200">
-                                      {step.reviewer || "-"}
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                      {ed ? (
+                                        <input
+                                          className="w-full min-w-[80px] border border-slate-300 rounded px-1 py-1"
+                                          value={step.reviewer ?? ""}
+                                          onChange={(e) =>
+                                            patchEditStep(itemIdx, idx, { reviewer: e.target.value })
+                                          }
+                                        />
+                                      ) : (
+                                        step.reviewer || "-"
+                                      )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 whitespace-pre-wrap break-words">
-                                      {step.comment || "-"}
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                      {ed ? (
+                                        <textarea
+                                          rows={2}
+                                          className="w-full min-w-[100px] border border-slate-300 rounded px-1 py-1 text-xs"
+                                          value={step.comment ?? ""}
+                                          onChange={(e) =>
+                                            patchEditStep(itemIdx, idx, { comment: e.target.value })
+                                          }
+                                        />
+                                      ) : (
+                                        step.comment || "-"
+                                      )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 whitespace-pre-wrap break-words">
-                                      {step.reviewer_feedback || "-"}
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                      {ed ? (
+                                        <textarea
+                                          rows={2}
+                                          className="w-full min-w-[100px] border border-slate-300 rounded px-1 py-1 text-xs"
+                                          value={step.reviewer_feedback ?? ""}
+                                          onChange={(e) =>
+                                            patchEditStep(itemIdx, idx, {
+                                              reviewer_feedback: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      ) : (
+                                        step.reviewer_feedback || "-"
+                                      )}
                                     </td>
+                                    {ed && (
+                                      <td className="px-2 py-2 border border-slate-200 text-center align-top">
+                                        <button
+                                          type="button"
+                                          onClick={() => removeEditStep(itemIdx, idx)}
+                                          className="text-[11px] font-semibold text-red-700 hover:text-red-900 hover:underline"
+                                        >
+                                          Remove
+                                        </button>
+                                      </td>
+                                    )}
                                   </tr>
                                 ))}
+                                {ed && stepRows.length === 0 && (
+                                  <tr>
+                                    <td
+                                      colSpan={7}
+                                      className="p-4 text-center text-slate-500 border border-slate-200"
+                                    >
+                                      No steps left. Click <strong>Save</strong> to update the record, or{" "}
+                                      <strong>Delete published record</strong> to remove it entirely.
+                                    </td>
+                                  </tr>
+                                )}
                               </tbody>
                             </table>
                           </div>
+                          {ed && stepRows.some((s) => s.id == null) && (
+                            <p className="mt-2 text-[11px] text-amber-700">
+                              Some rows are missing a database ID — refresh the report page after deploy so step saves work
+                              correctly.
+                            </p>
+                          )}
                         </div>
                       </div>
                     );
