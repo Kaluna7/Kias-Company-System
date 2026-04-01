@@ -17,14 +17,35 @@ export function buildWorksheetPatchData(body) {
     data.custom_audit_areas =
       Array.isArray(v) && v.length > 0 ? JSON.stringify(v) : null;
   }
+  if (Object.prototype.hasOwnProperty.call(body, "reviewer")) {
+    const r = body.reviewer;
+    data.reviewer =
+      r != null && String(r).trim() !== "" ? String(r).trim() : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "reviewerDate")) {
+    const d = body.reviewerDate;
+    data.reviewer_date = d ? new Date(d) : null;
+  }
   return data;
 }
 
 /**
  * Update latest draft row for department/year, or create a minimal draft if none exists.
+ * @param {boolean} [canPatchReviewerFields] if false, reviewer / reviewerDate in body are ignored
  */
-export async function executeWorksheetPatch(prisma, department, body, yearParam) {
-  const patch = buildWorksheetPatchData(body);
+export async function executeWorksheetPatch(
+  prisma,
+  department,
+  body,
+  yearParam,
+  canPatchReviewerFields = false,
+) {
+  const safeBody = { ...body };
+  if (!canPatchReviewerFields) {
+    delete safeBody.reviewer;
+    delete safeBody.reviewerDate;
+  }
+  const patch = buildWorksheetPatchData(safeBody);
   if (Object.keys(patch).length === 0) return;
 
   const draftWhere = buildDraftWhereClause(department, yearParam);

@@ -5,6 +5,7 @@ import prisma from "@/app/lib/prisma";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import schedulePool from "@/app/lib/db";
 import { buildWindowFromSchedule } from "@/lib/scheduleYearWindow";
+import { yearCreatedAtFilter } from "@/app/api/worksheet/_shared/worksheetWhere";
 
 const DEPARTMENTS = [
   {
@@ -161,7 +162,10 @@ async function loadModuleScheduleByDept(moduleKey) {
   if (!check?.rows?.[0]?.exists) return byDept;
 
   const r = await schedulePool.query(
-    `SELECT department_id, start_date, end_date
+    `SELECT department_id, start_date, end_date,
+            TO_CHAR(start_date::date, 'YYYY-MM-DD') AS start_ymd,
+            TO_CHAR(end_date::date, 'YYYY-MM-DD') AS end_ymd,
+            updated_at AS feedback_updated_at
      FROM public.schedule_module_feedback
      WHERE module_key = $1 AND is_configured = true
      ORDER BY department_id`,
@@ -173,9 +177,30 @@ async function loadModuleScheduleByDept(moduleKey) {
     byDept.set(deptKey, {
       start_date: row.start_date,
       end_date: row.end_date,
+      start_ymd: row.start_ymd ? String(row.start_ymd).trim() : null,
+      end_ymd: row.end_ymd ? String(row.end_ymd).trim() : null,
+      /** Last save of this module row; worksheet progress only counts publishes after this (new cycle after re-schedule). */
+      feedbackUpdatedAt: row.feedback_updated_at ?? row.updated_at ?? null,
     });
   }
   return byDept;
+}
+
+/** Clip schedule [startYmd, endYmd] to audit calendar year using ISO date string ordering. */
+function clipIsoYmdRangeToYear(startYmd, endYmd, year) {
+  const s0 = String(startYmd || "").slice(0, 10);
+  const e0 = String(endYmd || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s0) || !/^\d{4}-\d{2}-\d{2}$/.test(e0)) return null;
+  if (year == null || !Number.isFinite(year)) {
+    if (s0 > e0) return null;
+    return { startYmd: s0, endYmd: e0 };
+  }
+  const yStart = `${year}-01-01`;
+  const yEnd = `${year}-12-31`;
+  const s = s0 > yStart ? s0 : yStart;
+  const e = e0 < yEnd ? e0 : yEnd;
+  if (s > e) return null;
+  return { startYmd: s, endYmd: e };
 }
 
 /**
@@ -223,18 +248,70 @@ async function getSopReviewDoneSet(scheduleByDept, year) {
 }
 
 async function getWorksheetDoneSet(scheduleByDept, year) {
-  // "Finish" = current scheduled worksheet has a file and has been marked Checked.
+  // Done = published row + file in the selected audit year (same idea as GET /api/worksheet/*/ year filter).
+  // Also require worksheet.created_at >= schedule_module_feedback.updated_at for this dept+module so that
+  // after "finish" + a new worksheet schedule save, old published rows from the previous cycle do not count
+  // until someone publishes again (saving the schedule bumps updated_at via UPSERT).
   const checks = await Promise.all(
     DEPARTMENTS.map(async (d) => {
-      const window = buildWindowFromSchedule(scheduleByDept?.get(d.key), year);
-      if (!window) return { key: d.key, done: false };
+      const sched = scheduleByDept?.get(d.key);
+      if (!sched?.start_date || !sched?.end_date) return { key: d.key, done: false };
+
+      const cutoffRaw = sched.feedbackUpdatedAt;
+      const cutoff =
+        cutoffRaw != null ? new Date(cutoffRaw) : null;
+      const cutoffOk = cutoff && !Number.isNaN(cutoff.getTime());
+
+      const yf = yearCreatedAtFilter(year);
+      const andParts = [
+        { file_path: { not: null } },
+        { NOT: { file_path: "" } },
+      ];
+      if (cutoffOk) {
+        andParts.push({ created_at: { gte: cutoff } });
+      }
+
+      if (yf) {
+        andParts.push({
+          OR: [
+            { created_at: { gte: yf.gte, lt: yf.lt } },
+            { updated_at: { gte: yf.gte, lt: yf.lt } },
+          ],
+        });
+      } else {
+        const startYmd =
+          sched.start_ymd ||
+          (typeof sched.start_date === "string"
+            ? sched.start_date.slice(0, 10)
+            : null) ||
+          (sched.start_date instanceof Date && !Number.isNaN(sched.start_date.getTime())
+            ? sched.start_date.toISOString().slice(0, 10)
+            : null);
+        const endYmd =
+          sched.end_ymd ||
+          (typeof sched.end_date === "string"
+            ? sched.end_date.slice(0, 10)
+            : null) ||
+          (sched.end_date instanceof Date && !Number.isNaN(sched.end_date.getTime())
+            ? sched.end_date.toISOString().slice(0, 10)
+            : null);
+        const bounds = clipIsoYmdRangeToYear(startYmd, endYmd, null);
+        if (!bounds) return { key: d.key, done: false };
+        const startTs = new Date(`${bounds.startYmd}T00:00:00.000Z`);
+        const endTs = new Date(`${bounds.endYmd}T23:59:59.999Z`);
+        andParts.push({
+          OR: [
+            { created_at: { gte: startTs, lte: endTs } },
+            { updated_at: { gte: startTs, lte: endTs } },
+          ],
+        });
+      }
 
       const count = await prisma.worksheet_finance.count({
         where: {
           department: d.worksheetDept,
-          file_path: { not: null },
-          status_wp: { equals: "Checked", mode: "insensitive" },
-          updated_at: { gte: window.start, lte: window.end },
+          published_to_report: true,
+          AND: andParts,
         },
       });
 

@@ -1,8 +1,24 @@
 import { PrismaClient } from "@/generated/prisma";
 import { buildWorksheetFindManyWhere } from "../_shared/worksheetWhere";
-import { requireWorksheetEditorSession, isWorksheetPublisherRole } from "../_shared/worksheetAuth";
+import {
+  requireWorksheetEditorSession,
+  isWorksheetPublisherRole,
+  canEditWorksheetReviewerFields,
+} from "../_shared/worksheetAuth";
 import { executeWorksheetPost } from "../_shared/executeWorksheetPost";
 import { executeWorksheetPatch } from "../_shared/executeWorksheetPatch";
+import {
+  worksheetStatusWpAllowsPublish,
+  worksheetFilePathAllowsPublish,
+  worksheetAuditAreaAllowsPublish,
+  worksheetReviewerAllowsPublish,
+  worksheetReviewerDateAllowsPublish,
+  WORKSHEET_PUBLISH_REQUIRES_CHECKED_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_FILE_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_AUDIT_AREA_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_REVIEWER_MESSAGE,
+  WORKSHEET_PUBLISH_REQUIRES_REVIEWER_DATE_MESSAGE,
+} from "../_shared/worksheetPublishValidation";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -35,6 +51,36 @@ export async function POST(req) {
     if (error) return error;
     const body = await req.json();
     const publish = isWorksheetPublisherRole(role);
+    if (publish && !worksheetFilePathAllowsPublish(body.filePath)) {
+      return new Response(
+        JSON.stringify({ success: false, error: WORKSHEET_PUBLISH_REQUIRES_FILE_MESSAGE }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (publish && !worksheetStatusWpAllowsPublish(body.statusWP)) {
+      return new Response(
+        JSON.stringify({ success: false, error: WORKSHEET_PUBLISH_REQUIRES_CHECKED_MESSAGE }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (publish && !worksheetAuditAreaAllowsPublish(body.auditArea)) {
+      return new Response(
+        JSON.stringify({ success: false, error: WORKSHEET_PUBLISH_REQUIRES_AUDIT_AREA_MESSAGE }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (publish && !worksheetReviewerAllowsPublish(body.reviewer)) {
+      return new Response(
+        JSON.stringify({ success: false, error: WORKSHEET_PUBLISH_REQUIRES_REVIEWER_MESSAGE }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (publish && !worksheetReviewerDateAllowsPublish(body.reviewerDate)) {
+      return new Response(
+        JSON.stringify({ success: false, error: WORKSHEET_PUBLISH_REQUIRES_REVIEWER_DATE_MESSAGE }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
     const data = await executeWorksheetPost(prisma, "ACCOUNTING", body, publish);
     return new Response(
       JSON.stringify({ success: true, data, published_to_report: publish }),
@@ -54,11 +100,17 @@ export async function POST(req) {
 
 export async function PATCH(req) {
   try {
-    const { error } = await requireWorksheetEditorSession();
+    const { error, role } = await requireWorksheetEditorSession();
     if (error) return error;
     const body = await req.json();
     const url = new URL(req?.url || "", "http://localhost");
-    await executeWorksheetPatch(prisma, "ACCOUNTING", body, url.searchParams.get("year"));
+    await executeWorksheetPatch(
+      prisma,
+      "ACCOUNTING",
+      body,
+      url.searchParams.get("year"),
+      canEditWorksheetReviewerFields(role),
+    );
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
   } catch (err) {
     console.error("PATCH /api/worksheet/accounting error:", err);
