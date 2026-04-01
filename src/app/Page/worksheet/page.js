@@ -88,6 +88,12 @@ function worksheetAvailabilityStatus(row) {
 }
 
 async function WorksheetContent({ yearParam }) {
+  let auditYear = new Date().getFullYear();
+  if (yearParam != null && String(yearParam).trim() !== "") {
+    const p = parseInt(String(yearParam), 10);
+    if (Number.isFinite(p)) auditYear = p;
+  }
+
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
@@ -101,9 +107,12 @@ async function WorksheetContent({ yearParam }) {
   if (!isAdmin && !isReviewer && userName) {
     try {
       const baseUrl = getInternalFetchBaseUrl();
-      const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=worksheet`, {
+      const res = await fetch(
+        `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=worksheet&year=${encodeURIComponent(String(auditYear))}`,
+        {
         cache: "no-store",
-      });
+        }
+      );
       if (res.ok) {
         const data = await res.json().catch(() => null);
         if (data?.success) {
@@ -137,34 +146,47 @@ async function WorksheetContent({ yearParam }) {
     { id: "B1.10", department: "OPERATIONAL" },
     { id: "B1.11", department: "WAREHOUSE" },
   ];
-  
+
+  let scheduleWindowByDept = {};
+  try {
+    const baseUrl = getInternalFetchBaseUrl();
+    const sr = await fetch(
+      `${baseUrl}/api/schedule/module?module=worksheet&year=${encodeURIComponent(String(auditYear))}`,
+      { cache: "no-store" }
+    );
+    const sj = await sr.json().catch(() => null);
+    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
+      scheduleWindowByDept = buildScheduleWindowsByUpperDeptName(sj.rows);
+    }
+  } catch (e) {
+    console.warn("Failed to load worksheet schedule windows:", e?.message);
+  }
+
+  const hasWorksheetScheduleForDept = (deptName) => {
+    const win = scheduleWindowByDept[deptName];
+    return !!(win?.start && win?.end);
+  };
+
   const isDepartmentEnabled = (deptName) => {
-    // Admin can access all departments
-    // Reviewer can access all departments (for viewing), but can only edit reviewer fields
+    if (!hasWorksheetScheduleForDept(deptName)) return false;
     if (isAdmin || isReviewer) return true;
-    // If no assignments, disable all departments
     if (allowedDepartments.length === 0) return false;
-    // Check if department is in allowed list (by name or by deptKey)
     const deptKey = getDeptKeyFromDepartmentName(deptName);
     return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
   };
 
   // Ambil data terakhir per department dari database (order by created_at desc, ambil baris pertama per department = terbaru)
-  const year = yearParam ? parseInt(yearParam, 10) : null;
   const departments = baseWorksheets.map((w) => w.department);
 
   let latestByDept = {};
   try {
+    const from = new Date(auditYear, 0, 1);
+    const to = new Date(auditYear + 1, 0, 1);
     const where = {
       department: { in: departments },
       published_to_report: false,
+      created_at: { gte: from, lt: to },
     };
-    if (!Number.isNaN(year) && year) {
-      const from = new Date(year, 0, 1);
-      const to = new Date(year + 1, 0, 1);
-      // Filter berdasarkan created_at dalam tahun tersebut
-      where.created_at = { gte: from, lt: to };
-    }
 
     const rows = await prisma.worksheet_finance.findMany({
       where,
@@ -188,18 +210,6 @@ async function WorksheetContent({ yearParam }) {
     console.error("Failed to load worksheet summaries:", e);
   }
 
-  let scheduleWindowByDept = {};
-  try {
-    const baseUrl = getInternalFetchBaseUrl();
-    const sr = await fetch(`${baseUrl}/api/schedule/module?module=worksheet`, { cache: "no-store" });
-    const sj = await sr.json().catch(() => null);
-    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
-      scheduleWindowByDept = buildScheduleWindowsByUpperDeptName(sj.rows);
-    }
-  } catch (e) {
-    console.warn("Failed to load worksheet schedule windows:", e?.message);
-  }
-
   const worksheets = baseWorksheets.map((base) => {
     const row = latestByDept[base.department];
     const status = worksheetAvailabilityStatus(row);
@@ -214,7 +224,7 @@ async function WorksheetContent({ yearParam }) {
     };
   });
 
-  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+  const yearQuery = `?year=${encodeURIComponent(String(auditYear))}`;
 
   return (
     <>
@@ -400,7 +410,12 @@ async function WorksheetContent({ yearParam }) {
 export default async function Worksheet({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
-  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+  let shellYear = new Date().getFullYear();
+  if (yearParam != null && String(yearParam).trim() !== "") {
+    const p = parseInt(String(yearParam), 10);
+    if (Number.isFinite(p)) shellYear = p;
+  }
+  const yearQuery = `?year=${encodeURIComponent(String(shellYear))}`;
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">

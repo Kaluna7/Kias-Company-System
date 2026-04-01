@@ -28,6 +28,15 @@ function getDeptKeyFromDepartmentName(deptName) {
 }
 
 export default async function Evidence({ searchParams }) {
+  const params = await searchParams;
+  const yearParam = params?.year;
+  let auditYear = new Date().getFullYear();
+  if (yearParam != null && String(yearParam).trim() !== "") {
+    const p = parseInt(String(yearParam), 10);
+    if (Number.isFinite(p)) auditYear = p;
+  }
+  const yearQuery = `?year=${encodeURIComponent(String(auditYear))}`;
+
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
@@ -41,9 +50,12 @@ export default async function Evidence({ searchParams }) {
   if (!isAdmin && !isReviewer && userName) {
     try {
       const baseUrl = getInternalFetchBaseUrl();
-      const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=evidence`, {
+      const res = await fetch(
+        `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=evidence&year=${encodeURIComponent(String(auditYear))}`,
+        {
         cache: "no-store",
-      });
+        }
+      );
       if (res.ok) {
         const data = await res.json().catch(() => null);
         if (data?.success) {
@@ -63,14 +75,31 @@ export default async function Evidence({ searchParams }) {
   const allowedDeptKeys = new Set(
     allowedDepartments.map(d => d.key)
   );
-  
+
+  let scheduleByDept = {};
+  try {
+    const baseUrl = getInternalFetchBaseUrl();
+    const sr = await fetch(
+      `${baseUrl}/api/schedule/module?module=evidence&year=${encodeURIComponent(String(auditYear))}`,
+      { cache: "no-store" }
+    );
+    const sj = await sr.json().catch(() => null);
+    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
+      scheduleByDept = buildScheduleWindowsByUpperDeptName(sj.rows);
+    }
+  } catch (e) {
+    console.warn("Failed to load evidence schedule dates:", e?.message);
+  }
+
+  const hasEvidenceScheduleForDept = (deptName) => {
+    const win = scheduleByDept[deptName];
+    return !!(win?.start && win?.end);
+  };
+
   const isDepartmentEnabled = (deptName) => {
-    // Admin can access all departments
-    // Reviewer can access all departments (for viewing), but can only edit reviewer fields
+    if (!hasEvidenceScheduleForDept(deptName)) return false;
     if (isAdmin || isReviewer) return true;
-    // If no assignments, disable all departments
     if (allowedDepartments.length === 0) return false;
-    // Check if department is in allowed list (by name or by deptKey)
     const deptKey = getDeptKeyFromDepartmentName(deptName);
     return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
   };
@@ -88,22 +117,6 @@ export default async function Evidence({ searchParams }) {
     { id: 'E1.10', department: 'OPERATIONAL' },
     { id: 'E1.11', department: 'WAREHOUSE' }
   ];
-
-  const params = await searchParams;
-  const yearParam = params?.year;
-  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
-
-  let scheduleByDept = {};
-  try {
-    const baseUrl = getInternalFetchBaseUrl();
-    const sr = await fetch(`${baseUrl}/api/schedule/module?module=evidence`, { cache: "no-store" });
-    const sj = await sr.json().catch(() => null);
-    if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
-      scheduleByDept = buildScheduleWindowsByUpperDeptName(sj.rows);
-    }
-  } catch (e) {
-    console.warn("Failed to load evidence schedule dates:", e?.message);
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-3 sm:p-4 md:p-6">

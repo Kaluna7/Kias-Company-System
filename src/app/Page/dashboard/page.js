@@ -168,6 +168,18 @@ function DashboardPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.name, session?.user?.role, progressUserName, selectedYear]);
 
+  useEffect(() => {
+    const raw = searchParams.get("year");
+    const cy = new Date().getFullYear();
+    if (raw == null || raw === "") {
+      setSelectedYear((prev) => (prev !== cy ? cy : prev));
+      return;
+    }
+    const p = parseInt(raw, 10);
+    if (Number.isNaN(p)) return;
+    setSelectedYear((prev) => (prev !== p ? p : prev));
+  }, [searchParams]);
+
   // Refetch progress when user returns to this tab (e.g. after clicking Publish elsewhere)
   useEffect(() => {
     function onVisible() {

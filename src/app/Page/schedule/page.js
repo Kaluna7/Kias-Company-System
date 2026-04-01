@@ -1,10 +1,10 @@
 // src/app/Page/schedule/page.js
 "use client";
 
-import { useCallback, useEffect, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useRef, useState, startTransition, Suspense } from "react";
 import gsap from "gsap";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 
 const BASE_DEPT_ROWS = [
@@ -35,10 +35,20 @@ const DEFAULT_MAIN_SCHEDULE_DATA = [
   { department: "Warehouse", incharge: "All", startDate: "03-Nov-25", endDate: "30-Nov-25", days: 28 },
 ];
 
-export default function SchedulePage() {
+function SchedulePageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
+
+  const currentYear = new Date().getFullYear();
+  const yearFromUrl = searchParams.get("year");
+  const initialYear = (() => {
+    if (!yearFromUrl) return currentYear;
+    const parsed = parseInt(yearFromUrl, 10);
+    return Number.isNaN(parsed) ? currentYear : parsed;
+  })();
+  const [selectedYear, setSelectedYear] = useState(initialYear);
 
   const headerRef = useRef(null);
   const tableRef = useRef(null);
@@ -83,6 +93,18 @@ export default function SchedulePage() {
   const [mainTempInchargeModules, setMainTempInchargeModules] = useState([]);
   const [mainTempModuleDates, setMainTempModuleDates] = useState({}); // { moduleKey: { startDate, endDate } }
 
+  useEffect(() => {
+    const raw = searchParams.get("year");
+    const cy = new Date().getFullYear();
+    if (raw == null || raw === "") {
+      setSelectedYear((prev) => (prev !== cy ? cy : prev));
+      return;
+    }
+    const p = parseInt(raw, 10);
+    if (Number.isNaN(p)) return;
+    setSelectedYear((prev) => (prev !== p ? p : prev));
+  }, [searchParams]);
+
   // ---- Helpers
   const parseDate = useCallback((dateStr) => {
     if (!dateStr) return "";
@@ -114,7 +136,8 @@ export default function SchedulePage() {
   // Load data from API
   const loadModuleSchedule = useCallback(async (moduleKey, setData) => {
     try {
-      const res = await fetch(`/api/schedule/module?module=${encodeURIComponent(moduleKey)}`, { cache: "no-store" });
+      const yq = selectedYear != null && Number.isFinite(selectedYear) ? `&year=${encodeURIComponent(String(selectedYear))}` : "";
+      const res = await fetch(`/api/schedule/module?module=${encodeURIComponent(moduleKey)}${yq}`, { cache: "no-store" });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success || !Array.isArray(json.rows)) {
         console.log(`loadModuleSchedule(${moduleKey}): No data or error`);
@@ -164,7 +187,7 @@ export default function SchedulePage() {
     } catch (err) {
       console.error(`Error loading schedule module ${moduleKey}:`, err);
     }
-  }, [formatDate]);
+  }, [formatDate, selectedYear]);
 
   const loadAllModuleSchedules = useCallback(async () => {
     await Promise.allSettled([
@@ -197,7 +220,8 @@ export default function SchedulePage() {
 
   const loadMainSchedule = useCallback(async () => {
     try {
-      const res = await fetch("/api/schedule/main", { cache: "no-store" });
+      const yq = selectedYear != null && Number.isFinite(selectedYear) ? `?year=${encodeURIComponent(String(selectedYear))}` : "";
+      const res = await fetch(`/api/schedule/main${yq}`, { cache: "no-store" });
       const json = await res.json().catch(() => null);
       const rows = res.ok && json?.success && Array.isArray(json.rows) ? json.rows : [];
 
@@ -302,7 +326,7 @@ export default function SchedulePage() {
       // fallback to defaults
       setMainScheduleRows(DEFAULT_MAIN_SCHEDULE_DATA.map((d) => ({ ...d, inchargeModules: [], moduleDates: {} })));
     }
-  }, [formatDate]);
+  }, [formatDate, selectedYear]);
 
   const loadArchive = useCallback(async () => {
     try {
@@ -342,19 +366,25 @@ export default function SchedulePage() {
       return;
     }
     if (status === "authenticated") {
-      // Only load on initial mount or when status changes to authenticated
-      // Don't reload when callbacks change to avoid overwriting user changes
-      loadMainSchedule();
-      loadAllModuleSchedules();
       loadUsers();
       loadArchive();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, router]); // Removed callback dependencies to prevent unnecessary reloads
+  }, [status, router]);
 
   useEffect(() => {
-    router.prefetch("/Page/dashboard");
-  }, [router]);
+    if (status !== "authenticated") return;
+    loadMainSchedule();
+    loadAllModuleSchedules();
+  }, [status, selectedYear, loadMainSchedule, loadAllModuleSchedules]);
+
+  useEffect(() => {
+    const qs =
+      selectedYear != null && Number.isFinite(selectedYear)
+        ? `?year=${encodeURIComponent(String(selectedYear))}`
+        : "";
+    router.prefetch(`/Page/dashboard${qs}`);
+  }, [router, selectedYear]);
 
   useEffect(() => {
     if (headerRef.current) {
@@ -1595,7 +1625,11 @@ export default function SchedulePage() {
             type="button"
             onClick={() => {
               startTransition(() => {
-                router.push("/Page/dashboard");
+                const qs =
+                  selectedYear != null && Number.isFinite(selectedYear)
+                    ? `?year=${encodeURIComponent(String(selectedYear))}`
+                    : "";
+                router.push(`/Page/dashboard${qs}`);
               });
             }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
@@ -1611,13 +1645,39 @@ export default function SchedulePage() {
         <header className="mb-6 sm:mb-8" ref={headerRef}>
           <div className="bg-gradient-to-r from-[#141D38] via-[#1e2d4a] to-[#2D3A5A] rounded-2xl sm:rounded-3xl shadow-xl border border-slate-700/40 overflow-hidden">
             <div className="p-5 sm:p-6 md:p-8">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 flex-shrink-0">
-                  <span className="text-xl sm:text-2xl" aria-hidden>📅</span>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 min-w-0">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 flex-shrink-0">
+                    <span className="text-xl sm:text-2xl" aria-hidden>📅</span>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">Schedule</h1>
+                    <p className="text-blue-100/90 text-sm sm:text-base mt-0.5">Project timeline & preparer feedback</p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">Schedule</h1>
-                  <p className="text-blue-100/90 text-sm sm:text-base mt-0.5">Project timeline & preparer feedback</p>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs sm:text-sm text-blue-100">Year:</span>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => {
+                      const nextYear = parseInt(e.target.value, 10);
+                      setSelectedYear(nextYear);
+                      try {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("year", String(nextYear));
+                        router.replace(url.pathname + url.search);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="bg-white/10 border border-white/30 text-white text-xs sm:text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200/70"
+                  >
+                    {[currentYear + 1, currentYear, currentYear - 1, currentYear - 2].map((y) => (
+                      <option key={y} value={y} className="text-slate-900 bg-white">
+                        {y}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -2343,4 +2403,10 @@ export default function SchedulePage() {
   );
 }
 
-
+export default function SchedulePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 text-sm">Loading...</div>}>
+      <SchedulePageContent />
+    </Suspense>
+  );
+}

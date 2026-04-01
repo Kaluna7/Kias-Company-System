@@ -119,6 +119,12 @@ function SopReviewGridSkeleton() {
 }
 
 async function SopReviewGrid({ yearParam }) {
+  let auditYear = new Date().getFullYear();
+  if (yearParam != null && String(yearParam).trim() !== "") {
+    const p = parseInt(String(yearParam), 10);
+    if (Number.isFinite(p)) auditYear = p;
+  }
+
   const sopStatuses = await loadSopStatuses();
   
   // Get user session and assignments
@@ -137,7 +143,7 @@ async function SopReviewGrid({ yearParam }) {
   if (!isPrivileged && userName) {
     try {
       const baseUrl = getInternalFetchBaseUrl();
-      const apiUrl = `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=sop-review`;
+      const apiUrl = `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=sop-review&year=${encodeURIComponent(String(auditYear))}`;
       const res = await fetch(apiUrl, {
         cache: "no-store",
       });
@@ -186,7 +192,10 @@ async function SopReviewGrid({ yearParam }) {
   let scheduleByDeptKey = {};
   try {
     const baseUrl = getInternalFetchBaseUrl();
-    const sr = await fetch(`${baseUrl}/api/schedule/module?module=sop-review`, { cache: "no-store" });
+    const sr = await fetch(
+      `${baseUrl}/api/schedule/module?module=sop-review&year=${encodeURIComponent(String(auditYear))}`,
+      { cache: "no-store" }
+    );
     const sj = await sr.json().catch(() => null);
     if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
       scheduleByDeptKey = buildScheduleWindowsByDeptKey(sj.rows);
@@ -214,11 +223,18 @@ async function SopReviewGrid({ yearParam }) {
     }
   };
   
-  const isDepartmentEnabled = (deptName) => {
-    if (isPrivileged) return true;
-    // Report is always accessible
+  const hasSopScheduleForCard = (deptName) => {
     if (deptName === "Report") return true;
-    // If no assignments, disable all departments
+    const k = getDeptKeyFromCardName(deptName);
+    if (!k) return false;
+    const w = scheduleByDeptKey[k];
+    return !!(w?.start && w?.end);
+  };
+
+  const isDepartmentEnabled = (deptName) => {
+    if (deptName === "Report") return true;
+    if (!hasSopScheduleForCard(deptName)) return false;
+    if (isPrivileged) return true;
     if (allowedDepartments.length === 0) return false;
     // Normalize department name for matching
     const normalized = normalizeDeptName(deptName);
@@ -231,7 +247,7 @@ async function SopReviewGrid({ yearParam }) {
     return enabledByName || enabledByKey;
   };
 
-  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+  const yearQuery = `?year=${encodeURIComponent(String(auditYear))}`;
 
   return (
     <div className="mb-8">
@@ -355,7 +371,12 @@ async function SopReviewGrid({ yearParam }) {
 export default async function SopReview({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
-  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+  let shellYear = new Date().getFullYear();
+  if (yearParam != null && String(yearParam).trim() !== "") {
+    const p = parseInt(String(yearParam), 10);
+    if (Number.isFinite(p)) shellYear = p;
+  }
+  const yearQuery = `?year=${encodeURIComponent(String(shellYear))}`;
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import pkg from "pg";
 const { Pool } = pkg;
 import prisma from "@/app/lib/prisma";
+import { buildWindowFromSchedule, dateToLocalYmd } from "@/lib/scheduleYearWindow";
 
 // Reuse global pool to avoid too many clients in dev/serverless
 if (!global._pgPool) {
@@ -233,6 +234,11 @@ export async function GET(req) {
       return NextResponse.json({ success: false, error: "Missing/invalid module. Use ?module=sop-review|worksheet|audit-finding|evidence" }, { status: 400 });
     }
 
+    const url = new URL(req.url);
+    const yearParam = url.searchParams.get("year");
+    const parsedYear = yearParam ? parseInt(yearParam, 10) : null;
+    const filterYear = parsedYear != null && Number.isFinite(parsedYear) ? parsedYear : null;
+
     const client = await pool.connect();
     try {
       await migrateFromLegacyIfNeeded(client);
@@ -248,7 +254,7 @@ export async function GET(req) {
       
       // Dates are already formatted as YYYY-MM-DD strings from PostgreSQL TO_CHAR
       // No need for additional formatting - use them directly
-      const formattedRows = (r.rows || []).map(row => {
+      let formattedRows = (r.rows || []).map(row => {
         const formatted = { ...row };
         // start_date and end_date are already strings in YYYY-MM-DD format from TO_CHAR
         // Just ensure they're trimmed and valid
@@ -262,6 +268,23 @@ export async function GET(req) {
         }
         return formatted;
       });
+
+      if (filterYear != null) {
+        formattedRows = formattedRows.map((row) => {
+          if (!row.is_configured || !row.start_date || !row.end_date) return row;
+          const win = buildWindowFromSchedule(
+            { start_date: row.start_date, end_date: row.end_date },
+            filterYear
+          );
+          if (!win) {
+            return { ...row, start_date: "", end_date: "", days: null, is_configured: false };
+          }
+          const sd = dateToLocalYmd(win.start);
+          const ed = dateToLocalYmd(win.end);
+          const days = Math.ceil((win.end - win.start) / (1000 * 60 * 60 * 24)) + 1;
+          return { ...row, start_date: sd, end_date: ed, days };
+        });
+      }
       
       console.log(`GET /api/schedule/module?module=${moduleKey}: Returning ${formattedRows.length} rows`);
       if (formattedRows.length > 0) {

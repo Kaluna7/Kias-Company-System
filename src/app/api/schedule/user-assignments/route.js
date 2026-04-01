@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import schedulePool from "@/app/lib/db";
+import { buildWindowFromSchedule } from "@/lib/scheduleYearWindow";
 
 const DEPT_KEY_BY_SCHEDULE_ID = {
   "A1.1": "finance",
@@ -38,6 +39,9 @@ export async function GET(req) {
     const url = new URL(req.url);
     const userName = (url.searchParams.get("userName") || "").trim();
     const moduleKey = (url.searchParams.get("module") || "sop-review").trim();
+    const yearParam = url.searchParams.get("year");
+    const parsedYear = yearParam ? parseInt(yearParam, 10) : null;
+    const year = parsedYear != null && Number.isFinite(parsedYear) ? parsedYear : null;
 
     if (!userName) {
       return NextResponse.json({ success: false, error: "Missing userName parameter" }, { status: 400 });
@@ -57,7 +61,9 @@ export async function GET(req) {
     // user_name di schedule bisa berisi beberapa orang (dipisah koma). Equality SQL pada
     // seluruh string gagal jika session = "A" tapi kolom = "A, B". Sama seperti dashboard progress.
     const r = await schedulePool.query(
-      `SELECT department_id, department_name, user_name
+      `SELECT department_id, department_name, user_name,
+              TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+              TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date
        FROM public.schedule_module_feedback
        WHERE module_key = $1 AND is_configured = true`,
       [moduleKey]
@@ -68,6 +74,14 @@ export async function GET(req) {
     const allowedDepartments = [];
 
     for (const row of r.rows || []) {
+      if (year != null) {
+        const w = buildWindowFromSchedule(
+          { start_date: row.start_date, end_date: row.end_date },
+          year
+        );
+        if (!w) continue;
+      }
+
       const rawName = String(row.user_name || "").trim();
       if (!rawName) continue;
 

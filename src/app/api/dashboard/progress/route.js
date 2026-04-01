@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/app/lib/prisma";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import schedulePool from "@/app/lib/db";
+import { buildWindowFromSchedule } from "@/lib/scheduleYearWindow";
 
 const DEPARTMENTS = [
   {
@@ -177,30 +178,12 @@ async function loadModuleScheduleByDept(moduleKey) {
   return byDept;
 }
 
-function buildWindowFromSchedule(schedule, year) {
-  if (!schedule?.start_date || !schedule?.end_date) return null;
-
-  let start = schedule.start_date instanceof Date ? schedule.start_date : new Date(schedule.start_date);
-  let end = schedule.end_date instanceof Date ? schedule.end_date : new Date(schedule.end_date);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-
-  if (year) {
-    const yearStart = new Date(year, 0, 1);
-    const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-    if (end < yearStart || start > yearEnd) return null;
-    if (start < yearStart) start = yearStart;
-    if (end > yearEnd) end = yearEnd;
-  }
-
-  return { start, end };
-}
-
 /**
  * SOP Review "Done" = user clicked Publish in that department FOR THE CURRENT SCHEDULE only.
  * We require a publish whose published_at falls within the department's schedule window (start_date..end_date).
  * So: hanya setelah user click Publish di module/department yang dipilih di schedule, baru dianggap Done.
  */
-async function getSopReviewDoneSet(scheduleByDept) {
+async function getSopReviewDoneSet(scheduleByDept, year) {
   const client = await pool.connect();
   try {
     const promises = [];
@@ -209,12 +192,11 @@ async function getSopReviewDoneSet(scheduleByDept) {
       const metaTable = `sop_report_${d.sopSlug}`;
       deptByIndex.push(d.key);
       const schedule = scheduleByDept?.get(d.key);
-      if (!schedule?.start_date || !schedule?.end_date) {
+      const window = buildWindowFromSchedule(schedule, year);
+      if (!window) {
         promises.push(Promise.resolve(false));
         continue;
       }
-      const startDate = schedule.start_date instanceof Date ? schedule.start_date : new Date(schedule.start_date);
-      const endDate = schedule.end_date instanceof Date ? schedule.end_date : new Date(schedule.end_date);
       promises.push(
         client
           .query(
@@ -223,7 +205,7 @@ async function getSopReviewDoneSet(scheduleByDept) {
                AND published_at::date >= $1::date
                AND published_at::date <= $2::date
              LIMIT 1`,
-            [startDate, endDate]
+            [window.start, window.end]
           )
           .then((r) => (r?.rowCount ?? 0) > 0)
           .catch(() => false)
@@ -345,8 +327,8 @@ async function getEvidenceDoneSet(scheduleByDept, year) {
   return done;
 }
 
-async function loadConfiguredModules() {
-  // Returns Map(moduleKey -> Set(deptKey)) for all modules that have is_configured = true
+async function loadConfiguredModules(year) {
+  // Returns Map(moduleKey -> Set(deptKey)) for modules configured in the selected audit year (or all years if year is null)
   const configuredByModule = new Map();
 
   // If schedule table doesn't exist yet, return empty map
@@ -358,15 +340,24 @@ async function loadConfiguredModules() {
   );
   if (!check?.rows?.[0]?.exists) return configuredByModule;
 
-  // Get all modules that are configured (is_configured = true)
   const r = await schedulePool.query(
-    `SELECT module_key, department_id
+    `SELECT module_key, department_id,
+            TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+            TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date
      FROM public.schedule_module_feedback
      WHERE is_configured = true
      ORDER BY module_key, department_id`
   );
 
   for (const row of r.rows || []) {
+    if (year != null && Number.isFinite(year)) {
+      const w = buildWindowFromSchedule(
+        { start_date: row.start_date, end_date: row.end_date },
+        year
+      );
+      if (!w) continue;
+    }
+
     const deptId = String(row.department_id || "").trim();
     const deptKey = DEPT_KEY_BY_SCHEDULE_ID[deptId];
     if (!deptKey) continue;
@@ -380,7 +371,7 @@ async function loadConfiguredModules() {
   return configuredByModule;
 }
 
-async function loadAssignmentsByUser(userName) {
+async function loadAssignmentsByUser(userName, year) {
   if (!userName) return { allowedDeptKeys: null, allowedByModule: null };
 
   // If schedule table doesn't exist yet, don't filter anything
@@ -396,7 +387,9 @@ async function loadAssignmentsByUser(userName) {
   // tetapi sekarang bisa berisi beberapa user (dipisah koma).
   // Kita ambil SEMUA baris is_configured=true lalu filter di kode.
   const r = await schedulePool.query(
-    `SELECT module_key, department_id, user_name
+    `SELECT module_key, department_id, user_name,
+            TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+            TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date
      FROM public.schedule_module_feedback
      WHERE is_configured = true`
   );
@@ -407,6 +400,14 @@ async function loadAssignmentsByUser(userName) {
   const target = String(userName || "").trim().toLowerCase();
 
   for (const row of r.rows || []) {
+    if (year != null && Number.isFinite(year)) {
+      const w = buildWindowFromSchedule(
+        { start_date: row.start_date, end_date: row.end_date },
+        year
+      );
+      if (!w) continue;
+    }
+
     const rawName = String(row.user_name || "").trim();
     if (!rawName) continue;
 
@@ -523,18 +524,19 @@ export async function GET(req) {
     const url = new URL(req.url);
     const userName = (url.searchParams.get("userName") || "").trim();
     const yearParam = url.searchParams.get("year");
-    const year = yearParam ? parseInt(yearParam, 10) : null;
+    const parsedYear = yearParam ? parseInt(yearParam, 10) : null;
+    const year = parsedYear != null && Number.isFinite(parsedYear) ? parsedYear : null;
 
     const [assignments, archive, configuredByModule, sopScheduleByDept, worksheetScheduleByDept, auditFindingScheduleByDept, evidenceScheduleByDept] = await Promise.all([
-      loadAssignmentsByUser(userName || null),
+      loadAssignmentsByUser(userName || null, year),
       loadArchive(),
-      loadConfiguredModules(),
+      loadConfiguredModules(year),
       loadSopReviewScheduleByDept(),
       loadModuleScheduleByDept("worksheet"),
       loadModuleScheduleByDept("audit-finding"),
       loadModuleScheduleByDept("evidence"),
     ]);
-    const sopDone = await getSopReviewDoneSet(sopScheduleByDept);
+    const sopDone = await getSopReviewDoneSet(sopScheduleByDept, year);
     const [worksheetDone, auditFindingDone, evidenceDone] = await Promise.all([
       getWorksheetDoneSet(worksheetScheduleByDept, year),
       getAuditFindingDoneSet(auditFindingScheduleByDept, year),

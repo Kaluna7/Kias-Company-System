@@ -152,7 +152,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
-  const backHref = `/Page/sop-review${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+  const auditYear = useMemo(() => {
+    if (yearParam != null && String(yearParam).trim() !== "") {
+      const p = parseInt(String(yearParam), 10);
+      if (Number.isFinite(p)) return p;
+    }
+    return new Date().getFullYear();
+  }, [yearParam]);
+  const backHref = `/Page/sop-review?year=${encodeURIComponent(String(auditYear))}`;
 
   useEffect(() => {
     const check = () => setIsMobileView(window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || ""));
@@ -189,7 +196,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           return;
         }
 
-        const res = await fetch(`/api/schedule/module?module=sop-review`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/schedule/module?module=sop-review&year=${encodeURIComponent(String(auditYear))}`,
+          { cache: "no-store" }
+        );
         const data = await res.json();
         
         if (data.success && Array.isArray(data.rows)) {
@@ -279,7 +289,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     return () => {
       mounted = false;
     };
-  }, [apiPath]);
+  }, [apiPath, auditYear]);
 
   useEffect(() => {
     let mounted = true;
@@ -287,7 +297,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const qs = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+        const qs = `?year=${encodeURIComponent(String(auditYear))}`;
         const [res, metaRes] = await Promise.all([
           fetch(`/api/SopReview/${apiPath}${qs}`, { method: "GET" }),
           fetch(`/api/SopReview/${apiPath}/meta${qs}`, { method: "GET" }),
@@ -425,7 +435,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       mounted = false;
       clearTimeout(timeoutId);
     };
-  }, [apiPath, schedulePreparerName, schedulePreparerDate]);
+  }, [apiPath, schedulePreparerName, schedulePreparerDate, auditYear]);
   
   // Ensure schedule per module date is always used (even after meta data loads or user tries to change it)
   // This useEffect runs whenever schedulePreparerDate changes and ensures it overrides any meta data or user changes

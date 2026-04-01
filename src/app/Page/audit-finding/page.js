@@ -30,6 +30,12 @@ function getDeptKeyFromDepartmentName(deptName) {
 export default async function B2AuditFinding({ searchParams }) {
   const params = await searchParams;
   const yearParam = params?.year;
+  let auditYear = new Date().getFullYear();
+  if (yearParam != null && String(yearParam).trim() !== "") {
+    const p = parseInt(String(yearParam), 10);
+    if (Number.isFinite(p)) auditYear = p;
+  }
+
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
@@ -43,9 +49,12 @@ export default async function B2AuditFinding({ searchParams }) {
   if (!isAdmin && !isReviewer && userName) {
     try {
       const baseUrl = getInternalFetchBaseUrl();
-      const res = await fetch(`${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=audit-finding`, {
+      const res = await fetch(
+        `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=audit-finding&year=${encodeURIComponent(String(auditYear))}`,
+        {
         cache: "no-store",
-      });
+        }
+      );
       if (res.ok) {
         const data = await res.json().catch(() => null);
         if (data?.success) {
@@ -65,17 +74,6 @@ export default async function B2AuditFinding({ searchParams }) {
   const allowedDeptKeys = new Set(
     allowedDepartments.map(d => d.key)
   );
-  
-  const isDepartmentEnabled = (deptName) => {
-    // Admin can access all departments
-    // Reviewer can access all departments (for viewing), but can only edit reviewer fields
-    if (isAdmin || isReviewer) return true;
-    // If no assignments, disable all departments
-    if (allowedDepartments.length === 0) return false;
-    // Check if department is in allowed list (by name or by deptKey)
-    const deptKey = getDeptKeyFromDepartmentName(deptName);
-    return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
-  };
 
   // Base list: id, department, apiPath (for /api/audit-finding/{apiPath}/meta)
   const baseFindings = [
@@ -99,9 +97,7 @@ export default async function B2AuditFinding({ searchParams }) {
       baseFindings.map(async (base) => {
         try {
           const url = new URL(`${internalBase}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`);
-          if (yearParam) {
-            url.searchParams.set("year", String(yearParam));
-          }
+          url.searchParams.set("year", String(auditYear));
           const res = await fetch(url.toString(), { cache: 'no-store' });
           if (!res.ok) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
           const json = await res.json().catch(() => null);
@@ -122,7 +118,10 @@ export default async function B2AuditFinding({ searchParams }) {
     ),
     (async () => {
       try {
-        const sr = await fetch(`${internalBase}/api/schedule/module?module=audit-finding`, { cache: "no-store" });
+        const sr = await fetch(
+          `${internalBase}/api/schedule/module?module=audit-finding&year=${encodeURIComponent(String(auditYear))}`,
+          { cache: "no-store" }
+        );
         const sj = await sr.json().catch(() => null);
         if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
           return buildScheduleWindowsByDeptKey(sj.rows);
@@ -136,7 +135,22 @@ export default async function B2AuditFinding({ searchParams }) {
 
   const auditFindings = metaResults;
 
-  const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
+  const hasAfScheduleForDept = (deptName) => {
+    const k = getDeptKeyFromDepartmentName(deptName);
+    if (!k) return false;
+    const w = scheduleByDeptKey[k];
+    return !!(w?.start && w?.end);
+  };
+
+  const isDepartmentEnabled = (deptName) => {
+    if (!hasAfScheduleForDept(deptName)) return false;
+    if (isAdmin || isReviewer) return true;
+    if (allowedDepartments.length === 0) return false;
+    const deptKey = getDeptKeyFromDepartmentName(deptName);
+    return allowedDeptNames.has(deptName.toUpperCase()) || (deptKey && allowedDeptKeys.has(deptKey));
+  };
+
+  const yearQuery = `?year=${encodeURIComponent(String(auditYear))}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">

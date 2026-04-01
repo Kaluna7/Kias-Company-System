@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
@@ -26,8 +26,15 @@ export default function EvidenceDeptPage({
   const [evidenceMeta, setEvidenceMeta] = useState(null);
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
-  const yearFilter = yearParam ? parseInt(yearParam, 10) : null;
-  const backHref = `/Page/evidence${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`;
+  const effectiveYear = useMemo(() => {
+    if (yearParam != null && String(yearParam).trim() !== "") {
+      const p = parseInt(String(yearParam), 10);
+      if (Number.isFinite(p)) return p;
+    }
+    return new Date().getFullYear();
+  }, [yearParam]);
+  const yearFilter = effectiveYear;
+  const backHref = `/Page/evidence?year=${encodeURIComponent(String(effectiveYear))}`;
 
   // Map department label to schedule department_id
   const getScheduleDeptId = (deptLabel) => {
@@ -56,7 +63,9 @@ export default function EvidenceDeptPage({
         return null;
       }
 
-      const res = await fetch(`/api/schedule/module?module=evidence`);
+      const res = await fetch(
+        `/api/schedule/module?module=evidence&year=${encodeURIComponent(String(effectiveYear))}`
+      );
       const result = await res.json().catch(() => ({}));
 
       if (result.success && Array.isArray(result.rows)) {
@@ -77,7 +86,7 @@ export default function EvidenceDeptPage({
       setPreparer("");
       return null;
     }
-  }, [departmentLabel]);
+  }, [departmentLabel, effectiveYear]);
 
   useEffect(() => {
     fetchPreparerFromSchedule();
@@ -94,9 +103,7 @@ export default function EvidenceDeptPage({
         page: String(page),
         pageSize: String(pageSize),
       });
-      if (yearFilter) {
-        params.set("year", String(yearFilter));
-      }
+      params.set("year", String(yearFilter));
       // Sembunyikan data yang sudah dipublish (COMPLETE + ada file) dari halaman departemen;
       // data tersebut akan tampil di halaman Report.
       params.set("exclude_published", "1");
@@ -173,7 +180,7 @@ export default function EvidenceDeptPage({
       formData.append("ap_id", row.ap_id);
       formData.append("ap_code", row.ap_code);
       formData.append("department", departmentLabel);
-      if (yearParam) formData.append("year", yearParam);
+      formData.append("year", String(effectiveYear));
 
       const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
       const result = await response.json();
@@ -225,7 +232,7 @@ export default function EvidenceDeptPage({
           ap_id: row.ap_id,
           ap_code: row.ap_code,
           fileUrl,
-          year: yearParam || null,
+          year: String(effectiveYear),
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -283,7 +290,7 @@ export default function EvidenceDeptPage({
           department: departmentLabel, 
           preparer: (preparer && preparer !== "Not Set") ? String(preparer).trim() : "", 
           overallStatus: overallStatus || "INCOMPLETE", 
-          year: yearParam || null,
+          year: String(effectiveYear),
           evidenceData: validEvidenceData 
         }),
       });

@@ -187,6 +187,13 @@ export default function WorksheetDeptPage({
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
+  const auditYear = useMemo(() => {
+    if (yearParam != null && String(yearParam).trim() !== "") {
+      const p = parseInt(String(yearParam), 10);
+      if (Number.isFinite(p)) return p;
+    }
+    return new Date().getFullYear();
+  }, [yearParam]);
 
   const fetchPreparerFromSchedule = useCallback(async () => {
     try {
@@ -197,7 +204,10 @@ export default function WorksheetDeptPage({
         setSchedulePreparerDateLocked(false);
         return;
       }
-      const res = await fetch(`/api/schedule/module?module=worksheet`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/schedule/module?module=worksheet&year=${encodeURIComponent(String(auditYear))}`,
+        { cache: "no-store" }
+      );
       const result = await res.json().catch(() => ({}));
       if (result.success && Array.isArray(result.rows)) {
         const scheduleRow = result.rows.find(
@@ -220,7 +230,7 @@ export default function WorksheetDeptPage({
       setPreparerDate("");
       setSchedulePreparerDateLocked(false);
     }
-  }, [departmentValue]);
+  }, [departmentValue, auditYear]);
 
   useEffect(() => {
     fetchPreparerFromSchedule();
@@ -234,7 +244,7 @@ export default function WorksheetDeptPage({
   const fetchLatestWorksheetRow = useCallback(async () => {
     try {
       const url = new URL(apiPath, window.location.origin);
-      if (yearParam) url.searchParams.set("year", yearParam);
+      url.searchParams.set("year", String(auditYear));
       url.searchParams.set("excludePublished", "1");
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) return null;
@@ -243,7 +253,7 @@ export default function WorksheetDeptPage({
     } catch {
       return null;
     }
-  }, [apiPath, yearParam]);
+  }, [apiPath, auditYear]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,7 +293,7 @@ export default function WorksheetDeptPage({
   const saveStatusWP = async (value) => {
     try {
       const u = new URL(apiPath, typeof window !== "undefined" ? window.location.origin : "http://localhost");
-      if (yearParam) u.searchParams.set("year", yearParam);
+      u.searchParams.set("year", String(auditYear));
       const res = await fetch(u.toString(), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -308,9 +318,7 @@ export default function WorksheetDeptPage({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("department", uploadDepartment);
-      if (yearParam) {
-        formData.append("year", yearParam);
-      }
+      formData.append("year", String(auditYear));
 
       const response = await fetch("/api/worksheet/upload", {
         method: "POST",
@@ -389,7 +397,7 @@ export default function WorksheetDeptPage({
           statusWP,
           filePath,
           auditArea: auditAreaSerialized,
-          year: yearParam || null,
+          year: String(auditYear),
         }),
       });
 
@@ -430,7 +438,7 @@ export default function WorksheetDeptPage({
         <SmallHeader
           label={headerLabel}
           showSearch={false}
-          backHref={`/Page/worksheet${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
+          backHref={`/Page/worksheet?year=${encodeURIComponent(String(auditYear))}`}
         />
         <div className="flex-1 w-full h-full overflow-y-auto mt-20 md:mt-14 p-4 md:p-6">
           <div className="bg-white rounded-xl shadow-lg p-6 md:p-8 max-w-7xl mx-auto border border-gray-200">

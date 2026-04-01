@@ -82,7 +82,11 @@ async function loadAuditReviewData(dept, selectedYear = null) {
     // Fetch schedule data
     let schedule = null;
     try {
-      const scheduleRes = await fetch(`${baseUrl}/api/schedule/module?module=audit-finding`, noStore);
+      const scheduleYear = Number.isInteger(selectedYear) ? selectedYear : new Date().getFullYear();
+      const scheduleRes = await fetch(
+        `${baseUrl}/api/schedule/module?module=audit-finding&year=${encodeURIComponent(String(scheduleYear))}`,
+        noStore
+      );
       if (scheduleRes.ok) {
         const scheduleJson = await scheduleRes.json();
         if (scheduleJson.success && Array.isArray(scheduleJson.rows)) {
