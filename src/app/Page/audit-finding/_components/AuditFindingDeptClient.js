@@ -5,6 +5,13 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/app/components/ui/Pagination";
 import { useToast } from "@/app/contexts/ToastContext";
+import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
+
+/** Preparer Status / Final Status must be COMPLETE (or Complete) before publish — same as dropdown value COMPLETED. */
+function isAuditFindingHeaderStatusComplete(raw) {
+  const s = String(raw ?? "").trim().toUpperCase();
+  return s === "COMPLETED" || s === "COMPLETE";
+}
 
 function normalizeRows(rows) {
   const list = Array.isArray(rows) ? rows : [];
@@ -36,6 +43,83 @@ function normalizeRows(rows) {
 
 function isValidFindingRowPayload(item) {
   return item && typeof item === "object" && !Array.isArray(item);
+}
+
+function riskToApiValue(row) {
+  if (row.risk === "" || row.risk === null || row.risk === undefined) return null;
+  const n = typeof row.risk === "number" ? row.risk : parseInt(String(row.risk), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Baris tanpa id: simpan sebagai finding baru jika ada isian yang relevan (selaras dengan Save & Done). */
+function shouldPersistNewFindingRow(row) {
+  return !!(
+    row.riskId ||
+    row.riskDescription ||
+    row.riskDetails ||
+    row.apCode ||
+    row.substantiveTest ||
+    row.findingResult ||
+    row.preparer ||
+    (row.risk !== "" && row.risk != null && row.risk !== undefined) ||
+    row.checkYN ||
+    row.method ||
+    row.findingDescription ||
+    row.recommendation ||
+    row.auditee ||
+    row.completionDate
+  );
+}
+
+function buildFindingRowPutBody(row) {
+  return {
+    riskId: row.riskId,
+    riskDescription: row.riskDescription,
+    riskDetails: row.riskDetails,
+    apCode: row.apCode,
+    substantiveTest: row.substantiveTest,
+    risk: riskToApiValue(row),
+    checkYN: row.checkYN,
+    method: row.method,
+    preparer: row.preparer,
+    findingResult: row.findingResult,
+    findingDescription: row.findingDescription,
+    recommendation: row.recommendation,
+    auditee: row.auditee,
+    completionStatus: row.completionStatus,
+    completionDate: row.completionDate || null,
+  };
+}
+
+function buildFindingRowPostBody(row) {
+  return {
+    riskId: row.riskId || "",
+    riskDescription: row.riskDescription || "",
+    riskDetails: row.riskDetails || "",
+    apCode: row.apCode || "",
+    substantiveTest: row.substantiveTest || "",
+    risk: riskToApiValue(row),
+    checkYN: row.checkYN || "",
+    method: row.method || "",
+    preparer: row.preparer || "",
+    findingResult: row.findingResult || "",
+    findingDescription: row.findingDescription || "",
+    recommendation: row.recommendation || "",
+    auditee: row.auditee || "",
+    completionStatus: row.completionStatus || "",
+    completionDate: row.completionDate || null,
+  };
+}
+
+async function parseSaveErrorResponse(res) {
+  const text = await res.text().catch(() => "");
+  try {
+    const j = JSON.parse(text);
+    if (j?.error) return j.error;
+  } catch {
+    /* ignore */
+  }
+  return text || `HTTP ${res.status}`;
 }
 
 export default function AuditFindingDeptClient({
@@ -84,6 +168,7 @@ export default function AuditFindingDeptClient({
   const [findingMeta, setFindingMeta] = useState(initialMeta);
   const [isEditMode, setIsEditMode] = useState(false); // Global edit mode for all rows
   const [isScheduleConfigured, setIsScheduleConfigured] = useState(false); // Schedule configuration status
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
 
   // Auto-save refs
   const saveMetaTimeoutRef = useRef(null);
@@ -95,6 +180,8 @@ export default function AuditFindingDeptClient({
   const isSavingTableDataRef = useRef(false);
   const lastSavedTableDataRef = useRef(null);
   const isTableDirtyRef = useRef(false);
+  /** Selalu mirror isi tabel terkini (termasuk dalam updater setState) supaya Save & Done tidak baca state yang ketinggalan satu render. */
+  const tableDataRef = useRef(normalizeRows(initialData));
 
   const statusOptions = useMemo(
     () => [
@@ -115,6 +202,18 @@ export default function AuditFindingDeptClient({
       { value: "No", label: "No" },
     ],
     []
+  );
+
+  const isMetaReadyForPublish = useMemo(
+    () =>
+      isAuditFindingHeaderStatusComplete(preparerStatus) &&
+      isAuditFindingHeaderStatusComplete(finalStatus),
+    [preparerStatus, finalStatus],
+  );
+
+  const canOpenPublishModal = useMemo(
+    () => canPublish && (isScheduleConfigured || isAdmin),
+    [canPublish, isScheduleConfigured, isAdmin],
   );
 
   // Ensure prepareDate is set from schedule if available
@@ -254,79 +353,6 @@ export default function AuditFindingDeptClient({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiPath]);
-
-  // Sync completionStatus from Evidence REPORT-style data:
-  // Hanya AP yang sudah punya file DAN is_published=true (overall_status=COMPLETE) yang di-set ke "Ready to Publish".
-  useEffect(() => {
-    async function syncCompletionStatusFromEvidence() {
-      try {
-        const deptLabelMap = {
-          finance: "FINANCE",
-          accounting: "ACCOUNTING",
-          hrd: "HRD",
-          "g&a": "G&A",
-          ga: "G&A",
-          sdp: "SDP",
-          tax: "TAX",
-          "l&p": "L&P",
-          lp: "L&P",
-          mis: "MIS",
-          merch: "MERCHANDISE",
-          ops: "OPERATIONAL",
-          whs: "WAREHOUSE",
-        };
-        const deptLabel = deptLabelMap[apiPath];
-        if (!deptLabel) return;
-
-        const params = new URLSearchParams({
-          department: deptLabel,
-          page: "1",
-          pageSize: "1000",
-        });
-        params.set("year", String(auditYear));
-        const res = await fetch(`/api/evidence/${encodeURIComponent(apiPath)}?${params.toString()}`);
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || !json?.data || !Array.isArray(json.data)) return;
-
-        // ambil ap_code yang sudah published (punya file & is_published=true)
-        const publishedCodes = new Set(
-          json.data
-            .filter(
-              (row) =>
-                row.is_published === true &&
-                (row.file_url || row.attachment || (Array.isArray(row.attachments) && row.attachments.length > 0)) &&
-                row.ap_code,
-            )
-            .map((row) => String(row.ap_code).trim()),
-        );
-        if (publishedCodes.size === 0) return;
-
-        // update completionStatus di Finding: hanya untuk AP yang published & belum COMPLETED
-        setTableData((prev) => {
-          let changed = false;
-          const updated = prev.map((row) => {
-            const code = (row.apCode || "").toString().trim();
-            if (
-              code &&
-              publishedCodes.has(code) &&
-              row.completionStatus !== "Ready to Publish" &&
-              row.completionStatus !== "COMPLETED"
-            ) {
-              changed = true;
-              return { ...row, completionStatus: "Ready to Publish" };
-            }
-            return row;
-          });
-          if (changed) isTableDirtyRef.current = true;
-          return changed ? updated : prev;
-        });
-      } catch {
-        // abaikan error agar halaman tetap jalan
-      }
-    }
-
-    syncCompletionStatusFromEvidence();
-  }, [apiPath, auditYear]);
 
   // Auto-save meta data to API
   const saveMetaData = useCallback(async () => {
@@ -490,6 +516,7 @@ export default function AuditFindingDeptClient({
       }
       const normalized = normalizeRows(sanitizedRows);
       setTableData(normalized);
+      tableDataRef.current = normalized;
       // Sinkronkan snapshot terakhir yang tersimpan supaya:
       // - tombol Cancel mengembalikan ke state ini
       // - auto-save tidak menimpa perubahan yang baru saja di-load
@@ -635,142 +662,77 @@ export default function AuditFindingDeptClient({
   }, [apiPath, auditYear]);
 
   useEffect(() => {
-    // keep client in sync if server data changes / refresh
+    // Jangan timpa tabel dari props jika user punya edit lokal — ref dirty bisa false jika ada race; cek dirty saja.
+    if (isTableDirtyRef.current) {
+      return;
+    }
     const normalized = normalizeRows(initialData);
     setTableData(normalized);
+    tableDataRef.current = normalized;
     if (initialMeta) setFindingMeta(initialMeta);
-    // Initialize lastSavedTableDataRef to prevent immediate auto-save on initial load
-    lastSavedTableDataRef.current = normalized;
+    lastSavedTableDataRef.current = JSON.parse(JSON.stringify(normalized));
     isTableDirtyRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiPath, initialData, initialMeta]);
 
-  // Auto-save table data to API
-  const saveTableData = useCallback(async () => {
+  useEffect(() => {
+    tableDataRef.current = tableData;
+  }, [tableData]);
+
+  // Simpan semua baris ke API (dipakai auto-save setelah keluar edit mode, Save & Done, dan sebelum publish).
+  // `force`: abaikan flag dirty (wajib untuk Save & Done / publish — dirty bisa tidak ter-set atau ke-reset).
+  // Melempar Error jika ada request yang gagal agar caller bisa menampilkan pesan — bukan diam-diam gagal.
+  const saveTableData = useCallback(async (options = {}) => {
+    const force = options.force === true;
     if (isSavingTableDataRef.current) return;
-    if (!isTableDirtyRef.current) return;
+    if (!force && !isTableDirtyRef.current) return;
 
     isSavingTableDataRef.current = true;
     try {
-      const updatedTableData = [...tableData];
-      const savePromises = [];
-      
+      const updatedTableData = JSON.parse(JSON.stringify(tableDataRef.current));
+
       for (let i = 0; i < updatedTableData.length; i++) {
         const row = updatedTableData[i];
         const numericId = row.id != null ? Number(row.id) : null;
         const hasValidId = Number.isFinite(numericId) && numericId > 0;
+
         if (hasValidId) {
-          // Update existing row
           const saveUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}?year=${encodeURIComponent(String(auditYear))}`;
-          const promise = fetch(saveUrl, {
+          const res = await fetch(saveUrl, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              riskId: row.riskId,
-              riskDescription: row.riskDescription,
-              riskDetails: row.riskDetails,
-              apCode: row.apCode,
-              substantiveTest: row.substantiveTest,
-              risk: row.risk ? parseInt(row.risk, 10) : null,
-              checkYN: row.checkYN,
-              method: row.method,
-              preparer: row.preparer,
-              findingResult: row.findingResult,
-              findingDescription: row.findingDescription,
-              recommendation: row.recommendation,
-              auditee: row.auditee,
-              completionStatus: row.completionStatus,
-              completionDate: row.completionDate || null,
-            }),
-          })
-            .then(async (res) => {
-              if (!res.ok) {
-                const errorText = await res.text().catch(() => "");
-                console.warn(`Failed to save row ${row.id}:`, res.status, errorText);
-                return null;
-              }
-              return await res.json().catch(() => null);
-            })
-            .catch((err) => {
-              console.warn(`Error saving row ${row.id}:`, err);
-              return null;
-            });
-          savePromises.push(promise);
-        } else {
-          // Create new row only if user actually entered meaningful editable content.
-          // Jangan buat row hanya karena completionStatus default dari sistem.
-          if (
-            row.riskId ||
-            row.apCode ||
-            row.findingResult ||
-            row.preparer ||
-            row.risk !== "" ||
-            row.checkYN ||
-            row.method ||
-            row.findingDescription ||
-            row.recommendation ||
-            row.auditee
-          ) {
-            const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}?year=${encodeURIComponent(String(auditYear))}`;
-            const promise = fetch(createUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                riskId: row.riskId || "",
-                riskDescription: row.riskDescription || "",
-                riskDetails: row.riskDetails || "",
-                apCode: row.apCode || "",
-                substantiveTest: row.substantiveTest || "",
-                risk: row.risk ? parseInt(row.risk, 10) : null,
-                checkYN: row.checkYN || "",
-                method: row.method || "",
-                preparer: row.preparer || "",
-                findingResult: row.findingResult || "",
-                findingDescription: row.findingDescription || "",
-                recommendation: row.recommendation || "",
-                auditee: row.auditee || "",
-                completionStatus: row.completionStatus || "",
-                completionDate: row.completionDate || null,
-              }),
-            })
-              .then(async (res) => {
-                if (!res.ok) {
-                  const errorText = await res.text().catch(() => "");
-                  console.warn(`Failed to create row:`, res.status, errorText);
-                  return null;
-                }
-                return await res.json().catch(() => null);
-              })
-              .then((created) => {
-                if (created?.data) {
-                  // Update row id after creation
-                  updatedTableData[i].id = created.data.id;
-                }
-                return created;
-              })
-              .catch((err) => {
-                console.warn(`Error creating row:`, err);
-                return null;
-              });
-            savePromises.push(promise);
+            body: JSON.stringify(buildFindingRowPutBody(row)),
+          });
+          if (!res.ok) {
+            const msg = await parseSaveErrorResponse(res);
+            throw new Error(msg || `Failed to save row ${numericId}`);
+          }
+        } else if (shouldPersistNewFindingRow(row)) {
+          const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}?year=${encodeURIComponent(String(auditYear))}`;
+          const res = await fetch(createUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildFindingRowPostBody(row)),
+          });
+          if (!res.ok) {
+            const msg = await parseSaveErrorResponse(res);
+            throw new Error(msg || "Failed to create finding row");
+          }
+          const created = await res.json().catch(() => null);
+          if (created?.data?.id != null) {
+            updatedTableData[i].id = created.data.id;
           }
         }
       }
 
-      await Promise.all(savePromises);
-      
-      // Update state with updated data (especially for new rows that got IDs)
       setTableData(updatedTableData);
-      
-      // Update lastSavedTableDataRef after successful save
+      tableDataRef.current = updatedTableData;
       lastSavedTableDataRef.current = JSON.parse(JSON.stringify(updatedTableData));
       isTableDirtyRef.current = false;
-    } catch (err) {
-      console.warn("Error saving table data:", err);
     } finally {
       isSavingTableDataRef.current = false;
     }
-  }, [apiPath, tableData]);
+  }, [apiPath, auditYear]);
 
   // Auto-save table data with debounce.
   // Penting: JANGAN auto-save ketika user sedang edit (isEditMode=true),
@@ -788,7 +750,10 @@ export default function AuditFindingDeptClient({
 
     // Debounce save by 1 detik
     saveTableDataTimeoutRef.current = setTimeout(() => {
-      saveTableData();
+      saveTableData().catch((err) => {
+        console.warn("Auto-save failed:", err);
+        toast.show(err?.message || "Auto-save failed", "error");
+      });
     }, 1000);
 
     return () => {
@@ -804,8 +769,14 @@ export default function AuditFindingDeptClient({
       const row = prev[rowIndex];
       if (!row || row[field] === value) return prev;
       const updated = [...prev];
-      updated[rowIndex] = { ...row, [field]: value };
+      const next = { ...row, [field]: value };
+      const completed = String(row.completionStatus || "").toUpperCase() === "COMPLETED";
+      if (field === "checkYN" && !completed) {
+        next.completionStatus = isAuditFindingCheckYes(value) ? "Ready to Publish" : "Draft";
+      }
+      updated[rowIndex] = next;
       isTableDirtyRef.current = true;
+      tableDataRef.current = updated;
       return updated;
     });
   }, []);
@@ -825,6 +796,7 @@ export default function AuditFindingDeptClient({
       // Clone deep supaya tidak share reference
       const cloned = JSON.parse(JSON.stringify(lastSavedTableDataRef.current));
       isTableDirtyRef.current = false;
+      tableDataRef.current = cloned;
       setTableData(cloned);
     } else {
       // Fallback: kalau belum ada snapshot, reload dari server
@@ -833,12 +805,18 @@ export default function AuditFindingDeptClient({
   };
 
   // Handle publish (user will click manually, not auto publish)
-  // Only rows with COMPLETION STATUS = "Ready to Publish" will be published to audit review.
+  // Publish uses rows with CHECK (Y/N) = Yes (COMPLETION STATUS shows Ready to Publish).
   // Save all current edits first so data is persisted before publish.
   const handlePublish = async () => {
-    // Check if schedule is configured (non-admin only)
     if (!isScheduleConfigured && !isAdmin) {
       toast.show("Sorry, no schedule", "error");
+      return;
+    }
+    if (!isMetaReadyForPublish) {
+      toast.show(
+        "Publish requires both Preparer Status and Final Status to be COMPLETE. Set them in the header and wait for auto-save (or refresh the page after saving).",
+        "error",
+      );
       return;
     }
 
@@ -846,8 +824,7 @@ export default function AuditFindingDeptClient({
       setLoading(true);
       setError(null);
 
-      // Save all current edits so data is persisted before publish (edited but not yet published will be saved)
-      await saveTableData();
+      await saveTableData({ force: true });
 
       // Double-check schedule before publishing (non-admin only)
       if (!isAdmin) {
@@ -901,7 +878,7 @@ export default function AuditFindingDeptClient({
         }
       }
       
-      // Publish only findings with COMPLETION STATUS = "Ready to Publish"
+      // Publish findings where CHECK (Y/N) = Yes (saved as Ready to Publish on the server)
       const publishUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/publish?year=${encodeURIComponent(String(auditYear))}`;
       const res = await fetch(publishUrl, {
         method: "PUT",
@@ -913,13 +890,17 @@ export default function AuditFindingDeptClient({
       
       const count = json?.count ?? 0;
       if (count === 0) {
-        toast.show(json?.message || "No findings with status \"Ready to Publish\" to publish. Set COMPLETION STATUS to \"Ready to Publish\" for rows you want to publish.", "info");
+        toast.show(
+          json?.message ||
+            "No findings to publish. Set CHECK (Y/N) to Yes in Audit Finding (COMPLETION STATUS becomes Ready to Publish), then publish.",
+          "info",
+        );
+        setPublishModalOpen(false);
         return;
       }
       
       toast.show("Successfully published! Data is now available in Audit Review and Report.", "success");
-      
-      // Refresh data on this page instead of redirecting away
+      setPublishModalOpen(false);
       await fetchData();
     } catch (e) {
       setError(e?.message || String(e));
@@ -927,6 +908,11 @@ export default function AuditFindingDeptClient({
     } finally {
       setLoading(false);
     }
+  };
+
+  const openPublishModal = () => {
+    if (!canOpenPublishModal) return;
+    setPublishModalOpen(true);
   };
 
   // Save cell changes to backend
@@ -993,7 +979,6 @@ export default function AuditFindingDeptClient({
       }
       
       await fetchData();
-      setEditingCell(null);
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -1022,92 +1007,19 @@ export default function AuditFindingDeptClient({
     }
   };
 
-  // Save all changes to backend
+  // Save & keluar edit mode — satu jalur dengan saveTableData (sama dengan auto-save / pre-publish).
   const handleSaveAllChanges = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Save all rows that have been modified atau baru
-      for (const row of tableData) {
-        const numericId = row.id != null ? Number(row.id) : null;
-        const hasValidId = Number.isFinite(numericId) && numericId > 0;
-        if (hasValidId) {
-          // Update existing
-          const updateUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}/${numericId}?year=${encodeURIComponent(String(auditYear))}`;
-          const res = await fetch(
-            updateUrl,
-            {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              riskId: row.riskId,
-              riskDescription: row.riskDescription,
-              riskDetails: row.riskDetails,
-              apCode: row.apCode,
-              substantiveTest: row.substantiveTest,
-              risk: row.risk,
-              checkYN: row.checkYN,
-              method: row.method,
-              preparer: row.preparer,
-              findingResult: row.findingResult,
-              findingDescription: row.findingDescription,
-              recommendation: row.recommendation,
-              auditee: row.auditee,
-              completionStatus: row.completionStatus,
-              completionDate: row.completionDate,
-            }),
-          });
-          if (!res.ok) {
-            const json = await res.json().catch(() => ({}));
-            throw new Error(json?.error || "Failed to update data");
-          }
-        } else if (
-          row.riskId ||
-          row.riskDescription ||
-          row.apCode ||
-          row.risk !== "" ||
-          row.checkYN ||
-          row.preparer ||
-          row.findingResult ||
-          row.findingDescription ||
-          row.recommendation ||
-          row.auditee
-        ) {
-          // Create new only if user has entered meaningful editable data.
-          const createUrl = `/api/audit-finding/${encodeURIComponent(apiPath)}?year=${encodeURIComponent(String(auditYear))}`;
-          const res = await fetch(createUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              riskId: row.riskId,
-              riskDescription: row.riskDescription,
-              riskDetails: row.riskDetails,
-              apCode: row.apCode,
-              substantiveTest: row.substantiveTest,
-              risk: row.risk,
-              checkYN: row.checkYN,
-              method: row.method,
-              preparer: row.preparer,
-              findingResult: row.findingResult,
-              findingDescription: row.findingDescription,
-              recommendation: row.recommendation,
-              auditee: row.auditee,
-              completionStatus: row.completionStatus,
-              completionDate: row.completionDate,
-            }),
-          });
-          if (!res.ok) {
-            const json = await res.json().catch(() => ({}));
-            throw new Error(json?.error || "Failed to save data");
-          }
-        }
-      }
-
+      await saveTableData({ force: true });
       setIsEditMode(false);
       await fetchData();
+      toast.show("Changes saved.", "success");
     } catch (e) {
-      setError(e?.message || String(e));
+      const msg = e?.message || String(e);
+      setError(msg);
+      toast.show(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -1234,7 +1146,7 @@ export default function AuditFindingDeptClient({
                       disabled={!canEditFinalStatus}
                       title={
                         !canEditFinalStatus
-                          ? "Hanya admin atau reviewer yang dapat mengubah Final Status"
+                          ? "Only admin or reviewer can change Final Status"
                           : undefined
                       }
                       className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -1383,9 +1295,9 @@ export default function AuditFindingDeptClient({
                   className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
                     loading ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"
                   }`}
-                  title="Save All Changes"
+                  title="Save all changes and exit edit mode"
                 >
-                  {loading ? "Saving..." : "Save All"}
+                  {loading ? "Saving..." : "Save & Done"}
                 </button>
               </>
             ) : (
@@ -1399,10 +1311,11 @@ export default function AuditFindingDeptClient({
                   Edit
                 </button>
                 <button
-                  onClick={handlePublish}
-                  disabled={loading || !canPublish || (!isScheduleConfigured && !isAdmin)}
+                  type="button"
+                  onClick={openPublishModal}
+                  disabled={loading || !canOpenPublishModal}
                   className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                    loading || !canPublish || (!isScheduleConfigured && !isAdmin)
+                    loading || !canOpenPublishModal
                       ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                       : "bg-purple-600 hover:bg-purple-700 text-white"
                   }`}
@@ -1410,16 +1323,24 @@ export default function AuditFindingDeptClient({
                     !isScheduleConfigured && !isAdmin
                       ? "Schedule not configured"
                       : !canPublish
-                      ? "Only admins and reviewers can publish"
-                      : "Publish"
+                        ? "Only admins and reviewers can publish"
+                        : "Review and publish findings"
                   }
                 >
-                  {loading ? "Publishing..." : "Publish"}
+                  Publish
                 </button>
               </>
             )}
           </div>
         </div>
+
+        {canOpenPublishModal && !isMetaReadyForPublish && (
+          <div className="mb-3 text-xs text-amber-800 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
+            To publish, set both <span className="font-semibold">Preparer Status</span> and{" "}
+            <span className="font-semibold">Final Status</span> to <span className="font-semibold">COMPLETED</span> in
+            the header above (they save automatically). Admin and reviewer only.
+          </div>
+        )}
 
         {error && (
           <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -1504,21 +1425,14 @@ export default function AuditFindingDeptClient({
                       <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} title={row.application || undefined}>
                         {row.application || "-"}
                       </td>
-                      {/* RISK - Editable when in edit mode */}
-                      {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
-                          <input
-                            type="number"
-                            value={row.risk !== "" ? String(row.risk) : ""}
-                            onChange={(e) => handleCellEdit(index, "risk", e.target.value)}
-                            className="w-full p-1 text-xs text-center border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            placeholder="-"
-                            min="0"
-                          />
-                        </td>
-                      ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.risk !== "" ? String(row.risk) : "-"}</td>
-                      )}
+                      {/* RISK — from Risk Assessment / snapshot; not editable by anyone */}
+                      <td
+                        className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50"
+                        style={{ overflowWrap: "break-word", wordBreak: "break-word" }}
+                        title="Risk level comes from Risk Assessment; cannot be edited here."
+                      >
+                        {row.risk !== "" && row.risk != null ? String(row.risk) : "-"}
+                      </td>
                       {/* CHECK (Y/N) - Editable when in edit mode */}
                       {isEditing ? (
                         <td className="p-1 border border-gray-200 align-top">
@@ -1612,7 +1526,7 @@ export default function AuditFindingDeptClient({
                       ) : (
                         <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.auditee || "-"}</td>
                       )}
-                      {/* COMPLETION STATUS - System managed, never editable */}
+                      {/* COMPLETION STATUS — from CHECK (Y/N): Yes => Ready to Publish; system-managed, not directly editable */}
                       <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {row.completionStatus || "-"}
                       </td>
@@ -1639,6 +1553,96 @@ export default function AuditFindingDeptClient({
           <Pagination meta={findingMeta} onPageChange={(p) => fetchData(p)} loading={loading} />
         </div>
       </div>
+
+      {publishModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => !loading && setPublishModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200">
+              <div className="text-lg font-bold text-slate-900">Publish Audit Finding</div>
+              <div className="text-xs text-slate-600 mt-1">
+                Department: <span className="font-semibold">{departmentLabel}</span> · Year:{" "}
+                <span className="font-semibold">{auditYear}</span> · Rows:{" "}
+                <span className="font-semibold">{tableData.length}</span>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-bold text-slate-800 mb-2">Preparer Status</div>
+                  <div className="text-sm text-slate-700">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-500">Current</span>
+                      <span
+                        className={`font-bold ${
+                          isAuditFindingHeaderStatusComplete(preparerStatus) ? "text-green-700" : "text-amber-700"
+                        }`}
+                      >
+                        {preparerStatus || "Not set"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-bold text-slate-800 mb-2">Final Status</div>
+                  <div className="text-sm text-slate-700">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-500">Current</span>
+                      <span
+                        className={`font-bold ${
+                          isAuditFindingHeaderStatusComplete(finalStatus) ? "text-green-700" : "text-amber-700"
+                        }`}
+                      >
+                        {finalStatus || "Not set"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="text-sm font-semibold text-white bg-red-600 w-fit rounded-2xl px-2 py-0.5">Rule</div>
+                <p className="text-sm text-slate-600 mt-2">
+                  Publish is only allowed when both <span className="font-semibold">Preparer Status</span> and{" "}
+                  <span className="font-semibold">Final Status</span> are{" "}
+                  <span className="font-semibold">COMPLETED</span> (saved in the header). Only{" "}
+                  <span className="font-semibold">admin</span> or <span className="font-semibold">reviewer</span> can
+                  publish. Findings with <span className="font-semibold">CHECK (Y/N) = Yes</span> are published to Audit
+                  Review.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setPublishModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={loading || !isMetaReadyForPublish}
+                onClick={() => void handlePublish()}
+                className={`px-4 py-2 rounded-xl font-semibold text-white ${
+                  loading || !isMetaReadyForPublish
+                    ? "bg-gray-300 cursor-not-allowed"
+                    : "bg-purple-600 hover:bg-purple-700 shadow-md"
+                }`}
+              >
+                {loading ? "Publishing..." : "Publish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

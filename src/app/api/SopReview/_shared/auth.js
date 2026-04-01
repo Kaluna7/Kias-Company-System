@@ -3,12 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 /**
- * Hanya izinkan user dengan role "reviewer" untuk melakukan perubahan data SOP Review.
- * Kembalikan NextResponse error jika:
- * - belum login, atau
- * - role bukan reviewer.
+ * Allow only users with role "reviewer" to change SOP Review data.
+ * Returns a NextResponse error when:
+ * - not signed in, or
+ * - role is not reviewer.
  *
- * Pemakaian di route:
+ * Usage in route:
  *   const authError = await requireReviewer();
  *   if (authError) return authError;
  */
@@ -31,7 +31,6 @@ export async function requireReviewer() {
       );
     }
 
-    // null artinya OK, lanjutkan handler
     return null;
   } catch (err) {
     console.error("requireReviewer error:", err);
@@ -43,13 +42,13 @@ export async function requireReviewer() {
 }
 
 /**
- * Izinkan editor SOP (preparer/reviewer/admin) mengubah draft:
- * - role "user"  (preparer)
+ * Allow SOP editors (preparer / reviewer / admin) to change drafts:
+ * - role "user" (preparer)
  * - role "reviewer"
- * - role "admin" (jika ada)
+ * - role "admin"
  *
- * Digunakan untuk: simpan langkah SOP, meta (preparer/reviewer), audit period, dsb.
- * Publish final report tetap memakai requireReviewer().
+ * Used for: saving SOP steps, meta (preparer/reviewer), audit period, etc.
+ * Final publish still uses requireReviewer().
  */
 export async function requireSopEditor() {
   try {
@@ -77,6 +76,32 @@ export async function requireSopEditor() {
       { success: false, error: "Auth error" },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Editing published report data: reviewer or admin only.
+ */
+export async function requireSopReportPublishedEditor() {
+  try {
+    const session = await getServerSession(authOptions);
+    const role = (session?.user?.role || "").toLowerCase();
+
+    if (!session?.user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (role !== "reviewer" && role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: only reviewer or admin can edit published report data" },
+        { status: 403 },
+      );
+    }
+
+    return null;
+  } catch (err) {
+    console.error("requireSopReportPublishedEditor error:", err);
+    return NextResponse.json({ success: false, error: "Auth error" }, { status: 500 });
   }
 }
 

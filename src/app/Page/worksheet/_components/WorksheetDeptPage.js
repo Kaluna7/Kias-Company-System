@@ -5,13 +5,19 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import {
+  worksheetStatusWpReadOnlyBoxClass,
+  worksheetStatusWpSelectClass,
+} from "@/lib/worksheetStatusWpDisplay";
+import {
   WORKSHEET_AUDIT_AREA_TREE,
   WORKSHEET_AUDIT_AREA_ALL_LABEL,
   displayWorksheetAuditArea,
   flattenAuditAreaTree,
+  pathSetFromStoredWorksheetAuditArea,
+  parseWorksheetCustomAuditAreasJson,
 } from "@/app/data/worksheetAuditAreaTree";
 
-/** departmentValue dari masing-masing halaman worksheet → department_id di schedule */
+/** departmentValue from each worksheet page → department_id in schedule */
 const WORKSHEET_DEPT_TO_SCHEDULE_ID = {
   FINANCE: "A1.1",
   ACCOUNTING: "A1.2",
@@ -37,7 +43,7 @@ function toDateInputValue(v) {
   }
 }
 
-/** Sama seperti Audit Finding: normalisasi start_date dari API schedule → YYYY-MM-DD untuk input date. */
+/** Same as Audit Finding: normalize schedule start_date from API → YYYY-MM-DD for date inputs. */
 function scheduleStartDateToInputValue(dateValue) {
   if (dateValue == null || dateValue === "") return "";
   if (typeof dateValue === "string") {
@@ -63,7 +69,7 @@ function scheduleStartDateToInputValue(dateValue) {
   return "";
 }
 
-/** Normalisasi satu baris worksheet dari API (snake_case / camelCase). */
+/** Normalize one worksheet row from the API (snake_case / camelCase). */
 function pickLatestRowFields(latest) {
   if (!latest) return null;
   const pr = latest.preparer_date ?? latest.preparerDate;
@@ -76,6 +82,7 @@ function pickLatestRowFields(latest) {
     statusWP: latest.status_wp ?? latest.statusWP ?? "",
     filePath: latest.file_path ?? latest.filePath ?? "",
     auditAreaRaw: latest.audit_area ?? latest.auditArea ?? "",
+    customAuditAreasRaw: latest.custom_audit_areas ?? latest.customAuditAreas ?? null,
   };
 }
 
@@ -89,22 +96,31 @@ export default function WorksheetDeptPage({
   const { data: session } = useSession();
   const role = (session?.user?.role || "").toLowerCase();
   const isUserRole = role === "user";
-  /** Hanya admin & reviewer yang boleh mengisi nama / tanggal reviewer. */
+  /** Only admin & reviewer may edit reviewer name / date. */
   const canEditReviewerFields = role === "admin" || role === "reviewer";
   /** Akun reviewer: hanya boleh mengisi sisi review (WP/status), bukan upload/preparer. */
   const isReviewerAccount = enableRoleRestrictions && role === "reviewer";
   const isAdminAccount = enableRoleRestrictions && role === "admin";
-  const canSave = Boolean(session?.user);
+  /** Preparer: save draft only (not on Report until published). Reviewer/Admin: Publish to Report. */
+  const canSaveDraft = Boolean(session?.user) && isUserRole;
+  /** Preparer (user) never sees Publish — only admin / reviewer. */
+  const canPublish =
+    Boolean(session?.user) &&
+    !isUserRole &&
+    (role === "admin" || role === "reviewer");
 
   const [preparer, setPreparer] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [preparerDate, setPreparerDate] = useState("");
-  /** Tanggal mulai dari Schedule → Worksheet (start_date); jika true, user tidak boleh ubah manual. */
+  /** Preparer date from Schedule → Worksheet (start_date); when set, preparer cannot change it manually. */
   const [schedulePreparerDateLocked, setSchedulePreparerDateLocked] = useState(false);
   const [reviewerDate, setReviewerDate] = useState("");
   const [statusDocuments, setStatusDocuments] = useState("");
   const [statusWP, setStatusWP] = useState("");
   const [filePath, setFilePath] = useState("");
+  const [customAuditEntries, setCustomAuditEntries] = useState([]);
+  const [newCustomAreaInput, setNewCustomAreaInput] = useState("");
+  const [isSavingCustomList, setIsSavingCustomList] = useState(false);
   const auditAreaRows = useMemo(
     () => flattenAuditAreaTree(WORKSHEET_AUDIT_AREA_TREE),
     [],
@@ -112,9 +128,18 @@ export default function WorksheetDeptPage({
   const pathToLabel = useMemo(() => {
     const m = new Map();
     auditAreaRows.forEach((r) => m.set(r.path, r.label));
+    customAuditEntries.forEach((e) => m.set(`custom:${e.id}`, e.label));
     return m;
-  }, [auditAreaRows]);
-  const allAuditPaths = useMemo(() => auditAreaRows.map((r) => r.path), [auditAreaRows]);
+  }, [auditAreaRows, customAuditEntries]);
+  const allBuiltinPaths = useMemo(() => auditAreaRows.map((r) => r.path), [auditAreaRows]);
+  const allCustomPathIds = useMemo(
+    () => customAuditEntries.map((e) => `custom:${e.id}`),
+    [customAuditEntries],
+  );
+  const allSelectablePaths = useMemo(
+    () => [...allBuiltinPaths, ...allCustomPathIds],
+    [allBuiltinPaths, allCustomPathIds],
+  );
 
   const [selectedAuditPaths, setSelectedAuditPaths] = useState(() => new Set());
 
@@ -129,16 +154,16 @@ export default function WorksheetDeptPage({
 
   const toggleSelectAllAuditAreas = useCallback(
     (checked) => {
-      setSelectedAuditPaths(() => (checked ? new Set(allAuditPaths) : new Set()));
+      setSelectedAuditPaths(() => (checked ? new Set(allSelectablePaths) : new Set()));
     },
-    [allAuditPaths],
+    [allSelectablePaths],
   );
 
   const allAuditSelected =
-    allAuditPaths.length > 0 && allAuditPaths.every((p) => selectedAuditPaths.has(p));
+    allSelectablePaths.length > 0 && allSelectablePaths.every((p) => selectedAuditPaths.has(p));
 
   const auditAreaSerialized = useMemo(() => {
-    if (allAuditPaths.length > 0 && selectedAuditPaths.size === allAuditPaths.length) {
+    if (allSelectablePaths.length > 0 && selectedAuditPaths.size === allSelectablePaths.length) {
       return WORKSHEET_AUDIT_AREA_ALL_LABEL;
     }
     const labels = Array.from(selectedAuditPaths)
@@ -146,7 +171,7 @@ export default function WorksheetDeptPage({
       .filter(Boolean);
     labels.sort((a, b) => a.localeCompare(b));
     return labels.join("; ");
-  }, [selectedAuditPaths, pathToLabel, allAuditPaths.length, selectedAuditPaths.size]);
+  }, [selectedAuditPaths, pathToLabel, allSelectablePaths]);
 
   const [auditAreaModalOpen, setAuditAreaModalOpen] = useState(false);
 
@@ -169,7 +194,7 @@ export default function WorksheetDeptPage({
   }, [auditAreaModalOpen]);
 
   const auditAreaTriggerLabel = useMemo(() => {
-    if (allAuditPaths.length > 0 && selectedAuditPaths.size === allAuditPaths.length) {
+    if (allSelectablePaths.length > 0 && selectedAuditPaths.size === allSelectablePaths.length) {
       return WORKSHEET_AUDIT_AREA_ALL_LABEL;
     }
     const n = selectedAuditPaths.size;
@@ -179,9 +204,10 @@ export default function WorksheetDeptPage({
       return pathToLabel.get(only) || "- Select audit area -";
     }
     return `${n} areas selected`;
-  }, [selectedAuditPaths, pathToLabel, allAuditPaths.length]);
+  }, [selectedAuditPaths, pathToLabel, allSelectablePaths]);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingAuditArea, setIsSavingAuditArea] = useState(false);
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const [notification, setNotification] = useState(null);
 
@@ -246,7 +272,7 @@ export default function WorksheetDeptPage({
       const url = new URL(apiPath, window.location.origin);
       url.searchParams.set("year", String(auditYear));
       url.searchParams.set("excludePublished", "1");
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await fetch(url.toString(), { cache: "no-store", credentials: "include" });
       if (!res.ok) return null;
       const data = await res.json();
       return data?.rows?.[0] ?? null;
@@ -266,6 +292,7 @@ export default function WorksheetDeptPage({
           setFilePath("");
           setReviewer("");
           setReviewerDate("");
+          setCustomAuditEntries([]);
           setSelectedAuditPaths(new Set());
           return;
         }
@@ -275,12 +302,10 @@ export default function WorksheetDeptPage({
         setFilePath(f.filePath ? String(f.filePath) : "");
         setReviewer(f.reviewer);
         setReviewerDate(f.reviewerDate);
+        const customs = parseWorksheetCustomAuditAreasJson(f.customAuditAreasRaw);
+        setCustomAuditEntries(customs);
         const ar = String(f.auditAreaRaw ?? "").trim();
-        if (ar && displayWorksheetAuditArea(ar) === WORKSHEET_AUDIT_AREA_ALL_LABEL) {
-          setSelectedAuditPaths(new Set(allAuditPaths));
-        } else {
-          setSelectedAuditPaths(new Set());
-        }
+        setSelectedAuditPaths(pathSetFromStoredWorksheetAuditArea(ar, auditAreaRows, customs));
       } catch (_) {
         // Ignore initial load failures and keep the form usable.
       }
@@ -288,7 +313,7 @@ export default function WorksheetDeptPage({
     return () => {
       cancelled = true;
     };
-  }, [fetchLatestWorksheetRow, allAuditPaths]);
+  }, [fetchLatestWorksheetRow, auditAreaRows]);
 
   const saveStatusWP = async (value) => {
     try {
@@ -296,6 +321,7 @@ export default function WorksheetDeptPage({
       u.searchParams.set("year", String(auditYear));
       const res = await fetch(u.toString(), {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ statusWP: value }),
       });
@@ -308,6 +334,116 @@ export default function WorksheetDeptPage({
     } catch (_) {
       showNotification("error", "Failed to save Status WP.");
     }
+  };
+
+  const patchCustomAuditAreas = useCallback(
+    async (nextEntries) => {
+      const u = new URL(apiPath, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+      u.searchParams.set("year", String(auditYear));
+      const res = await fetch(u.toString(), {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customAuditAreas: nextEntries }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        showNotification("error", "Please sign in again.");
+        return false;
+      }
+      if (res.status === 403) {
+        showNotification("error", data?.error || "Access denied.");
+        return false;
+      }
+      if (!data.success) {
+        showNotification("error", data?.error || "Failed to save custom areas.");
+        return false;
+      }
+      return true;
+    },
+    [apiPath, auditYear],
+  );
+
+  const handleAddMoreAreaSave = async () => {
+    if (isReviewerAccount) return;
+    const raw = newCustomAreaInput.trim();
+    if (!raw) {
+      showNotification("error", "Enter an area name.");
+      return;
+    }
+    const upper = raw.toLocaleUpperCase("en-US");
+    if (auditAreaRows.some((r) => r.label.toLocaleUpperCase("en-US") === upper)) {
+      showNotification("error", "That area already exists in the standard list.");
+      return;
+    }
+    if (customAuditEntries.some((e) => e.label.toLocaleUpperCase("en-US") === upper)) {
+      showNotification("error", "That additional area is already added.");
+      return;
+    }
+    const id =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const next = [...customAuditEntries, { id, label: upper }];
+    setIsSavingCustomList(true);
+    try {
+      const ok = await patchCustomAuditAreas(next);
+      if (!ok) return;
+      setCustomAuditEntries(next);
+      setNewCustomAreaInput("");
+      setSelectedAuditPaths((prev) => {
+        const n = new Set(prev);
+        n.add(`custom:${id}`);
+        return n;
+      });
+      showNotification("success", "Area added.");
+    } finally {
+      setIsSavingCustomList(false);
+    }
+  };
+
+  /** Persists audit_area on latest draft so all roles (e.g. user) see the same selection. */
+  const saveAuditAreaToDraft = useCallback(async () => {
+    setIsSavingAuditArea(true);
+    try {
+      const u = new URL(apiPath, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+      u.searchParams.set("year", String(auditYear));
+      const res = await fetch(u.toString(), {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auditArea: auditAreaSerialized }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        showNotification("error", "Please sign in again to save audit areas.");
+        return false;
+      }
+      if (res.status === 403) {
+        showNotification("error", data?.error || "Access denied.");
+        return false;
+      }
+      if (!data.success) {
+        showNotification("error", data?.error || "Failed to save audit areas.");
+        return false;
+      }
+      showNotification("success", "Audit areas saved.");
+      return true;
+    } catch {
+      showNotification("error", "Failed to save audit areas.");
+      return false;
+    } finally {
+      setIsSavingAuditArea(false);
+    }
+  }, [apiPath, auditYear, auditAreaSerialized]);
+
+  const handleAuditAreaModalDone = async () => {
+    if (isReviewerAccount) {
+      setAuditAreaModalOpen(false);
+      return;
+    }
+    const ok = await saveAuditAreaToDraft();
+    if (ok) setAuditAreaModalOpen(false);
   };
 
   const handleFileUpload = async (e) => {
@@ -367,66 +503,131 @@ export default function WorksheetDeptPage({
     }
   };
 
-  const handleSave = async () => {
+  const buildWorksheetPostBody = async () => {
+    let reviewerPayload = reviewer;
+    let reviewerDatePayload = reviewerDate || null;
+    if (!canEditReviewerFields) {
+      const prev = await fetchLatestWorksheetRow();
+      const pf = pickLatestRowFields(prev);
+      if (pf) {
+        reviewerPayload = pf.reviewer;
+        reviewerDatePayload = pf.reviewerDate || null;
+      }
+    }
+    return {
+      department: departmentValue,
+      preparer,
+      reviewer: reviewerPayload,
+      preparerDate: preparerDate || null,
+      reviewerDate: reviewerDatePayload,
+      statusDocuments,
+      statusWorksheet: filePath ? "Available" : "Not Available",
+      statusWP,
+      filePath,
+      auditArea: auditAreaSerialized,
+      customAuditAreas: customAuditEntries,
+      year: String(auditYear),
+    };
+  };
+
+  const clearFormAfterPublish = async () => {
+    setAuditAreaModalOpen(false);
+    setFilePath("");
+    await fetchPreparerFromSchedule();
+    if (canEditReviewerFields) {
+      setReviewer("");
+      setReviewerDate("");
+    } else {
+      const after = await fetchLatestWorksheetRow();
+      const af = pickLatestRowFields(after);
+      if (af) {
+        setReviewer(af.reviewer);
+        setReviewerDate(af.reviewerDate);
+      }
+    }
+    setStatusDocuments("");
+    setStatusWP("");
+    setCustomAuditEntries([]);
+    setNewCustomAreaInput("");
+    setSelectedAuditPaths(new Set());
+  };
+
+  /** Preparer (user): save draft — not shown on Report until Reviewer/Admin publishes. */
+  const handleSaveDraft = async () => {
     setIsSaving(true);
     try {
-      let reviewerPayload = reviewer;
-      let reviewerDatePayload = reviewerDate || null;
-      if (!canEditReviewerFields) {
-        const prev = await fetchLatestWorksheetRow();
-        const pf = pickLatestRowFields(prev);
-        if (pf) {
-          reviewerPayload = pf.reviewer;
-          reviewerDatePayload = pf.reviewerDate || null;
-        }
-      }
-
+      const body = await buildWorksheetPostBody();
       const response = await fetch(apiPath, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          department: departmentValue,
-          preparer,
-          reviewer: reviewerPayload,
-          preparerDate: preparerDate || null,
-          reviewerDate: reviewerDatePayload,
-          statusDocuments,
-          statusWorksheet: filePath ? "Available" : "Not Available",
-          statusWP,
-          filePath,
-          auditArea: auditAreaSerialized,
-          year: String(auditYear),
-        }),
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
-
-      const data = await response.json();
-      if (data.success) {
-        showNotification("success", "Data has been saved. It appears in Report; the form is cleared for the next entry.");
-        setAuditAreaModalOpen(false);
-        setFilePath("");
-        await fetchPreparerFromSchedule();
-        if (canEditReviewerFields) {
-          setReviewer("");
-          setReviewerDate("");
-        } else {
-          const after = await fetchLatestWorksheetRow();
-          const af = pickLatestRowFields(after);
-          if (af) {
-            setReviewer(af.reviewer);
-            setReviewerDate(af.reviewerDate);
-          }
-        }
-        setStatusDocuments("");
-        setStatusWP("");
-        setSelectedAuditPaths(new Set());
-      } else {
-        showNotification("error", `Failed to save data: ${data.error || "Unknown error."}`);
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        showNotification("error", "Please sign in again to save your draft.");
+        return;
       }
+      if (response.status === 403) {
+        showNotification("error", data?.error || "Access denied.");
+        return;
+      }
+      if (!data.success) {
+        showNotification("error", `Failed to save draft: ${data.error || "Unknown error."}`);
+        return;
+      }
+      if (data.published_to_report) {
+        showNotification("error", "Server treated this as publish; use a preparer account for drafts.");
+        return;
+      }
+      showNotification(
+        "success",
+        "Draft saved. It will appear on the Report after a Reviewer or Admin publishes.",
+      );
     } catch (error) {
-      console.error("Error saving data:", error);
-      showNotification("error", `Error while saving data: ${error.message || "Unknown error."}`);
+      console.error("Error saving draft:", error);
+      showNotification("error", `Failed to save draft: ${error.message || "Unknown error."}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  /** Reviewer / Admin: publish to Report (same as legacy save behaviour). */
+  const handlePublish = async () => {
+    setIsSaving(true);
+    try {
+      const body = await buildWorksheetPostBody();
+      const response = await fetch(apiPath, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        showNotification("error", "Please sign in again to publish.");
+        return;
+      }
+      if (response.status === 403) {
+        showNotification("error", data?.error || "Access denied.");
+        return;
+      }
+      if (!data.success) {
+        showNotification("error", `Publish failed: ${data.error || "Unknown error."}`);
+        return;
+      }
+      if (!data.published_to_report) {
+        showNotification(
+          "error",
+          "Only a Reviewer or Admin can publish to the Report. Preparers should use Save draft.",
+        );
+        return;
+      }
+      showNotification("success", "Published to Report. The form has been cleared for the next entry.");
+      await clearFormAfterPublish();
+    } catch (error) {
+      console.error("Error publishing:", error);
+      showNotification("error", `Publish failed: ${error.message || "Unknown error."}`);
     } finally {
       setIsSaving(false);
     }
@@ -521,21 +722,29 @@ export default function WorksheetDeptPage({
                     </svg>
                     STATUS WP
                   </label>
-                  <select
-                    value={statusWP}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setStatusWP(value);
-                      saveStatusWP(value);
-                    }}
-                    disabled={enableRoleRestrictions && !isAdminAccount && !isReviewerAccount}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">- Select -</option>
-                    <option value="Not Checked">Not Checked</option>
-                    <option value="Checked">Checked</option>
-                    <option value="Reject">Reject</option>
-                  </select>
+                  {enableRoleRestrictions && !isAdminAccount && !isReviewerAccount ? (
+                    <div
+                      className={worksheetStatusWpReadOnlyBoxClass(statusWP)}
+                      title="Only reviewer or admin can change Status WP"
+                    >
+                      {statusWP ? statusWP : "- Select -"}
+                    </div>
+                  ) : (
+                    <select
+                      value={statusWP}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setStatusWP(value);
+                        saveStatusWP(value);
+                      }}
+                      className={worksheetStatusWpSelectClass(statusWP)}
+                    >
+                      <option value="">- Select -</option>
+                      <option value="Not Checked">Not Checked</option>
+                      <option value="Checked">Checked</option>
+                      <option value="Reject">Reject</option>
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -561,7 +770,7 @@ export default function WorksheetDeptPage({
                       <span className="font-semibold">Schedule → Worksheet</span> for this department.
                     </div>
                   )}
-                  <p className="mt-1 text-xs text-slate-500">Nama preparer diambil dari penugasan di modul Schedule (Worksheet).</p>
+                  <p className="mt-1 text-xs text-slate-500">Preparer name comes from assignments in the Schedule (Worksheet) module.</p>
                 </div>
 
                 <div>
@@ -578,7 +787,7 @@ export default function WorksheetDeptPage({
                     className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter reviewer name"
                     disabled={!canEditReviewerFields}
-                    title={!canEditReviewerFields ? "Hanya admin atau reviewer yang dapat mengisi" : undefined}
+                    title={!canEditReviewerFields ? "Only admin or reviewer can edit this field" : undefined}
                   />
                 </div>
 
@@ -598,7 +807,7 @@ export default function WorksheetDeptPage({
                       disabled={isReviewerAccount}
                       title={
                         isUserRole && schedulePreparerDateLocked
-                          ? "Dari Schedule → Worksheet (tanggal mulai)"
+                          ? "From Schedule → Worksheet (start date)"
                           : undefined
                       }
                       className={`w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
@@ -606,8 +815,8 @@ export default function WorksheetDeptPage({
                       }`}
                     />
                     <p className="mt-1 text-xs text-slate-500">
-                      Tanggal preparer mengikuti <span className="font-semibold">tanggal mulai</span> di Schedule →
-                      Worksheet untuk department ini (sama seperti Audit Finding).
+                      Preparer date follows the <span className="font-semibold">start date</span> in Schedule →
+                      Worksheet for this department (same as Audit Finding).
                     </p>
                   </div>
 
@@ -624,7 +833,7 @@ export default function WorksheetDeptPage({
                       onChange={(e) => setReviewerDate(e.target.value)}
                       className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent shadow-sm transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       disabled={!canEditReviewerFields}
-                      title={!canEditReviewerFields ? "Hanya admin atau reviewer yang dapat mengisi" : undefined}
+                      title={!canEditReviewerFields ? "Only admin or reviewer can edit this field" : undefined}
                     />
                   </div>
                 </div>
@@ -641,13 +850,24 @@ export default function WorksheetDeptPage({
                     type="button"
                     disabled={isReviewerAccount}
                     onClick={() => setAuditAreaModalOpen(true)}
-                    className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-[#141D38] shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="w-full flex items-center gap-3 bg-[#141D38] hover:bg-[#141D38]/90 text-white border border-transparent rounded-lg px-4 py-3 text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:ring-offset-1 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
-                    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    <span className="truncate uppercase">{auditAreaTriggerLabel}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">Add area</div>
+                      <div className="text-xs font-normal text-white/90 truncate uppercase mt-0.5">
+                        {auditAreaTriggerLabel}
+                      </div>
+                    </div>
                   </button>
+                  {!isReviewerAccount && (
+                    <p className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-md px-2 py-1.5">
+                      Selection is saved to the server when you click <span className="font-semibold">Done</span> in
+                      the dialog (visible to preparer, reviewer, and admin).
+                    </p>
+                  )}
                   {auditAreaSerialized ? (
                     <p className="mt-2 text-xs text-slate-500 line-clamp-3 sm:line-clamp-none" title={auditAreaSerialized}>
                       Selected: {auditAreaSerialized}
@@ -657,30 +877,64 @@ export default function WorksheetDeptPage({
               </div>
             </div>
 
-            <div className="mt-8 flex justify-end gap-4 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving || !canSave}
-                className="px-6 py-2.5 bg-[#141D38] hover:bg-[#141D38]/90 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isSaving ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Save
-                  </>
+            <div className="mt-8 flex flex-col items-stretch sm:items-end gap-3 pt-6 border-t border-gray-200">
+              {canSaveDraft && (
+                <p className="text-xs text-slate-600 sm:text-right order-2 sm:order-1">
+                  As a preparer you only <span className="font-semibold">save a draft</span>. Publishing to the Report is for Reviewers or Admins only.
+                </p>
+              )}
+              <div className="flex flex-col sm:flex-row justify-end gap-3 order-1 sm:order-2 w-full sm:w-auto">
+                {canSaveDraft && (
+                  <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={isSaving}
+                    className="px-6 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isSaving ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Saving draft...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        </svg>
+                        Save draft
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+                {canPublish && (
+                  <button
+                    type="button"
+                    onClick={handlePublish}
+                    disabled={isSaving}
+                    className="px-6 py-2.5 bg-[#141D38] hover:bg-[#141D38]/90 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isSaving ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Publishing...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Publish
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -702,7 +956,7 @@ export default function WorksheetDeptPage({
           <div className="relative z-10 flex w-full max-h-[min(92dvh,100%)] sm:max-h-[min(85vh,720px)] sm:max-w-lg flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:rounded-xl">
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
               <h2 id="audit-area-modal-title" className="text-base font-bold uppercase tracking-wide text-gray-900">
-                Audit area
+                Add audit area
               </h2>
               <button
                 type="button"
@@ -744,14 +998,67 @@ export default function WorksheetDeptPage({
                   </label>
                 ))}
               </div>
+              {customAuditEntries.length > 0 && (
+                <div className="mt-2 border-t border-gray-100 pt-2">
+                  <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Additional areas
+                  </p>
+                  {customAuditEntries.map((e) => (
+                    <label
+                      key={e.id}
+                      className="flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs sm:text-sm text-gray-800 hover:bg-slate-50"
+                      style={{ paddingLeft: "10px" }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-gray-300 text-[#141D38] focus:ring-[#141D38]"
+                        checked={selectedAuditPaths.has(`custom:${e.id}`)}
+                        onChange={(ev) => toggleAuditPath(`custom:${e.id}`, ev.target.checked)}
+                        disabled={isReviewerAccount}
+                      />
+                      <span className="uppercase leading-snug">{e.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {!isReviewerAccount && (
+                <div className="mt-3 border-t border-gray-200 pt-3 px-2">
+                  <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Add more area</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                    <input
+                      type="text"
+                      value={newCustomAreaInput}
+                      onChange={(e) => setNewCustomAreaInput(e.target.value.toLocaleUpperCase("en-US"))}
+                      placeholder="Type new area name"
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium uppercase tracking-wide text-gray-900 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#141D38] focus:border-transparent"
+                      disabled={isSavingCustomList}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddMoreAreaSave();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddMoreAreaSave()}
+                      disabled={isSavingCustomList}
+                      className="shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSavingCustomList ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 gap-2 border-t border-gray-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
-                onClick={() => setAuditAreaModalOpen(false)}
-                className="flex-1 rounded-lg bg-[#141D38] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#141D38]/90"
+                onClick={() => handleAuditAreaModalDone()}
+                disabled={isSavingAuditArea}
+                className="flex-1 rounded-lg bg-[#141D38] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#141D38]/90 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Done
+                {isSavingAuditArea ? "Saving…" : "Done"}
               </button>
             </div>
           </div>

@@ -6,6 +6,11 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { displayWorksheetAuditArea } from "@/app/data/worksheetAuditAreaTree";
+import {
+  displayWorksheetStatusLabel,
+  worksheetStatusReportCellClass,
+} from "@/lib/worksheetStatusDisplay";
+import { worksheetStatusWpBadgeClass } from "@/lib/worksheetStatusWpDisplay";
 
 function WorksheetFinanceReportPageContent() {
   const [data, setData] = useState([]);
@@ -53,8 +58,8 @@ function WorksheetFinanceReportPageContent() {
     <div className="flex flex-col">
       <SmallHeader label="B.1.1 WORKSHEET - FINANCE REPORT" backHref={`/Page/worksheet/finance${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`} />
       <div className="p-4">
-        {loading && <div className="text-sm text-gray-600 mb-4">Memuat data...</div>}
-        {error && <div className="text-sm text-red-600 mb-4">Gagal memuat data: {error}</div>}
+        {loading && <div className="text-sm text-gray-600 mb-4">Loading...</div>}
+        {error && <div className="text-sm text-red-600 mb-4">Failed to load data: {error}</div>}
 
         <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm mt-4">
           <table className="min-w-full table-fixed border-collapse text-xs">
@@ -133,20 +138,20 @@ function WorksheetFinanceReportPageContent() {
 
                   {/* Status Worksheet */}
                   <td
-                    className={`p-1 text-xs text-center border border-gray-200 font-semibold ${
-                      row.status_worksheet === "COMPLETED"
-                        ? "bg-green-100 text-green-800"
-                        : row.status_worksheet === "IN PROGRESS"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
+                    className={`p-1 text-xs text-center border border-gray-200 font-semibold ${worksheetStatusReportCellClass(
+                      row.status_worksheet,
+                    )}`}
                   >
-                    {row.status_worksheet || "-"}
+                    {displayWorksheetStatusLabel(row.status_worksheet)}
                   </td>
 
                   {/* Status WP */}
-                  <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap">
-                    {row.status_wp || "-"}
+                  <td className="p-1 text-xs border border-gray-200 text-center whitespace-nowrap align-middle">
+                    <span
+                      className={`inline-flex min-w-[4.5rem] justify-center px-2 py-0.5 rounded-md text-[11px] leading-tight ${worksheetStatusWpBadgeClass(row.status_wp)}`}
+                    >
+                      {row.status_wp || "-"}
+                    </span>
                   </td>
 
                   {/* Audit Area */}
@@ -171,7 +176,7 @@ function WorksheetFinanceReportPageContent() {
               {data.length === 0 && !loading && (
                 <tr>
                   <td colSpan={9} className="p-4 text-center text-sm text-gray-600">
-                    Belum ada data worksheet yang disimpan. Silakan save data di worksheet terlebih dahulu.
+                    No worksheet data saved yet. Save data from the worksheet page first.
                   </td>
                 </tr>
               )}
@@ -233,11 +238,17 @@ function WorksheetFinanceReportPageContent() {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Status Worksheet</div>
-                    <div className="text-sm">{selectedRow.status_worksheet || "-"}</div>
+                    <div className="text-sm">{displayWorksheetStatusLabel(selectedRow.status_worksheet)}</div>
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Status WP</div>
-                    <div className="text-sm">{selectedRow.status_wp || "-"}</div>
+                    <div className="text-sm mt-0.5">
+                      <span
+                        className={`inline-flex px-2.5 py-1 rounded-md text-xs ${worksheetStatusWpBadgeClass(selectedRow.status_wp)}`}
+                      >
+                        {selectedRow.status_wp || "-"}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <div className="font-semibold text-gray-700 text-xs">Audit Area</div>

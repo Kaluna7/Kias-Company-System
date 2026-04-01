@@ -1,9 +1,8 @@
 import { PrismaClient } from "@/generated/prisma";
-import {
-  buildWorksheetFindManyWhere,
-  buildDraftWhereClause,
-  yearCreatedAtFilter,
-} from "../_shared/worksheetWhere";
+import { buildWorksheetFindManyWhere } from "../_shared/worksheetWhere";
+import { requireWorksheetEditorSession, isWorksheetPublisherRole } from "../_shared/worksheetAuth";
+import { executeWorksheetPost } from "../_shared/executeWorksheetPost";
+import { executeWorksheetPatch } from "../_shared/executeWorksheetPatch";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -32,40 +31,18 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
+    const { error, role } = await requireWorksheetEditorSession();
+    if (error) return error;
     const body = await req.json();
-    const created = await prisma.worksheet_finance.create({
-      data: {
-        department: body.department || "DESIGN STORE PLANNER",
-        preparer: body.preparer || null,
-        reviewer: body.reviewer || null,
-        preparer_date: body.preparerDate ? new Date(body.preparerDate) : null,
-        reviewer_date: body.reviewerDate ? new Date(body.reviewerDate) : null,
-        status_documents: body.statusDocuments || null,
-        status_worksheet: body.statusWorksheet || "IN PROGRESS",
-        status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null,
-        file_path: body.filePath || null,
-        audit_area: body.auditArea || null,
-        published_to_report: true,
+    const publish = isWorksheetPublisherRole(role);
+    const data = await executeWorksheetPost(prisma, "DESIGN STORE PLANNER", body, publish);
+    return new Response(
+      JSON.stringify({ success: true, data, published_to_report: publish }),
+      {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
       },
-    });
-
-    const yf = yearCreatedAtFilter(body.year);
-    const delWhere = {
-      department: created.department,
-      id: { not: created.id },
-      published_to_report: false,
-    };
-    if (yf) delWhere.created_at = yf;
-    await prisma.worksheet_finance.deleteMany({ where: delWhere });
-
-    await prisma.worksheet_finance.update({
-      where: { id: created.id },
-      data: { status_wp: null },
-    });
-    return new Response(JSON.stringify({ success: true, data: { ...created, status_wp: null } }), {
-      status: 201,
-      headers: { "Content-Type": "application/json" },
-    });
+    );
   } catch (err) {
     console.error("POST /api/worksheet/sdp error:", err);
     return new Response(
@@ -77,28 +54,11 @@ export async function POST(req) {
 
 export async function PATCH(req) {
   try {
+    const { error } = await requireWorksheetEditorSession();
+    if (error) return error;
     const body = await req.json();
     const url = new URL(req?.url || "", "http://localhost");
-    const draftWhere = buildDraftWhereClause("DESIGN STORE PLANNER", url.searchParams.get("year"));
-
-    const latest = await prisma.worksheet_finance.findFirst({
-      where: draftWhere,
-      orderBy: { created_at: "desc" },
-    });
-    if (latest) {
-      await prisma.worksheet_finance.update({
-        where: { id: latest.id },
-        data: { status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null },
-      });
-    } else {
-      await prisma.worksheet_finance.create({
-        data: {
-          department: "DESIGN STORE PLANNER",
-          status_wp: body.statusWP !== undefined && body.statusWP !== "" ? body.statusWP : null,
-          published_to_report: false,
-        },
-      });
-    }
+    await executeWorksheetPatch(prisma, "DESIGN STORE PLANNER", body, url.searchParams.get("year"));
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
   } catch (err) {
     console.error("PATCH /api/worksheet/sdp error:", err);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@/generated/prisma";
+import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -36,69 +37,6 @@ const deptToAuditProgram = {
   ops: { parent: "operational", ap: "OperationalAp", relation: "operational" },
   whs: { parent: "warehouse", ap: "WarehouseAp", relation: "warehouse" },
 };
-
-// Map audit-finding dept slug to Evidence/Worksheet department name (uppercase)
-const deptToWorksheetEvidenceName = {
-  accounting: "ACCOUNTING",
-  finance: "FINANCE",
-  hrd: "HRD",
-  "g&a": "G&A",
-  ga: "G&A",
-  sdp: "DESIGN STORE PLANNER",
-  tax: "TAX",
-  "l&p": "SECURITY L&P",
-  lp: "SECURITY L&P",
-  mis: "MIS",
-  merch: "MERCHANDISE",
-  ops: "OPERATIONAL",
-  whs: "WAREHOUSE",
-};
-
-/** 
- * Returns { worksheetHasFile, evidenceApCodesWithFile }.
- * - worksheetHasFile: apakah pernah ada file worksheet untuk department ini (dipakai hanya sebagai info tambahan).
- * - evidenceApCodesWithFile: SET ap_code yang SUDAH PUBLISH di Evidence (overall_status = COMPLETE + ada file).
- */
-async function getWorksheetAndEvidenceFileStatus(dept, options = {}) {
-  const deptName = deptToWorksheetEvidenceName[dept];
-  if (!deptName) return { worksheetHasFile: false, evidenceApCodesWithFile: new Set() };
-  try {
-    const { from = null, to = null } = options;
-    const evidenceWhere = {
-      department: deptName,
-      file_url: { not: null },
-      overall_status: {
-        equals: "COMPLETE",
-        mode: "insensitive",
-      },
-    };
-    if (from && to) {
-      evidenceWhere.updated_at = { gte: from, lt: to };
-    }
-
-    const [worksheetLatest, evidenceRows] = await Promise.all([
-      prisma.worksheet_finance.findFirst({
-        where: { department: deptName },
-        orderBy: { created_at: "desc" },
-        select: { file_path: true },
-      }),
-      prisma.evidence.findMany({
-        where: evidenceWhere,
-        select: { ap_code: true },
-      }),
-    ]);
-    const worksheetHasFile = !!(worksheetLatest?.file_path && String(worksheetLatest.file_path).trim());
-    const evidenceApCodesWithFile = new Set(
-      (evidenceRows || [])
-        .map((r) => (r.ap_code != null && String(r.ap_code).trim() !== "" ? String(r.ap_code).trim() : null))
-        .filter(Boolean)
-    );
-    return { worksheetHasFile, evidenceApCodesWithFile };
-  } catch (e) {
-    console.warn(`[audit-finding/${dept}] getWorksheetAndEvidenceFileStatus error:`, e?.message);
-    return { worksheetHasFile: false, evidenceApCodesWithFile: new Set() };
-  }
-}
 
 function toIntOrNull(v) {
   if (v === undefined || v === null || v === "") return null;
@@ -592,11 +530,6 @@ export async function GET(req, { params }) {
         .filter(Boolean),
     );
 
-    const { worksheetHasFile, evidenceApCodesWithFile } = await getWorksheetAndEvidenceFileStatus(
-      dept,
-      { from, to }
-    );
-
     const auditProgramData = parents.flatMap((p) =>
       p.aps && p.aps.length > 0
         ? p.aps
@@ -614,18 +547,14 @@ export async function GET(req, { params }) {
               // Fallback ke ap_code saja jika risk_id berubah / kosong saat save,
               // supaya row yang sudah disimpan tetap ketemu lagi saat reload.
               const finding = findingByKey.get(key) || findingByApCode.get(apCodeTrimmed);
-              const hasEvidenceFileForRow = evidenceApCodesWithFile.has(apCodeTrimmed);
 
-              // Completion status dikontrol sistem:
-              // - jika sudah publish => COMPLETED
-              // - jika Evidence sudah COMPLETE => Ready to Publish
-              // - selain itu => Draft
+              // Completion status (sistem): COMPLETED tetap; CHECK (Y/N) = Yes => Ready to Publish; lainnya Draft
               const existingStatusRaw = (finding?.completion_status || "").toString().trim();
               const existingStatusUpper = existingStatusRaw.toUpperCase();
               let completionStatus;
               if (existingStatusUpper === "COMPLETED") {
                 completionStatus = "COMPLETED";
-              } else if (hasEvidenceFileForRow) {
+              } else if (isAuditFindingCheckYes(finding?.check_yn)) {
                 completionStatus = "Ready to Publish";
               } else {
                 completionStatus = "Draft";

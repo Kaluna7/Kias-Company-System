@@ -139,20 +139,14 @@ function mergeReviewFindings(latestFindings = [], savedReviewFindings = []) {
   if (normalizedLatest.length === 0) return normalizedSaved;
 
   const savedMap = new Map(normalizedSaved.map((finding) => [getFindingIdentity(finding), finding]));
-  const merged = normalizedLatest.map((finding) => {
+  // Seluruh baris yang disimpan di audit-review (JSON) harus menang atas snapshot audit-finding
+  // untuk kolom yang sama — bukan hanya reviewNote/reviewStatus. Kalau tidak, setelah Save/Done
+  // atau router.refresh() nilai PREPARER, FINDING RESULT, dll. kembali ke data finding mentah.
+  const merged = normalizedLatest.map((finding, idx) => {
     const saved = savedMap.get(getFindingIdentity(finding));
     if (!saved) return finding;
 
-    return {
-      ...finding,
-      reviewNote: saved.reviewNote ?? "",
-      reviewStatus: normalizeReviewStatus(saved.reviewStatus),
-      preparerRespo: saved.preparerRespo ?? "",
-      referenceLink: saved.referenceLink ?? "",
-      followUpDueDate: saved.followUpDueDate ?? "",
-      timeline: saved.timeline ?? "",
-      followUpStatus: normalizeFollowUpStatus(saved.followUpStatus),
-    };
+    return normalizeKeyFindingRow({ ...finding, ...saved }, idx);
   });
 
   const latestKeys = new Set(normalizedLatest.map((finding) => getFindingIdentity(finding)));

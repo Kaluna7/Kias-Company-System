@@ -3,6 +3,7 @@ import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import prisma from "@/app/lib/prisma";
+import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
 
 const deptToApDelegate = {
   FINANCE: "financeAp",
@@ -111,6 +112,26 @@ export function makeEvidenceHandlers(defaultDepartment) {
 
       if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
+      const upperDeptFinding = String(department || defaultDepartment || "").toUpperCase();
+      const findingDelegatePost = getFindingDelegate(upperDeptFinding);
+      const apCodeTrimPost = ap_code != null ? String(ap_code).trim() : "";
+      if (findingDelegatePost && selectedYear && apCodeTrimPost) {
+        const checkRows = await findingDelegatePost.findMany({
+          where: applyCreatedAtYearScope({ ap_code: apCodeTrimPost }, selectedYear),
+          select: { check_yn: true },
+        });
+        if (!checkRows.some((r) => isAuditFindingCheckYes(r.check_yn))) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Upload is only allowed when Audit Finding has CHECK (Y/N) = Yes for this AP (save the finding row first).",
+            },
+            { status: 403 },
+          );
+        }
+      }
+
       const uploadsDir = join(process.cwd(), "public", "uploads", "evidence", department.toLowerCase());
       if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true });
 
@@ -212,6 +233,22 @@ export function makeEvidenceHandlers(defaultDepartment) {
             ? parseInt(evidence.risk_id)
             : null;
         const apCode = evidence.ap_code || null;
+        const apCodeTrimPut = apCode != null ? String(apCode).trim() : "";
+        if (findingDelegate && selectedYear && apCodeTrimPut) {
+          const ynRows = await findingDelegate.findMany({
+            where: applyCreatedAtYearScope({ ap_code: apCodeTrimPut }, selectedYear),
+            select: { check_yn: true },
+          });
+          if (!ynRows.some((r) => isAuditFindingCheckYes(r.check_yn))) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Evidence actions require CHECK (Y/N) = Yes in Audit Finding for AP ${apCodeTrimPut}.`,
+              },
+              { status: 400 },
+            );
+          }
+        }
         const overallUpper = String(overallStatus || "").toUpperCase().trim();
 
         const existingEvidence = await prisma.evidence.findFirst({
@@ -299,8 +336,10 @@ export function makeEvidenceHandlers(defaultDepartment) {
       };
 
       const excludePublished = searchParams.get("exclude_published") === "1" || searchParams.get("exclude_published") === "true";
-      const apFetchSize = excludePublished ? 10000 : pageSize;
-      const apFetchSkip = excludePublished ? 0 : skip;
+      const findingDelegateForList = getFindingDelegate(upperDept);
+      const needsFindingYnFilter = hasValidYear && !!findingDelegateForList;
+      const apFetchSize = excludePublished || needsFindingYnFilter ? 10000 : pageSize;
+      const apFetchSkip = excludePublished || needsFindingYnFilter ? 0 : skip;
 
       const [apList, totalApCount] = await Promise.all([
         apDelegate.findMany({
@@ -443,8 +482,31 @@ export function makeEvidenceHandlers(defaultDepartment) {
         });
       }
 
+      if (findingDelegateForList && hasValidYear) {
+        const fromF = new Date(year, 0, 1);
+        const toF = new Date(year + 1, 0, 1);
+        const findingRows = await findingDelegateForList.findMany({
+          where: {
+            created_at: { gte: fromF, lt: toF },
+          },
+          select: { ap_code: true, check_yn: true },
+        });
+        const eligibleApCodes = new Set();
+        for (const fr of findingRows || []) {
+          const c = fr.ap_code != null ? String(fr.ap_code).trim() : "";
+          if (c && isAuditFindingCheckYes(fr.check_yn)) eligibleApCodes.add(c);
+        }
+        merged = merged.filter((row) => {
+          const code = row.ap_code != null ? String(row.ap_code).trim() : "";
+          return code && eligibleApCodes.has(code);
+        });
+      }
+
       if (excludePublished) {
         merged = merged.filter((row) => !row._isPublished);
+        total = merged.length;
+        merged = merged.slice(skip, skip + pageSize);
+      } else if (needsFindingYnFilter) {
         total = merged.length;
         merged = merged.slice(skip, skip + pageSize);
       }
@@ -496,6 +558,29 @@ export function makeEvidenceHandlers(defaultDepartment) {
           { success: false, error: "Evidence record not found for this AP." },
           { status: 404 },
         );
+      }
+
+      const findingDelegateDel = getFindingDelegate(dept);
+      const codeForYn =
+        existingEvidence.ap_code != null
+          ? String(existingEvidence.ap_code).trim()
+          : ap_code != null
+            ? String(ap_code).trim()
+            : "";
+      if (findingDelegateDel && selectedYear && codeForYn) {
+        const ynDel = await findingDelegateDel.findMany({
+          where: applyCreatedAtYearScope({ ap_code: codeForYn }, selectedYear),
+          select: { check_yn: true },
+        });
+        if (!ynDel.some((r) => isAuditFindingCheckYes(r.check_yn))) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "This AP is not enabled for evidence (Audit Finding CHECK (Y/N) must be Yes).",
+            },
+            { status: 403 },
+          );
+        }
       }
 
       const currentAttachments = parseAttachmentsField(

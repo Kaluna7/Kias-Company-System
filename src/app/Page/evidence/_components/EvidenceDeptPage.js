@@ -344,7 +344,9 @@ export default function EvidenceDeptPage({
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
             <div className="text-xs font-semibold text-slate-500 tracking-wide">B3.1 EVIDENCE</div>
             <div className="text-lg font-bold text-slate-900">{departmentLabel}</div>
-            <div className="text-sm text-slate-600">Document uploads are linked to Audit Program AP codes</div>
+            <div className="text-sm text-slate-600">
+              Only APs with <span className="font-semibold">CHECK (Y/N) = Yes</span> in Audit Finding appear here; uploads are allowed for those rows only.
+            </div>
           </div>
         </div>
 
@@ -430,10 +432,12 @@ export default function EvidenceDeptPage({
                   ) : apData.length === 0 ? (
                     <tr>
                       <td colSpan="5" className="border border-gray-200 px-2 sm:px-4 py-8 text-center text-gray-500">
-                        <div className="space-y-3">
-                          <p className="font-semibold text-lg">No Audit Program data found</p>
+                        <div className="space-y-3 max-w-lg mx-auto">
+                          <p className="font-semibold text-lg">No APs available for evidence yet</p>
                           <p className="text-sm">
-                            Please create Audit Program data for <strong>{dashboardLabel}</strong> first.
+                            In <strong>Audit Finding</strong> for <strong>{dashboardLabel}</strong>, set{" "}
+                            <strong>CHECK (Y/N)</strong> to <strong>Yes</strong> for each row you need to attach
+                            evidence to, save the table, then return here. APs without Yes stay hidden.
                           </p>
                         </div>
                       </td>

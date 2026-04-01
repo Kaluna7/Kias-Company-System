@@ -289,7 +289,7 @@ async function SopReviewGrid({ yearParam }) {
               </span>
             </p>
 
-            {/* SOP Status - hanya untuk yang bukan Report */}
+            {/* SOP Status - not for Report card */}
             {item.name !== "Report" && (
               <div className="mb-3">
                 <div className="flex items-center justify-between">
@@ -341,7 +341,7 @@ async function SopReviewGrid({ yearParam }) {
               </span>
             </p>
 
-            {/* SOP Status - hanya untuk yang bukan Report */}
+            {/* SOP Status - not for Report card */}
             {item.name !== "Report" && (
               <div className="mb-3">
                 <div className="flex items-center justify-between">

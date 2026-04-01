@@ -82,8 +82,8 @@ async function loadReportData(year) {
       if (!map) return null;
       const apiPath = map.api;
       try {
-        // Ambil SEMUA data publish dari SOP Review Report,
-        // filtering tahun akan dilakukan di layer aplikasi di bawah (berdasarkan audit_period_start/published_at)
+        // Load all published SOP Review report data;
+        // year filtering is done in application code below (audit_period_start / published_at)
         const params = new URLSearchParams({ all: "1" });
         const publishedRes = await fetch(
           `${baseUrl}/api/SopReview/${apiPath}/published?${params.toString()}`,
@@ -125,6 +125,7 @@ async function loadReportData(year) {
           department: map.dept,
           meta,
           steps: (rows || []).map((r, idx) => ({
+            id: r.id ?? null,
             no: r.no ?? idx + 1,
             sop_related: r.sop_related || "",
             status: r.status || "DRAFT",
@@ -148,7 +149,7 @@ async function loadReportData(year) {
   const allRows = results
     .filter((r) => r.status === "fulfilled")
     .flatMap((r) => (Array.isArray(r.value) ? r.value : r.value ? [r.value] : []))
-    // Hanya baris yang benar‑benar sudah dipublish (punya published_at di meta/row)
+    // Only rows that are actually published (published_at on meta/row)
     .filter((row) => (row.meta?.published_at || row.published_at) != null);
 
   console.log("[SOP-REPORT] allRows after publish filter", {
@@ -170,8 +171,7 @@ async function loadReportData(year) {
     if (aps && aps !== "#####" && aps !== "no-period") {
       const d = new Date(aps);
       if (!Number.isNaN(d.getTime()) && d.getFullYear() === year) return true;
-      // Jika tanggal period ada tapi tidak valid / beda tahun, jangan langsung buang;
-      // jatuhkan ke published_at sebagai fallback.
+      // If period date exists but is invalid / wrong year, fall back to published_at instead of dropping the row.
     }
     const d = pub ? new Date(pub) : new Date("invalid");
     return !Number.isNaN(d.getTime()) && d.getFullYear() === year;
