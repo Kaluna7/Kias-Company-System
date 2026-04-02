@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useDeferredValue } from "react";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 
-export default function ReportClient({ initialData = [] }) {
+export default function ReportClient({ initialData = [], selectedYear = null }) {
   const [selectedGroup, setSelectedGroup] = useState(null); // { deptName, periodKey } | null
   const data = initialData;
   const dateFormatCache = useMemo(() => new Map(), []);
@@ -27,6 +27,38 @@ export default function ReportClient({ initialData = [] }) {
   }, [dateFormatCache]);
   const reportColumns = useMemo(
     () => [
+      {
+        key: "audit_fieldwork_start",
+        header: "Audit fieldwork — Start",
+        accessor: (row) => formatDate(row.audit_fieldwork_start ?? row.fieldwork_start),
+        align: "text-center",
+        className: "whitespace-nowrap",
+      },
+      {
+        key: "audit_fieldwork_end",
+        header: "Audit fieldwork — End",
+        accessor: (row) => {
+          const v = formatDate(row.audit_fieldwork_end ?? row.fieldwork_end);
+          if (row.exceeds_audit_period && v !== "-") return `${v} ⚠`;
+          return v;
+        },
+        align: "text-center",
+        className: "whitespace-nowrap",
+      },
+      {
+        key: "audit_period_start",
+        header: "Audit period — Start",
+        accessor: (row) => formatDate(row.audit_period_start ?? row.period_start),
+        align: "text-center",
+        className: "whitespace-nowrap",
+      },
+      {
+        key: "audit_period_end",
+        header: "Audit period — End",
+        accessor: (row) => formatDate(row.audit_period_end ?? row.period_end),
+        align: "text-center",
+        className: "whitespace-nowrap",
+      },
       { key: "department", header: "Department", accessor: (row) => row.department || "-", align: "text-left", className: "whitespace-nowrap" },
       { key: "risk_id", header: "Risk ID", accessor: (row) => row.risk_id || "-", align: "text-center", className: "whitespace-nowrap" },
       { key: "risk_description", header: "Risk Description", accessor: (row) => row.risk_description || "-", align: "text-left", wrap: true },
@@ -58,7 +90,9 @@ export default function ReportClient({ initialData = [] }) {
 
     data.forEach((row) => {
       const dept = row.department || "Unknown";
-      const periodKey = `${row.period_start || "no-start"}_${row.period_end || "no-end"}`;
+      const ps = row.audit_period_start ?? row.period_start;
+      const pe = row.audit_period_end ?? row.period_end;
+      const periodKey = `${ps || "no-start"}_${pe || "no-end"}`;
 
       if (!groups[dept]) {
         groups[dept] = {
@@ -70,8 +104,13 @@ export default function ReportClient({ initialData = [] }) {
 
       if (!groups[dept].periods[periodKey]) {
         groups[dept].periods[periodKey] = {
-          period_start: row.period_start,
-          period_end: row.period_end,
+          audit_period_start: ps,
+          audit_period_end: pe,
+          audit_fieldwork_start: row.audit_fieldwork_start ?? row.fieldwork_start ?? ps,
+          audit_fieldwork_end: row.audit_fieldwork_end ?? row.fieldwork_end,
+          exceeds_audit_period: row.exceeds_audit_period,
+          period_start: ps,
+          period_end: pe,
           data: [],
         };
       }
@@ -239,7 +278,14 @@ export default function ReportClient({ initialData = [] }) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">AUDIT FINDING REPORT</h1>
-              <p className="text-gray-600 mt-1">Report columns now follow the audit finding table data.</p>
+              <p className="text-gray-600 mt-1">
+                Published findings with audit period and fieldwork columns. Dates come from the snapshot saved at publish,
+                or from schedule history (each time you save Audit Finding dates in Schedule). The current schedule alone
+                is not used for old rows — so changing dates later does not rewrite past publishes.
+                {selectedYear != null && !Number.isNaN(selectedYear) ? (
+                  <span className="font-medium text-gray-800"> Year: {selectedYear}.</span>
+                ) : null}
+              </p>
             </div>
           </div>
         </div>
@@ -272,7 +318,8 @@ export default function ReportClient({ initialData = [] }) {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600">
-                          This section shows all published findings for <span className="font-semibold">{deptName}</span>, grouped by audit period.
+                          Published findings for <span className="font-semibold">{deptName}</span>, grouped by the audit period
+                          snapshot. Open a group to see the table (period/fieldwork columns are in the grid, not repeated here).
                         </p>
                       </div>
                     </div>
@@ -280,16 +327,22 @@ export default function ReportClient({ initialData = [] }) {
 
                   {/* Period chips for this department */}
                   <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2">
-                    {periodEntries.map(([periodKey, period]) => (
-                      <button
-                        key={periodKey}
-                        onClick={() => openModal(deptName, periodKey)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 text-xs text-gray-800 rounded-full border border-gray-200 shadow-sm transition-colors"
-                      >
-                        <span className="font-semibold text-blue-700">View data</span>
-                        <span className="text-[11px] text-gray-500">({period.data.length} findings)</span>
-                      </button>
-                    ))}
+                    {periodEntries.map(([periodKey, period]) => {
+                      const ps = period.audit_period_start ?? period.period_start;
+                      const pe = period.audit_period_end ?? period.period_end;
+                      const rangeLabel =
+                        ps && pe ? `${formatDate(ps)} – ${formatDate(pe)}` : "Period (see table)";
+                      return (
+                        <button
+                          key={periodKey}
+                          onClick={() => openModal(deptName, periodKey)}
+                          className="flex flex-col items-start gap-0.5 px-3 py-1.5 bg-white hover:bg-blue-50 text-xs text-gray-800 rounded-lg border border-gray-200 shadow-sm transition-colors text-left"
+                        >
+                          <span className="font-semibold text-blue-700">View {period.data.length} finding(s)</span>
+                          <span className="text-[10px] text-gray-500">{rangeLabel}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -313,9 +366,7 @@ export default function ReportClient({ initialData = [] }) {
               <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 p-4 flex items-center justify-between shadow-md">
                 <div>
                   <h2 className="text-xl font-bold text-white">Audit Finding Details</h2>
-                  <p className="text-sm text-blue-100 mt-1">
-                    {deptName} &middot; {formatDate(periodGroup.period_start)} - {formatDate(periodGroup.period_end)}
-                  </p>
+                  <p className="text-sm text-blue-100 mt-1">{deptName}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -324,8 +375,8 @@ export default function ReportClient({ initialData = [] }) {
                       exportRowsToExcel(
                         periodGroup.data,
                         `${deptName}`,
-                        periodGroup.period_start,
-                        periodGroup.period_end
+                        periodGroup.audit_period_start ?? periodGroup.period_start,
+                        periodGroup.audit_period_end ?? periodGroup.period_end,
                       );
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-400/90 hover:bg-emerald-300 text-white shadow-sm"
@@ -360,11 +411,6 @@ export default function ReportClient({ initialData = [] }) {
 
               {/* Modal Content */}
               <div className="flex-1 overflow-auto p-4 bg-slate-50">
-                <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                  <span className="font-semibold">Audit period:</span> {formatDate(periodGroup.period_start)} - {formatDate(periodGroup.period_end)}
-                  <span className="mx-2 text-blue-300">|</span>
-                  <span className="font-semibold">Published date:</span> {formatDate(periodGroup.data?.[0]?.fieldwork_end)}
-                </div>
                 <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
                   <table className="min-w-[2200px] w-full border-collapse text-xs">
                     <thead>

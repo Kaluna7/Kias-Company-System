@@ -469,6 +469,11 @@ model audit_finding_accounting {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  /// Snapshot of schedule at publish time (do not overwrite when schedule changes)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_accounting")
 }
@@ -498,6 +503,10 @@ model audit_finding_finance {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_finance")
 }
@@ -526,6 +535,10 @@ model audit_finding_hrd {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_hrd")
 }
@@ -554,6 +567,10 @@ model audit_finding_ga {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_ga")
 }
@@ -582,6 +599,10 @@ model audit_finding_sdp {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_sdp")
 }
@@ -610,6 +631,10 @@ model audit_finding_tax {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_tax")
 }
@@ -638,6 +663,10 @@ model audit_finding_lp {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_lp")
 }
@@ -666,6 +695,10 @@ model audit_finding_mis {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_mis")
 }
@@ -694,6 +727,10 @@ model audit_finding_merch {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_merch")
 }
@@ -722,6 +759,10 @@ model audit_finding_ops {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_ops")
 }
@@ -750,6 +791,10 @@ model audit_finding_whs {
   completion_date     DateTime? @db.Date
   created_at          DateTime? @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_whs")
 }

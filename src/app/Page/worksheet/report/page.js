@@ -3,13 +3,11 @@ import ReportClient from "./ReportClient";
 
 export const dynamic = "force-dynamic";
 
-async function loadWorksheetScheduleModule(baseUrl, year) {
+async function loadWorksheetScheduleModule(baseUrl) {
   try {
     const url = new URL(`${baseUrl}/api/schedule/module`);
     url.searchParams.set("module", "worksheet");
-    if (year != null && !Number.isNaN(year)) {
-      url.searchParams.set("year", String(year));
-    }
+    // No ?year=: API would blank dates / flip is_configured for non-overlapping windows; report needs real period dates.
     const res = await fetch(url.toString(), { cache: "no-store" });
     const json = await res.json().catch(() => ({}));
     if (json.success && Array.isArray(json.rows)) return json.rows;
@@ -110,7 +108,7 @@ export default async function WorksheetReportPage({ searchParams }) {
 
   const [initialData, scheduleRows] = await Promise.all([
     loadWorksheetReportData(year),
-    loadWorksheetScheduleModule(baseUrl, year),
+    loadWorksheetScheduleModule(baseUrl),
   ]);
 
   return (

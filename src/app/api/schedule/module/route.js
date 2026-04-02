@@ -169,6 +169,23 @@ async function ensureModuleTable(client) {
   );
 }
 
+async function ensureScheduleHistoryTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.schedule_module_feedback_history (
+      id SERIAL PRIMARY KEY,
+      module_key VARCHAR(32) NOT NULL,
+      department_id VARCHAR(20) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_smfh_module_dept_created
+      ON public.schedule_module_feedback_history (module_key, department_id, created_at DESC);
+  `);
+}
+
 async function migrateFromLegacyIfNeeded(client) {
   // One-time-ish migration: copy sop-review assignments from schedule_preparer_feedback into schedule_module_feedback
   const regLegacy = await client.query("SELECT to_regclass($1) AS t", ["public.schedule_preparer_feedback"]);
@@ -389,6 +406,19 @@ export async function POST(req) {
         console.error(`WARNING: is_configured is not TRUE for ${module_key} ${department_id}! Value:`, savedRow.is_configured);
       } else if (savedRow) {
         console.log(`✓ is_configured = TRUE confirmed for ${module_key} ${department_id}`);
+      }
+
+      if (String(module_key).trim() === "audit-finding") {
+        try {
+          await ensureScheduleHistoryTable(client);
+          await client.query(
+            `INSERT INTO public.schedule_module_feedback_history (module_key, department_id, start_date, end_date)
+             VALUES ($1, $2, $3::date, $4::date)`,
+            [String(module_key).trim(), department_id, start_date, end_date],
+          );
+        } catch (histErr) {
+          console.warn("audit-finding schedule history append:", histErr?.message);
+        }
       }
       
       // Remove archive for this module if it exists (so new schedule can appear in progress)

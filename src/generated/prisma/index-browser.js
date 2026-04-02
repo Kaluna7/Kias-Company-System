@@ -535,7 +535,11 @@ exports.Prisma.Audit_finding_accountingScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_financeScalarFieldEnum = {
@@ -561,7 +565,11 @@ exports.Prisma.Audit_finding_financeScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_hrdScalarFieldEnum = {
@@ -587,7 +595,11 @@ exports.Prisma.Audit_finding_hrdScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_gaScalarFieldEnum = {
@@ -613,7 +625,11 @@ exports.Prisma.Audit_finding_gaScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_sdpScalarFieldEnum = {
@@ -639,7 +655,11 @@ exports.Prisma.Audit_finding_sdpScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_taxScalarFieldEnum = {
@@ -665,7 +685,11 @@ exports.Prisma.Audit_finding_taxScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_lpScalarFieldEnum = {
@@ -691,7 +715,11 @@ exports.Prisma.Audit_finding_lpScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_misScalarFieldEnum = {
@@ -717,7 +745,11 @@ exports.Prisma.Audit_finding_misScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_merchScalarFieldEnum = {
@@ -743,7 +775,11 @@ exports.Prisma.Audit_finding_merchScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_opsScalarFieldEnum = {
@@ -769,7 +805,11 @@ exports.Prisma.Audit_finding_opsScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Audit_finding_whsScalarFieldEnum = {
@@ -795,7 +835,11 @@ exports.Prisma.Audit_finding_whsScalarFieldEnum = {
   completion_status: 'completion_status',
   completion_date: 'completion_date',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  report_audit_period_start: 'report_audit_period_start',
+  report_audit_period_end: 'report_audit_period_end',
+  report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+  report_audit_fieldwork_end: 'report_audit_fieldwork_end'
 };
 
 exports.Prisma.Worksheet_financeScalarFieldEnum = {

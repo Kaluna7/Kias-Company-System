@@ -149,6 +149,11 @@ function buildFindingSelectSql(columns) {
       ? `"${columnName}"`
       : `NULL::text AS "${columnName}"`;
 
+  const optionalDateAsYmd = (columnName) =>
+    columns.has(columnName)
+      ? `to_char("${columnName}"::date, 'YYYY-MM-DD') AS "${columnName}"`
+      : `NULL::text AS "${columnName}"`;
+
   return [
     `"id"`,
     `"risk_id"`,
@@ -173,6 +178,10 @@ function buildFindingSelectSql(columns) {
     `"completion_date"`,
     `"created_at"`,
     `"updated_at"`,
+    optionalDateAsYmd("report_audit_period_start"),
+    optionalDateAsYmd("report_audit_period_end"),
+    optionalDateAsYmd("report_audit_fieldwork_start"),
+    optionalDateAsYmd("report_audit_fieldwork_end"),
   ].join(", ");
 }
 
@@ -380,6 +389,14 @@ export async function GET(req, { params }) {
     const dbHasSnapshotFields = ["objective", "procedures", "description", "application", "owners"].every(
       (field) => dbColumns.has(field)
     );
+    // Prisma findMany loads every scalar on the model; if schema has columns DB lacks (e.g. before migrate), use raw SQL path.
+    const dbHasReportScheduleSnapshotCols = [
+      "report_audit_period_start",
+      "report_audit_period_end",
+      "report_audit_fieldwork_start",
+      "report_audit_fieldwork_end",
+    ].every((c) => dbColumns.has(c));
+    const usePrismaFindManyForFindings = dbHasSnapshotFields && dbHasReportScheduleSnapshotCols;
 
     const apMapping = deptToAuditProgram[dept];
     // Jika include_completed=1, JANGAN lagi bergantung pada audit-program parents (karena setelah publish sudah dihapus).
@@ -432,7 +449,7 @@ export async function GET(req, { params }) {
     const apModel = getAuditProgramAp(dept);
     const parentModel = getAuditProgramParent(dept);
     if (!apModel || !parentModel) {
-      const { rows: findings, total } = dbHasSnapshotFields
+      const { rows: findings, total } = usePrismaFindManyForFindings
         ? await Promise.all([
             delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
             delegate.count({ where: whereFinding }),
@@ -461,7 +478,7 @@ export async function GET(req, { params }) {
         include: { aps: true },
         orderBy: { risk_id: "asc" },
       }),
-      dbHasSnapshotFields
+      usePrismaFindManyForFindings
         ? delegate.findMany({ where: whereFinding, orderBy: { id: "desc" } })
         : loadFindingsFromTable(dept, {
             includeCompleted: false,

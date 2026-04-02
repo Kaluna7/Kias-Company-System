@@ -1,5 +1,33 @@
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
+import {
+  loadAuditFindingScheduleHistories,
+  pickScheduleAsOfFromHistory,
+} from "@/lib/auditFindingReportSchedule";
+import prisma from "@/app/lib/prisma";
 import ReportClient from "./ReportClient";
+
+function normalizeScheduleDate(raw) {
+  if (raw == null || raw === "") return null;
+  const dateStr = String(raw);
+  let out = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(out)) {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    out = d.toISOString().slice(0, 10);
+  }
+  return out;
+}
+
+/** YYYY-MM-DD in local calendar for comparing publish day vs period end (same idea as worksheet report). */
+function toLocalIsoDate(v) {
+  if (v == null || v === "") return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 async function loadAuditFindingReportData(year) {
   try {
@@ -28,31 +56,10 @@ async function loadAuditFindingReportData(year) {
 
     const departments = Object.keys(departmentMap);
 
-    // Fetch schedule data untuk audit-finding module (audit period)
-    let scheduleData = {}; // Key: deptName, Value: { period_start, period_end }
-    try {
-      const scheduleRes = await fetch(`${baseUrl}/api/schedule/module?module=audit-finding`, {
-        next: { revalidate: 30 },
-      });
-      if (scheduleRes.ok) {
-        const scheduleJson = await scheduleRes.json();
-        if (scheduleJson.success && Array.isArray(scheduleJson.rows)) {
-          scheduleJson.rows.forEach((row) => {
-            const deptId = row.department_id;
-            const deptInfo = deptIdToDeptMap[deptId];
-            if (deptInfo) {
-              // Schedule module untuk audit-finding: start_date dan end_date adalah audit period
-              scheduleData[deptInfo.deptName] = {
-                period_start: row.start_date, // Audit period start = schedule start_date (dari schedule module)
-                period_end: row.end_date, // Audit period end = schedule end_date (dari schedule module)
-              };
-            }
-          });
-        }
-      }
-    } catch (err) {
-      console.warn("Error fetching schedule data:", err);
-    }
+    const scheduleHistoryByDeptId = await loadAuditFindingScheduleHistories(prisma);
+    const deptNameToScheduleId = Object.fromEntries(
+      Object.entries(deptIdToDeptMap).map(([scheduleId, info]) => [info.deptName, scheduleId]),
+    );
 
     // Fetch audit finding data dari semua department
     const allData = [];
@@ -87,27 +94,45 @@ async function loadAuditFindingReportData(year) {
           // Tambahkan department name, schedule, dan audit period ke setiap row
           // Audit Fieldwork Start: dari start_date schedule module (audit period start)
           // Audit Fieldwork End: dari updated_at (tanggal publish)
-          return completedData.map(row => {
-            // Format updated_at to date string (YYYY-MM-DD) for fieldwork_end
-            let fieldworkEnd = null;
-            if (row.updated_at) {
-              try {
-                const date = new Date(row.updated_at);
-                if (!isNaN(date.getTime())) {
-                  fieldworkEnd = date.toISOString().split('T')[0];
-                }
-              } catch (err) {
-                console.warn(`Error parsing updated_at for row:`, err);
-              }
-            }
-            
+          return completedData.map((row) => {
+            const deptName = deptInfo.deptName;
+            const scheduleDeptId = deptNameToScheduleId[deptName];
+            // 1) Snapshot columns set at publish. 2) Else schedule as it was when row was saved (append-only history).
+            // Do NOT use "current" module schedule for COMPLETED rows — it would rewrite all old publishes when dates change.
+            const storedPs = normalizeScheduleDate(row.report_audit_period_start);
+            const storedPe = normalizeScheduleDate(row.report_audit_period_end);
+            const storedFs = normalizeScheduleDate(row.report_audit_fieldwork_start);
+            const storedFe = normalizeScheduleDate(row.report_audit_fieldwork_end);
+
+            const asOf = row.updated_at ?? row.completion_date;
+            const needHistory = !storedPs && !storedPe;
+            const hist =
+              needHistory && scheduleDeptId
+                ? pickScheduleAsOfFromHistory(scheduleHistoryByDeptId[scheduleDeptId], asOf)
+                : null;
+            const histPs = hist ? normalizeScheduleDate(hist.start_date) : null;
+            const histPe = hist ? normalizeScheduleDate(hist.end_date) : null;
+
+            const auditPeriodStart = storedPs ?? histPs ?? null;
+            const auditPeriodEnd = storedPe ?? histPe ?? null;
+            const fieldworkStart = storedFs ?? auditPeriodStart;
+            const fieldworkEndIso = storedFe ?? toLocalIsoDate(row.updated_at);
+            const exceedsAuditPeriod = Boolean(
+              auditPeriodEnd && fieldworkEndIso && fieldworkEndIso > auditPeriodEnd,
+            );
+
             return {
               ...row,
-              department: deptInfo.deptName,
-              fieldwork_start: scheduleData[dept]?.period_start || null, // Fieldwork start = schedule start_date (audit period start)
-              fieldwork_end: fieldworkEnd, // Fieldwork end = updated_at (tanggal publish)
-              period_start: scheduleData[dept]?.period_start || null,
-              period_end: scheduleData[dept]?.period_end || null,
+              department: deptName,
+              audit_period_start: auditPeriodStart,
+              audit_period_end: auditPeriodEnd,
+              audit_fieldwork_start: fieldworkStart,
+              audit_fieldwork_end: fieldworkEndIso,
+              exceeds_audit_period: exceedsAuditPeriod,
+              period_start: auditPeriodStart,
+              period_end: auditPeriodEnd,
+              fieldwork_start: fieldworkStart,
+              fieldwork_end: fieldworkEndIso,
             };
           });
         }
@@ -169,6 +194,6 @@ export default async function AuditFindingReportPage({ searchParams }) {
   const yearParam = params?.year;
   const year = yearParam ? parseInt(yearParam, 10) : null;
   const initialData = await loadAuditFindingReportData(year);
-  return <ReportClient initialData={initialData} />;
+  return <ReportClient initialData={initialData} selectedYear={year} />;
 }
 

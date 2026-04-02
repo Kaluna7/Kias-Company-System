@@ -35510,6 +35510,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_accountingMaxAggregateOutputType = {
@@ -35536,6 +35540,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_accountingCountAggregateOutputType = {
@@ -35562,6 +35570,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -35600,6 +35612,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_accountingMaxAggregateInputType = {
@@ -35626,6 +35642,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_accountingCountAggregateInputType = {
@@ -35652,6 +35672,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -35765,6 +35789,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_accountingCountAggregateOutputType | null
     _avg: Audit_finding_accountingAvgAggregateOutputType | null
     _sum: Audit_finding_accountingSumAggregateOutputType | null
@@ -35810,6 +35838,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_accounting"]>
 
   export type audit_finding_accountingSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -35836,6 +35868,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_accounting"]>
 
   export type audit_finding_accountingSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -35862,6 +35898,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_accounting"]>
 
   export type audit_finding_accountingSelectScalar = {
@@ -35888,9 +35928,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_accountingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_accounting"]>
+  export type audit_finding_accountingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_accounting"]>
 
   export type $audit_finding_accountingPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_accounting"
@@ -35919,6 +35963,13 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      /**
+       * Snapshot of schedule at publish time (do not overwrite when schedule changes)
+       */
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_accounting"]>
     composites: {}
   }
@@ -36365,6 +36416,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_accounting", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_accounting", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_accounting", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_accounting", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_accounting", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_accounting", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_accounting", 'DateTime'>
   }
     
 
@@ -36777,6 +36832,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_financeMaxAggregateOutputType = {
@@ -36803,6 +36862,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_financeCountAggregateOutputType = {
@@ -36829,6 +36892,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -36867,6 +36934,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_financeMaxAggregateInputType = {
@@ -36893,6 +36964,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_financeCountAggregateInputType = {
@@ -36919,6 +36994,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -37032,6 +37111,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_financeCountAggregateOutputType | null
     _avg: Audit_finding_financeAvgAggregateOutputType | null
     _sum: Audit_finding_financeSumAggregateOutputType | null
@@ -37077,6 +37160,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_finance"]>
 
   export type audit_finding_financeSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -37103,6 +37190,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_finance"]>
 
   export type audit_finding_financeSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -37129,6 +37220,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_finance"]>
 
   export type audit_finding_financeSelectScalar = {
@@ -37155,9 +37250,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_finance"]>
+  export type audit_finding_financeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_finance"]>
 
   export type $audit_finding_financePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_finance"
@@ -37186,6 +37285,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_finance"]>
     composites: {}
   }
@@ -37632,6 +37735,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_finance", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_finance", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_finance", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_finance", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_finance", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_finance", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_finance", 'DateTime'>
   }
     
 
@@ -38044,6 +38151,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_hrdMaxAggregateOutputType = {
@@ -38070,6 +38181,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_hrdCountAggregateOutputType = {
@@ -38096,6 +38211,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -38134,6 +38253,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_hrdMaxAggregateInputType = {
@@ -38160,6 +38283,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_hrdCountAggregateInputType = {
@@ -38186,6 +38313,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -38299,6 +38430,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_hrdCountAggregateOutputType | null
     _avg: Audit_finding_hrdAvgAggregateOutputType | null
     _sum: Audit_finding_hrdSumAggregateOutputType | null
@@ -38344,6 +38479,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_hrd"]>
 
   export type audit_finding_hrdSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -38370,6 +38509,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_hrd"]>
 
   export type audit_finding_hrdSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -38396,6 +38539,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_hrd"]>
 
   export type audit_finding_hrdSelectScalar = {
@@ -38422,9 +38569,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_hrdOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_hrd"]>
+  export type audit_finding_hrdOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_hrd"]>
 
   export type $audit_finding_hrdPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_hrd"
@@ -38453,6 +38604,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_hrd"]>
     composites: {}
   }
@@ -38899,6 +39054,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_hrd", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_hrd", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_hrd", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_hrd", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_hrd", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_hrd", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_hrd", 'DateTime'>
   }
     
 
@@ -39311,6 +39470,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_gaMaxAggregateOutputType = {
@@ -39337,6 +39500,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_gaCountAggregateOutputType = {
@@ -39363,6 +39530,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -39401,6 +39572,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_gaMaxAggregateInputType = {
@@ -39427,6 +39602,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_gaCountAggregateInputType = {
@@ -39453,6 +39632,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -39566,6 +39749,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_gaCountAggregateOutputType | null
     _avg: Audit_finding_gaAvgAggregateOutputType | null
     _sum: Audit_finding_gaSumAggregateOutputType | null
@@ -39611,6 +39798,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_ga"]>
 
   export type audit_finding_gaSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -39637,6 +39828,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_ga"]>
 
   export type audit_finding_gaSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -39663,6 +39858,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_ga"]>
 
   export type audit_finding_gaSelectScalar = {
@@ -39689,9 +39888,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_gaOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_ga"]>
+  export type audit_finding_gaOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_ga"]>
 
   export type $audit_finding_gaPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_ga"
@@ -39720,6 +39923,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_ga"]>
     composites: {}
   }
@@ -40166,6 +40373,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_ga", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_ga", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_ga", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_ga", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_ga", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_ga", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_ga", 'DateTime'>
   }
     
 
@@ -40578,6 +40789,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_sdpMaxAggregateOutputType = {
@@ -40604,6 +40819,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_sdpCountAggregateOutputType = {
@@ -40630,6 +40849,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -40668,6 +40891,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_sdpMaxAggregateInputType = {
@@ -40694,6 +40921,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_sdpCountAggregateInputType = {
@@ -40720,6 +40951,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -40833,6 +41068,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_sdpCountAggregateOutputType | null
     _avg: Audit_finding_sdpAvgAggregateOutputType | null
     _sum: Audit_finding_sdpSumAggregateOutputType | null
@@ -40878,6 +41117,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_sdp"]>
 
   export type audit_finding_sdpSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -40904,6 +41147,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_sdp"]>
 
   export type audit_finding_sdpSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -40930,6 +41177,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_sdp"]>
 
   export type audit_finding_sdpSelectScalar = {
@@ -40956,9 +41207,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_sdpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_sdp"]>
+  export type audit_finding_sdpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_sdp"]>
 
   export type $audit_finding_sdpPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_sdp"
@@ -40987,6 +41242,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_sdp"]>
     composites: {}
   }
@@ -41433,6 +41692,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_sdp", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_sdp", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_sdp", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_sdp", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_sdp", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_sdp", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_sdp", 'DateTime'>
   }
     
 
@@ -41845,6 +42108,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_taxMaxAggregateOutputType = {
@@ -41871,6 +42138,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_taxCountAggregateOutputType = {
@@ -41897,6 +42168,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -41935,6 +42210,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_taxMaxAggregateInputType = {
@@ -41961,6 +42240,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_taxCountAggregateInputType = {
@@ -41987,6 +42270,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -42100,6 +42387,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_taxCountAggregateOutputType | null
     _avg: Audit_finding_taxAvgAggregateOutputType | null
     _sum: Audit_finding_taxSumAggregateOutputType | null
@@ -42145,6 +42436,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_tax"]>
 
   export type audit_finding_taxSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -42171,6 +42466,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_tax"]>
 
   export type audit_finding_taxSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -42197,6 +42496,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_tax"]>
 
   export type audit_finding_taxSelectScalar = {
@@ -42223,9 +42526,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_taxOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_tax"]>
+  export type audit_finding_taxOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_tax"]>
 
   export type $audit_finding_taxPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_tax"
@@ -42254,6 +42561,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_tax"]>
     composites: {}
   }
@@ -42700,6 +43011,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_tax", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_tax", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_tax", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_tax", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_tax", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_tax", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_tax", 'DateTime'>
   }
     
 
@@ -43112,6 +43427,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_lpMaxAggregateOutputType = {
@@ -43138,6 +43457,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_lpCountAggregateOutputType = {
@@ -43164,6 +43487,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -43202,6 +43529,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_lpMaxAggregateInputType = {
@@ -43228,6 +43559,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_lpCountAggregateInputType = {
@@ -43254,6 +43589,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -43367,6 +43706,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_lpCountAggregateOutputType | null
     _avg: Audit_finding_lpAvgAggregateOutputType | null
     _sum: Audit_finding_lpSumAggregateOutputType | null
@@ -43412,6 +43755,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_lp"]>
 
   export type audit_finding_lpSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -43438,6 +43785,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_lp"]>
 
   export type audit_finding_lpSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -43464,6 +43815,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_lp"]>
 
   export type audit_finding_lpSelectScalar = {
@@ -43490,9 +43845,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_lpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_lp"]>
+  export type audit_finding_lpOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_lp"]>
 
   export type $audit_finding_lpPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_lp"
@@ -43521,6 +43880,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_lp"]>
     composites: {}
   }
@@ -43967,6 +44330,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_lp", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_lp", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_lp", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_lp", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_lp", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_lp", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_lp", 'DateTime'>
   }
     
 
@@ -44379,6 +44746,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_misMaxAggregateOutputType = {
@@ -44405,6 +44776,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_misCountAggregateOutputType = {
@@ -44431,6 +44806,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -44469,6 +44848,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_misMaxAggregateInputType = {
@@ -44495,6 +44878,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_misCountAggregateInputType = {
@@ -44521,6 +44908,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -44634,6 +45025,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_misCountAggregateOutputType | null
     _avg: Audit_finding_misAvgAggregateOutputType | null
     _sum: Audit_finding_misSumAggregateOutputType | null
@@ -44679,6 +45074,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_mis"]>
 
   export type audit_finding_misSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -44705,6 +45104,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_mis"]>
 
   export type audit_finding_misSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -44731,6 +45134,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_mis"]>
 
   export type audit_finding_misSelectScalar = {
@@ -44757,9 +45164,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_misOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_mis"]>
+  export type audit_finding_misOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_mis"]>
 
   export type $audit_finding_misPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_mis"
@@ -44788,6 +45199,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_mis"]>
     composites: {}
   }
@@ -45234,6 +45649,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_mis", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_mis", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_mis", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_mis", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_mis", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_mis", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_mis", 'DateTime'>
   }
     
 
@@ -45646,6 +46065,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_merchMaxAggregateOutputType = {
@@ -45672,6 +46095,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_merchCountAggregateOutputType = {
@@ -45698,6 +46125,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -45736,6 +46167,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_merchMaxAggregateInputType = {
@@ -45762,6 +46197,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_merchCountAggregateInputType = {
@@ -45788,6 +46227,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -45901,6 +46344,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_merchCountAggregateOutputType | null
     _avg: Audit_finding_merchAvgAggregateOutputType | null
     _sum: Audit_finding_merchSumAggregateOutputType | null
@@ -45946,6 +46393,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_merch"]>
 
   export type audit_finding_merchSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -45972,6 +46423,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_merch"]>
 
   export type audit_finding_merchSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -45998,6 +46453,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_merch"]>
 
   export type audit_finding_merchSelectScalar = {
@@ -46024,9 +46483,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_merchOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_merch"]>
+  export type audit_finding_merchOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_merch"]>
 
   export type $audit_finding_merchPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_merch"
@@ -46055,6 +46518,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_merch"]>
     composites: {}
   }
@@ -46501,6 +46968,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_merch", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_merch", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_merch", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_merch", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_merch", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_merch", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_merch", 'DateTime'>
   }
     
 
@@ -46913,6 +47384,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_opsMaxAggregateOutputType = {
@@ -46939,6 +47414,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_opsCountAggregateOutputType = {
@@ -46965,6 +47444,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -47003,6 +47486,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_opsMaxAggregateInputType = {
@@ -47029,6 +47516,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_opsCountAggregateInputType = {
@@ -47055,6 +47546,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -47168,6 +47663,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_opsCountAggregateOutputType | null
     _avg: Audit_finding_opsAvgAggregateOutputType | null
     _sum: Audit_finding_opsSumAggregateOutputType | null
@@ -47213,6 +47712,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_ops"]>
 
   export type audit_finding_opsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -47239,6 +47742,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_ops"]>
 
   export type audit_finding_opsSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -47265,6 +47772,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_ops"]>
 
   export type audit_finding_opsSelectScalar = {
@@ -47291,9 +47802,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_opsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_ops"]>
+  export type audit_finding_opsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_ops"]>
 
   export type $audit_finding_opsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_ops"
@@ -47322,6 +47837,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_ops"]>
     composites: {}
   }
@@ -47768,6 +48287,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_ops", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_ops", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_ops", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_ops", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_ops", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_ops", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_ops", 'DateTime'>
   }
     
 
@@ -48180,6 +48703,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_whsMaxAggregateOutputType = {
@@ -48206,6 +48733,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
   }
 
   export type Audit_finding_whsCountAggregateOutputType = {
@@ -48232,6 +48763,10 @@ export namespace Prisma {
     completion_date: number
     created_at: number
     updated_at: number
+    report_audit_period_start: number
+    report_audit_period_end: number
+    report_audit_fieldwork_start: number
+    report_audit_fieldwork_end: number
     _all: number
   }
 
@@ -48270,6 +48805,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_whsMaxAggregateInputType = {
@@ -48296,6 +48835,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
   }
 
   export type Audit_finding_whsCountAggregateInputType = {
@@ -48322,6 +48865,10 @@ export namespace Prisma {
     completion_date?: true
     created_at?: true
     updated_at?: true
+    report_audit_period_start?: true
+    report_audit_period_end?: true
+    report_audit_fieldwork_start?: true
+    report_audit_fieldwork_end?: true
     _all?: true
   }
 
@@ -48435,6 +48982,10 @@ export namespace Prisma {
     completion_date: Date | null
     created_at: Date | null
     updated_at: Date | null
+    report_audit_period_start: Date | null
+    report_audit_period_end: Date | null
+    report_audit_fieldwork_start: Date | null
+    report_audit_fieldwork_end: Date | null
     _count: Audit_finding_whsCountAggregateOutputType | null
     _avg: Audit_finding_whsAvgAggregateOutputType | null
     _sum: Audit_finding_whsSumAggregateOutputType | null
@@ -48480,6 +49031,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_whs"]>
 
   export type audit_finding_whsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -48506,6 +49061,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_whs"]>
 
   export type audit_finding_whsSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -48532,6 +49091,10 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }, ExtArgs["result"]["audit_finding_whs"]>
 
   export type audit_finding_whsSelectScalar = {
@@ -48558,9 +49121,13 @@ export namespace Prisma {
     completion_date?: boolean
     created_at?: boolean
     updated_at?: boolean
+    report_audit_period_start?: boolean
+    report_audit_period_end?: boolean
+    report_audit_fieldwork_start?: boolean
+    report_audit_fieldwork_end?: boolean
   }
 
-  export type audit_finding_whsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at", ExtArgs["result"]["audit_finding_whs"]>
+  export type audit_finding_whsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "risk_id" | "risk_description" | "risk_details" | "owners" | "ap_code" | "substantive_test" | "objective" | "procedures" | "description" | "application" | "risk" | "check_yn" | "method" | "preparer" | "finding_result" | "finding_description" | "recommendation" | "auditee" | "completion_status" | "completion_date" | "created_at" | "updated_at" | "report_audit_period_start" | "report_audit_period_end" | "report_audit_fieldwork_start" | "report_audit_fieldwork_end", ExtArgs["result"]["audit_finding_whs"]>
 
   export type $audit_finding_whsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "audit_finding_whs"
@@ -48589,6 +49156,10 @@ export namespace Prisma {
       completion_date: Date | null
       created_at: Date | null
       updated_at: Date | null
+      report_audit_period_start: Date | null
+      report_audit_period_end: Date | null
+      report_audit_fieldwork_start: Date | null
+      report_audit_fieldwork_end: Date | null
     }, ExtArgs["result"]["audit_finding_whs"]>
     composites: {}
   }
@@ -49035,6 +49606,10 @@ export namespace Prisma {
     readonly completion_date: FieldRef<"audit_finding_whs", 'DateTime'>
     readonly created_at: FieldRef<"audit_finding_whs", 'DateTime'>
     readonly updated_at: FieldRef<"audit_finding_whs", 'DateTime'>
+    readonly report_audit_period_start: FieldRef<"audit_finding_whs", 'DateTime'>
+    readonly report_audit_period_end: FieldRef<"audit_finding_whs", 'DateTime'>
+    readonly report_audit_fieldwork_start: FieldRef<"audit_finding_whs", 'DateTime'>
+    readonly report_audit_fieldwork_end: FieldRef<"audit_finding_whs", 'DateTime'>
   }
     
 
@@ -52194,7 +52769,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_accountingScalarFieldEnum = (typeof Audit_finding_accountingScalarFieldEnum)[keyof typeof Audit_finding_accountingScalarFieldEnum]
@@ -52223,7 +52802,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_financeScalarFieldEnum = (typeof Audit_finding_financeScalarFieldEnum)[keyof typeof Audit_finding_financeScalarFieldEnum]
@@ -52252,7 +52835,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_hrdScalarFieldEnum = (typeof Audit_finding_hrdScalarFieldEnum)[keyof typeof Audit_finding_hrdScalarFieldEnum]
@@ -52281,7 +52868,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_gaScalarFieldEnum = (typeof Audit_finding_gaScalarFieldEnum)[keyof typeof Audit_finding_gaScalarFieldEnum]
@@ -52310,7 +52901,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_sdpScalarFieldEnum = (typeof Audit_finding_sdpScalarFieldEnum)[keyof typeof Audit_finding_sdpScalarFieldEnum]
@@ -52339,7 +52934,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_taxScalarFieldEnum = (typeof Audit_finding_taxScalarFieldEnum)[keyof typeof Audit_finding_taxScalarFieldEnum]
@@ -52368,7 +52967,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_lpScalarFieldEnum = (typeof Audit_finding_lpScalarFieldEnum)[keyof typeof Audit_finding_lpScalarFieldEnum]
@@ -52397,7 +53000,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_misScalarFieldEnum = (typeof Audit_finding_misScalarFieldEnum)[keyof typeof Audit_finding_misScalarFieldEnum]
@@ -52426,7 +53033,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_merchScalarFieldEnum = (typeof Audit_finding_merchScalarFieldEnum)[keyof typeof Audit_finding_merchScalarFieldEnum]
@@ -52455,7 +53066,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_opsScalarFieldEnum = (typeof Audit_finding_opsScalarFieldEnum)[keyof typeof Audit_finding_opsScalarFieldEnum]
@@ -52484,7 +53099,11 @@ export namespace Prisma {
     completion_status: 'completion_status',
     completion_date: 'completion_date',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    report_audit_period_start: 'report_audit_period_start',
+    report_audit_period_end: 'report_audit_period_end',
+    report_audit_fieldwork_start: 'report_audit_fieldwork_start',
+    report_audit_fieldwork_end: 'report_audit_fieldwork_end'
   };
 
   export type Audit_finding_whsScalarFieldEnum = (typeof Audit_finding_whsScalarFieldEnum)[keyof typeof Audit_finding_whsScalarFieldEnum]
@@ -55039,6 +55658,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
   }
 
   export type audit_finding_accountingOrderByWithRelationInput = {
@@ -55065,6 +55688,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_accountingWhereUniqueInput = Prisma.AtLeast<{
@@ -55094,6 +55721,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_accounting"> | Date | string | null
   }, "id">
 
   export type audit_finding_accountingOrderByWithAggregationInput = {
@@ -55120,6 +55751,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_accountingCountOrderByAggregateInput
     _avg?: audit_finding_accountingAvgOrderByAggregateInput
     _max?: audit_finding_accountingMaxOrderByAggregateInput
@@ -55154,6 +55789,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_accounting"> | Date | string | null
   }
 
   export type audit_finding_financeWhereInput = {
@@ -55183,6 +55822,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
   }
 
   export type audit_finding_financeOrderByWithRelationInput = {
@@ -55209,6 +55852,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_financeWhereUniqueInput = Prisma.AtLeast<{
@@ -55238,6 +55885,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_finance"> | Date | string | null
   }, "id">
 
   export type audit_finding_financeOrderByWithAggregationInput = {
@@ -55264,6 +55915,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_financeCountOrderByAggregateInput
     _avg?: audit_finding_financeAvgOrderByAggregateInput
     _max?: audit_finding_financeMaxOrderByAggregateInput
@@ -55298,6 +55953,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_finance"> | Date | string | null
   }
 
   export type audit_finding_hrdWhereInput = {
@@ -55327,6 +55986,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
   }
 
   export type audit_finding_hrdOrderByWithRelationInput = {
@@ -55353,6 +56016,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_hrdWhereUniqueInput = Prisma.AtLeast<{
@@ -55382,6 +56049,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_hrd"> | Date | string | null
   }, "id">
 
   export type audit_finding_hrdOrderByWithAggregationInput = {
@@ -55408,6 +56079,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_hrdCountOrderByAggregateInput
     _avg?: audit_finding_hrdAvgOrderByAggregateInput
     _max?: audit_finding_hrdMaxOrderByAggregateInput
@@ -55442,6 +56117,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_hrd"> | Date | string | null
   }
 
   export type audit_finding_gaWhereInput = {
@@ -55471,6 +56150,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
   }
 
   export type audit_finding_gaOrderByWithRelationInput = {
@@ -55497,6 +56180,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_gaWhereUniqueInput = Prisma.AtLeast<{
@@ -55526,6 +56213,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_ga"> | Date | string | null
   }, "id">
 
   export type audit_finding_gaOrderByWithAggregationInput = {
@@ -55552,6 +56243,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_gaCountOrderByAggregateInput
     _avg?: audit_finding_gaAvgOrderByAggregateInput
     _max?: audit_finding_gaMaxOrderByAggregateInput
@@ -55586,6 +56281,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_ga"> | Date | string | null
   }
 
   export type audit_finding_sdpWhereInput = {
@@ -55615,6 +56314,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
   }
 
   export type audit_finding_sdpOrderByWithRelationInput = {
@@ -55641,6 +56344,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_sdpWhereUniqueInput = Prisma.AtLeast<{
@@ -55670,6 +56377,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_sdp"> | Date | string | null
   }, "id">
 
   export type audit_finding_sdpOrderByWithAggregationInput = {
@@ -55696,6 +56407,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_sdpCountOrderByAggregateInput
     _avg?: audit_finding_sdpAvgOrderByAggregateInput
     _max?: audit_finding_sdpMaxOrderByAggregateInput
@@ -55730,6 +56445,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_sdp"> | Date | string | null
   }
 
   export type audit_finding_taxWhereInput = {
@@ -55759,6 +56478,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
   }
 
   export type audit_finding_taxOrderByWithRelationInput = {
@@ -55785,6 +56508,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_taxWhereUniqueInput = Prisma.AtLeast<{
@@ -55814,6 +56541,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_tax"> | Date | string | null
   }, "id">
 
   export type audit_finding_taxOrderByWithAggregationInput = {
@@ -55840,6 +56571,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_taxCountOrderByAggregateInput
     _avg?: audit_finding_taxAvgOrderByAggregateInput
     _max?: audit_finding_taxMaxOrderByAggregateInput
@@ -55874,6 +56609,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_tax"> | Date | string | null
   }
 
   export type audit_finding_lpWhereInput = {
@@ -55903,6 +56642,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
   }
 
   export type audit_finding_lpOrderByWithRelationInput = {
@@ -55929,6 +56672,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_lpWhereUniqueInput = Prisma.AtLeast<{
@@ -55958,6 +56705,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_lp"> | Date | string | null
   }, "id">
 
   export type audit_finding_lpOrderByWithAggregationInput = {
@@ -55984,6 +56735,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_lpCountOrderByAggregateInput
     _avg?: audit_finding_lpAvgOrderByAggregateInput
     _max?: audit_finding_lpMaxOrderByAggregateInput
@@ -56018,6 +56773,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_lp"> | Date | string | null
   }
 
   export type audit_finding_misWhereInput = {
@@ -56047,6 +56806,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
   }
 
   export type audit_finding_misOrderByWithRelationInput = {
@@ -56073,6 +56836,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_misWhereUniqueInput = Prisma.AtLeast<{
@@ -56102,6 +56869,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_mis"> | Date | string | null
   }, "id">
 
   export type audit_finding_misOrderByWithAggregationInput = {
@@ -56128,6 +56899,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_misCountOrderByAggregateInput
     _avg?: audit_finding_misAvgOrderByAggregateInput
     _max?: audit_finding_misMaxOrderByAggregateInput
@@ -56162,6 +56937,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_mis"> | Date | string | null
   }
 
   export type audit_finding_merchWhereInput = {
@@ -56191,6 +56970,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
   }
 
   export type audit_finding_merchOrderByWithRelationInput = {
@@ -56217,6 +57000,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_merchWhereUniqueInput = Prisma.AtLeast<{
@@ -56246,6 +57033,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_merch"> | Date | string | null
   }, "id">
 
   export type audit_finding_merchOrderByWithAggregationInput = {
@@ -56272,6 +57063,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_merchCountOrderByAggregateInput
     _avg?: audit_finding_merchAvgOrderByAggregateInput
     _max?: audit_finding_merchMaxOrderByAggregateInput
@@ -56306,6 +57101,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_merch"> | Date | string | null
   }
 
   export type audit_finding_opsWhereInput = {
@@ -56335,6 +57134,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
   }
 
   export type audit_finding_opsOrderByWithRelationInput = {
@@ -56361,6 +57164,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_opsWhereUniqueInput = Prisma.AtLeast<{
@@ -56390,6 +57197,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_ops"> | Date | string | null
   }, "id">
 
   export type audit_finding_opsOrderByWithAggregationInput = {
@@ -56416,6 +57227,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_opsCountOrderByAggregateInput
     _avg?: audit_finding_opsAvgOrderByAggregateInput
     _max?: audit_finding_opsMaxOrderByAggregateInput
@@ -56450,6 +57265,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_ops"> | Date | string | null
   }
 
   export type audit_finding_whsWhereInput = {
@@ -56479,6 +57298,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
   }
 
   export type audit_finding_whsOrderByWithRelationInput = {
@@ -56505,6 +57328,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
   }
 
   export type audit_finding_whsWhereUniqueInput = Prisma.AtLeast<{
@@ -56534,6 +57361,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
     created_at?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableFilter<"audit_finding_whs"> | Date | string | null
   }, "id">
 
   export type audit_finding_whsOrderByWithAggregationInput = {
@@ -56560,6 +57391,10 @@ export namespace Prisma {
     completion_date?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
+    report_audit_period_start?: SortOrderInput | SortOrder
+    report_audit_period_end?: SortOrderInput | SortOrder
+    report_audit_fieldwork_start?: SortOrderInput | SortOrder
+    report_audit_fieldwork_end?: SortOrderInput | SortOrder
     _count?: audit_finding_whsCountOrderByAggregateInput
     _avg?: audit_finding_whsAvgOrderByAggregateInput
     _max?: audit_finding_whsMaxOrderByAggregateInput
@@ -56594,6 +57429,10 @@ export namespace Prisma {
     completion_date?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_period_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_period_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_fieldwork_start?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
+    report_audit_fieldwork_end?: DateTimeNullableWithAggregatesFilter<"audit_finding_whs"> | Date | string | null
   }
 
   export type worksheet_financeWhereInput = {
@@ -59514,6 +60353,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_accountingUncheckedCreateInput = {
@@ -59540,6 +60383,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_accountingUpdateInput = {
@@ -59565,6 +60412,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_accountingUncheckedUpdateInput = {
@@ -59591,6 +60442,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_accountingCreateManyInput = {
@@ -59617,6 +60472,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_accountingUpdateManyMutationInput = {
@@ -59642,6 +60501,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_accountingUncheckedUpdateManyInput = {
@@ -59668,6 +60531,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_financeCreateInput = {
@@ -59693,6 +60560,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_financeUncheckedCreateInput = {
@@ -59719,6 +60590,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_financeUpdateInput = {
@@ -59744,6 +60619,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_financeUncheckedUpdateInput = {
@@ -59770,6 +60649,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_financeCreateManyInput = {
@@ -59796,6 +60679,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_financeUpdateManyMutationInput = {
@@ -59821,6 +60708,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_financeUncheckedUpdateManyInput = {
@@ -59847,6 +60738,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_hrdCreateInput = {
@@ -59872,6 +60767,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_hrdUncheckedCreateInput = {
@@ -59898,6 +60797,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_hrdUpdateInput = {
@@ -59923,6 +60826,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_hrdUncheckedUpdateInput = {
@@ -59949,6 +60856,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_hrdCreateManyInput = {
@@ -59975,6 +60886,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_hrdUpdateManyMutationInput = {
@@ -60000,6 +60915,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_hrdUncheckedUpdateManyInput = {
@@ -60026,6 +60945,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_gaCreateInput = {
@@ -60051,6 +60974,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_gaUncheckedCreateInput = {
@@ -60077,6 +61004,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_gaUpdateInput = {
@@ -60102,6 +61033,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_gaUncheckedUpdateInput = {
@@ -60128,6 +61063,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_gaCreateManyInput = {
@@ -60154,6 +61093,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_gaUpdateManyMutationInput = {
@@ -60179,6 +61122,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_gaUncheckedUpdateManyInput = {
@@ -60205,6 +61152,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_sdpCreateInput = {
@@ -60230,6 +61181,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_sdpUncheckedCreateInput = {
@@ -60256,6 +61211,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_sdpUpdateInput = {
@@ -60281,6 +61240,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_sdpUncheckedUpdateInput = {
@@ -60307,6 +61270,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_sdpCreateManyInput = {
@@ -60333,6 +61300,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_sdpUpdateManyMutationInput = {
@@ -60358,6 +61329,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_sdpUncheckedUpdateManyInput = {
@@ -60384,6 +61359,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_taxCreateInput = {
@@ -60409,6 +61388,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_taxUncheckedCreateInput = {
@@ -60435,6 +61418,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_taxUpdateInput = {
@@ -60460,6 +61447,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_taxUncheckedUpdateInput = {
@@ -60486,6 +61477,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_taxCreateManyInput = {
@@ -60512,6 +61507,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_taxUpdateManyMutationInput = {
@@ -60537,6 +61536,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_taxUncheckedUpdateManyInput = {
@@ -60563,6 +61566,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_lpCreateInput = {
@@ -60588,6 +61595,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_lpUncheckedCreateInput = {
@@ -60614,6 +61625,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_lpUpdateInput = {
@@ -60639,6 +61654,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_lpUncheckedUpdateInput = {
@@ -60665,6 +61684,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_lpCreateManyInput = {
@@ -60691,6 +61714,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_lpUpdateManyMutationInput = {
@@ -60716,6 +61743,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_lpUncheckedUpdateManyInput = {
@@ -60742,6 +61773,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_misCreateInput = {
@@ -60767,6 +61802,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_misUncheckedCreateInput = {
@@ -60793,6 +61832,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_misUpdateInput = {
@@ -60818,6 +61861,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_misUncheckedUpdateInput = {
@@ -60844,6 +61891,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_misCreateManyInput = {
@@ -60870,6 +61921,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_misUpdateManyMutationInput = {
@@ -60895,6 +61950,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_misUncheckedUpdateManyInput = {
@@ -60921,6 +61980,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_merchCreateInput = {
@@ -60946,6 +62009,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_merchUncheckedCreateInput = {
@@ -60972,6 +62039,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_merchUpdateInput = {
@@ -60997,6 +62068,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_merchUncheckedUpdateInput = {
@@ -61023,6 +62098,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_merchCreateManyInput = {
@@ -61049,6 +62128,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_merchUpdateManyMutationInput = {
@@ -61074,6 +62157,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_merchUncheckedUpdateManyInput = {
@@ -61100,6 +62187,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_opsCreateInput = {
@@ -61125,6 +62216,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_opsUncheckedCreateInput = {
@@ -61151,6 +62246,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_opsUpdateInput = {
@@ -61176,6 +62275,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_opsUncheckedUpdateInput = {
@@ -61202,6 +62305,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_opsCreateManyInput = {
@@ -61228,6 +62335,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_opsUpdateManyMutationInput = {
@@ -61253,6 +62364,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_opsUncheckedUpdateManyInput = {
@@ -61279,6 +62394,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_whsCreateInput = {
@@ -61304,6 +62423,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_whsUncheckedCreateInput = {
@@ -61330,6 +62453,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_whsUpdateInput = {
@@ -61355,6 +62482,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_whsUncheckedUpdateInput = {
@@ -61381,6 +62512,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_whsCreateManyInput = {
@@ -61407,6 +62542,10 @@ export namespace Prisma {
     completion_date?: Date | string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
+    report_audit_period_start?: Date | string | null
+    report_audit_period_end?: Date | string | null
+    report_audit_fieldwork_start?: Date | string | null
+    report_audit_fieldwork_end?: Date | string | null
   }
 
   export type audit_finding_whsUpdateManyMutationInput = {
@@ -61432,6 +62571,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type audit_finding_whsUncheckedUpdateManyInput = {
@@ -61458,6 +62601,10 @@ export namespace Prisma {
     completion_date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_period_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_start?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    report_audit_fieldwork_end?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type worksheet_financeCreateInput = {
@@ -63490,6 +64637,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_accountingAvgOrderByAggregateInput = {
@@ -63521,6 +64672,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_accountingMinOrderByAggregateInput = {
@@ -63547,6 +64702,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_accountingSumOrderByAggregateInput = {
@@ -63578,6 +64737,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_financeAvgOrderByAggregateInput = {
@@ -63609,6 +64772,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_financeMinOrderByAggregateInput = {
@@ -63635,6 +64802,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_financeSumOrderByAggregateInput = {
@@ -63666,6 +64837,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_hrdAvgOrderByAggregateInput = {
@@ -63697,6 +64872,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_hrdMinOrderByAggregateInput = {
@@ -63723,6 +64902,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_hrdSumOrderByAggregateInput = {
@@ -63754,6 +64937,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_gaAvgOrderByAggregateInput = {
@@ -63785,6 +64972,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_gaMinOrderByAggregateInput = {
@@ -63811,6 +65002,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_gaSumOrderByAggregateInput = {
@@ -63842,6 +65037,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_sdpAvgOrderByAggregateInput = {
@@ -63873,6 +65072,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_sdpMinOrderByAggregateInput = {
@@ -63899,6 +65102,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_sdpSumOrderByAggregateInput = {
@@ -63930,6 +65137,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_taxAvgOrderByAggregateInput = {
@@ -63961,6 +65172,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_taxMinOrderByAggregateInput = {
@@ -63987,6 +65202,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_taxSumOrderByAggregateInput = {
@@ -64018,6 +65237,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_lpAvgOrderByAggregateInput = {
@@ -64049,6 +65272,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_lpMinOrderByAggregateInput = {
@@ -64075,6 +65302,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_lpSumOrderByAggregateInput = {
@@ -64106,6 +65337,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_misAvgOrderByAggregateInput = {
@@ -64137,6 +65372,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_misMinOrderByAggregateInput = {
@@ -64163,6 +65402,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_misSumOrderByAggregateInput = {
@@ -64194,6 +65437,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_merchAvgOrderByAggregateInput = {
@@ -64225,6 +65472,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_merchMinOrderByAggregateInput = {
@@ -64251,6 +65502,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_merchSumOrderByAggregateInput = {
@@ -64282,6 +65537,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_opsAvgOrderByAggregateInput = {
@@ -64313,6 +65572,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_opsMinOrderByAggregateInput = {
@@ -64339,6 +65602,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_opsSumOrderByAggregateInput = {
@@ -64370,6 +65637,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_whsAvgOrderByAggregateInput = {
@@ -64401,6 +65672,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_whsMinOrderByAggregateInput = {
@@ -64427,6 +65702,10 @@ export namespace Prisma {
     completion_date?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    report_audit_period_start?: SortOrder
+    report_audit_period_end?: SortOrder
+    report_audit_fieldwork_start?: SortOrder
+    report_audit_fieldwork_end?: SortOrder
   }
 
   export type audit_finding_whsSumOrderByAggregateInput = {

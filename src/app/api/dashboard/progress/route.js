@@ -340,40 +340,61 @@ const auditFindingModelByDept = {
 };
 
 async function getAuditFindingDoneSet(scheduleByDept, year) {
-  // "Done" = current scheduled finding has been published (COMPLETED/COMPLETE) in the active schedule window.
-  const counts = await Promise.all(
-    DEPARTMENTS.map((d) => {
+  // Same idea as getWorksheetDoneSet: published (COMPLETED) in the audit year, and updated_at after last schedule save.
+  // Avoid requiring completion_date/updated_at inside schedule calendar window only — publish uses alignDateToSelectedYear
+  // which can sit outside a clipped window while still being the correct audit year.
+  const checks = await Promise.all(
+    DEPARTMENTS.map(async (d) => {
       const model = auditFindingModelByDept[d.auditFindingDept];
       const delegate = model ? prisma[model] : null;
-      if (!delegate) return Promise.resolve({ key: d.key, count: 0 });
+      if (!delegate) return { key: d.key, done: false };
 
-      const window = buildWindowFromSchedule(scheduleByDept?.get(d.key), year);
-      if (!window) return Promise.resolve({ key: d.key, count: 0 });
+      const sched = scheduleByDept?.get(d.key);
+      if (!sched?.start_date || !sched?.end_date) return { key: d.key, done: false };
 
-      const where = {
-        completion_status: {
-          in: ["COMPLETED", "COMPLETE"],
-          mode: "insensitive",
-        },
-        AND: [
-          {
-            OR: [
-              { completion_date: { gte: window.start, lte: window.end } },
-              { updated_at: { gte: window.start, lte: window.end } },
-            ],
+      const cutoffRaw = sched.feedbackUpdatedAt;
+      const cutoff = cutoffRaw != null ? new Date(cutoffRaw) : null;
+      const cutoffOk = cutoff && !Number.isNaN(cutoff.getTime());
+
+      const yf = yearCreatedAtFilter(year);
+      const andParts = [
+        {
+          completion_status: {
+            in: ["COMPLETED", "COMPLETE"],
+            mode: "insensitive",
           },
-        ],
-      };
-      return delegate
-        .count({
-          where,
-        })
-        .then((count) => ({ key: d.key, count }));
-    })
+        },
+      ];
+
+      if (cutoffOk) {
+        andParts.push({ updated_at: { gte: cutoff } });
+      }
+
+      if (yf) {
+        andParts.push({
+          OR: [
+            { created_at: { gte: yf.gte, lt: yf.lt } },
+            { updated_at: { gte: yf.gte, lt: yf.lt } },
+          ],
+        });
+      } else {
+        const window = buildWindowFromSchedule(sched, null);
+        if (!window) return { key: d.key, done: false };
+        andParts.push({
+          OR: [
+            { completion_date: { gte: window.start, lte: window.end } },
+            { updated_at: { gte: window.start, lte: window.end } },
+          ],
+        });
+      }
+
+      const count = await delegate.count({ where: { AND: andParts } });
+      return { key: d.key, done: count > 0 };
+    }),
   );
   const done = new Set();
-  for (const { key, count } of counts) {
-    if (count > 0) done.add(key);
+  for (const row of checks) {
+    if (row.done) done.add(row.key);
   }
   return done;
 }

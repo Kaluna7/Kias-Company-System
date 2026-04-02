@@ -216,6 +216,67 @@ export default function AuditFindingDeptClient({
     [canPublish, isScheduleConfigured, isAdmin],
   );
 
+  /** Apply one row from GET /meta (or null = empty header). Keeps lastSavedMetaRef in sync for auto-save. */
+  const applyHeaderMetaFromApiRow = useCallback((meta) => {
+    if (meta && typeof meta === "object") {
+      const pd = meta.prepare_date ? String(meta.prepare_date).slice(0, 10) : "";
+      const rd = meta.review_date ? String(meta.review_date).slice(0, 10) : "";
+      setPreparerStatus(meta.preparer_status || "");
+      setFinalStatus(meta.final_status || "");
+      setFindingResult(meta.finding_result || "");
+      setPrepare(meta.prepare || "");
+      setPrepareDate(pd);
+      setReview(meta.review || "");
+      setReviewDate(rd);
+      lastSavedMetaRef.current = {
+        preparerStatus: meta.preparer_status || "",
+        finalStatus: meta.final_status || "",
+        findingResult: meta.finding_result || "",
+        prepare: meta.prepare || "",
+        prepareDate: pd,
+        review: meta.review || "",
+        reviewDate: rd,
+      };
+    } else {
+      setPreparerStatus("");
+      setFinalStatus("");
+      setFindingResult("");
+      setPrepare("");
+      setPrepareDate("");
+      setReview("");
+      setReviewDate("");
+      lastSavedMetaRef.current = {
+        preparerStatus: "",
+        finalStatus: "",
+        findingResult: "",
+        prepare: "",
+        prepareDate: "",
+        review: "",
+        reviewDate: "",
+      };
+    }
+  }, []);
+
+  const refreshHeaderMetaFromApi = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      params.set("year", String(auditYear));
+      const res = await fetch(
+        `/api/audit-finding/${encodeURIComponent(apiPath)}/meta?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      const json = await res.json().catch(() => null);
+      if (json?.success) {
+        applyHeaderMetaFromApiRow(json.data ?? null);
+      } else {
+        applyHeaderMetaFromApiRow(null);
+      }
+    } catch (err) {
+      console.warn(`refreshHeaderMetaFromApi ${apiPath}:`, err);
+      applyHeaderMetaFromApiRow(null);
+    }
+  }, [apiPath, auditYear, applyHeaderMetaFromApiRow]);
+
   // Ensure prepareDate is set from schedule if available
   useEffect(() => {
     if (schedulePreparerDate) {
@@ -230,55 +291,21 @@ export default function AuditFindingDeptClient({
     }
   }, [schedulePreparerDate, isUser, prepareDate]);
 
-  // Fetch meta data from API on mount
+  // Fetch meta from API (scoped by audit year). Do not use localStorage when the server returns an empty row — that caused stale header after Publish.
   useEffect(() => {
     let mounted = true;
     async function fetchMetaData() {
       try {
-        const res = await fetch(`/api/audit-finding/${encodeURIComponent(apiPath)}/meta`, {
-          cache: "no-store",
-        });
+        const params = new URLSearchParams();
+        params.set("year", String(auditYear));
+        const res = await fetch(
+          `/api/audit-finding/${encodeURIComponent(apiPath)}/meta?${params.toString()}`,
+          { cache: "no-store" },
+        );
         if (!res.ok) {
           console.warn(`Failed to fetch meta data for ${apiPath}`);
-          return;
-        }
-        const json = await res.json().catch(() => null);
-        if (!mounted) return;
-        if (json?.success && json?.data) {
-          const meta = json.data;
-          // Always set all fields, regardless of role
-          setPreparerStatus(meta.preparer_status || "");
-          setFinalStatus(meta.final_status || "");
-          setFindingResult(meta.finding_result || "");
-          // Use schedule data if available, otherwise use meta data
-          setPrepare(meta.prepare || "");
-          // Set prepareDate from meta (schedule date will override via separate useEffect)
-          setPrepareDate(meta.prepare_date ? String(meta.prepare_date).slice(0, 10) : "");
-          setReview(meta.review || "");
-          setReviewDate(meta.review_date ? String(meta.review_date).slice(0, 10) : "");
-          
-          // Update lastSavedMetaRef to prevent immediate auto-save
-          lastSavedMetaRef.current = {
-            preparerStatus: meta.preparer_status || "",
-            finalStatus: meta.final_status || "",
-            findingResult: meta.finding_result || "",
-            prepare: meta.prepare || "",
-            prepareDate: meta.prepare_date ? String(meta.prepare_date).slice(0, 10) : "",
-            review: meta.review || "",
-            reviewDate: meta.review_date ? String(meta.review_date).slice(0, 10) : "",
-          };
-        } else {
-          // Initialize lastSavedMetaRef even if no data, so auto-save will work for new entries
-          lastSavedMetaRef.current = {
-            preparerStatus: "",
-            finalStatus: "",
-            findingResult: "",
-            prepare: "",
-            prepareDate: "",
-            review: "",
-            reviewDate: "",
-          };
-          // Fallback to localStorage if no API data
+          if (!mounted) return;
+          applyHeaderMetaFromApiRow(null);
           try {
             const raw = localStorage.getItem(storageKey);
             if (raw) {
@@ -287,11 +314,9 @@ export default function AuditFindingDeptClient({
               setFinalStatus(parsed.finalStatus ?? "");
               setFindingResult(parsed.findingResult ?? "");
               setPrepare(parsed.prepare ?? "");
-              // Set prepareDate from localStorage (schedule date will override via separate useEffect)
               setPrepareDate(parsed.prepareDate ?? "");
               setReview(parsed.review ?? "");
               setReviewDate(parsed.reviewDate ?? "");
-              // Update lastSavedMetaRef with localStorage data
               lastSavedMetaRef.current = {
                 preparerStatus: parsed.preparerStatus ?? "",
                 finalStatus: parsed.finalStatus ?? "",
@@ -303,22 +328,21 @@ export default function AuditFindingDeptClient({
               };
             }
           } catch {
-            // ignore
+            /* ignore */
           }
+          return;
         }
+        const json = await res.json().catch(() => null);
+        if (!mounted) return;
+        if (json?.success) {
+          applyHeaderMetaFromApiRow(json.data ?? null);
+          return;
+        }
+        applyHeaderMetaFromApiRow(null);
       } catch (err) {
         console.warn(`Error fetching meta data for ${apiPath}:`, err);
-        // Initialize lastSavedMetaRef even on error, so auto-save will work
-        lastSavedMetaRef.current = {
-          preparerStatus: "",
-          finalStatus: "",
-          findingResult: "",
-          prepare: "",
-          prepareDate: "",
-          review: "",
-          reviewDate: "",
-        };
-        // Fallback to localStorage
+        if (!mounted) return;
+        applyHeaderMetaFromApiRow(null);
         try {
           const raw = localStorage.getItem(storageKey);
           if (raw) {
@@ -327,11 +351,9 @@ export default function AuditFindingDeptClient({
             setFinalStatus(parsed.finalStatus ?? "");
             setFindingResult(parsed.findingResult ?? "");
             setPrepare(parsed.prepare ?? "");
-            // Set prepareDate from localStorage (schedule date will override via separate useEffect)
             setPrepareDate(parsed.prepareDate ?? "");
             setReview(parsed.review ?? "");
             setReviewDate(parsed.reviewDate ?? "");
-            // Update lastSavedMetaRef with localStorage data
             lastSavedMetaRef.current = {
               preparerStatus: parsed.preparerStatus ?? "",
               finalStatus: parsed.finalStatus ?? "",
@@ -343,7 +365,7 @@ export default function AuditFindingDeptClient({
             };
           }
         } catch {
-          // ignore
+          /* ignore */
         }
       }
     }
@@ -351,8 +373,7 @@ export default function AuditFindingDeptClient({
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiPath]);
+  }, [apiPath, auditYear, applyHeaderMetaFromApiRow, storageKey]);
 
   // Auto-save meta data to API
   const saveMetaData = useCallback(async () => {
@@ -901,7 +922,14 @@ export default function AuditFindingDeptClient({
       
       toast.show("Successfully published! Data is now available in Audit Review and Report.", "success");
       setPublishModalOpen(false);
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        /* ignore */
+      }
+      setIsEditMode(false);
       await fetchData();
+      await refreshHeaderMetaFromApi();
     } catch (e) {
       setError(e?.message || String(e));
       toast.show("Error: " + (e?.message || String(e)), "error");
