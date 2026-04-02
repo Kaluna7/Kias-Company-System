@@ -445,310 +445,355 @@ model users {
 }
 
 model audit_finding_accounting {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  /// Snapshot of schedule at publish time (do not overwrite when schedule changes)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_accounting")
 }
 
 // --- Audit Finding tables per department (same shape as accounting) ---
 model audit_finding_finance {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_finance")
 }
 
 model audit_finding_hrd {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_hrd")
 }
 
 model audit_finding_ga {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_ga")
 }
 
 model audit_finding_sdp {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_sdp")
 }
 
 model audit_finding_tax {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_tax")
 }
 
 model audit_finding_lp {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_lp")
 }
 
 model audit_finding_mis {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_mis")
 }
 
 model audit_finding_merch {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_merch")
 }
 
 model audit_finding_ops {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_ops")
 }
 
 model audit_finding_whs {
-  id                  Int       @id @default(autoincrement())
-  risk_id             String?   @db.VarChar(50)
-  risk_description    String?
-  risk_details        String?
-  owners              String?   @db.VarChar(35)
-  ap_code             String?   @db.VarChar(50)
-  substantive_test    String?
-  objective           String?
-  procedures          String?
-  description         String?
-  application         String?
-  risk                Int?
-  check_yn            String?   @db.VarChar(10)
-  method              String?   @db.VarChar(100)
-  preparer            String?   @db.VarChar(255)
-  finding_result      String?
-  finding_description String?
-  recommendation      String?
-  auditee             String?   @db.VarChar(255)
-  completion_status   String?   @db.VarChar(50)
-  completion_date     DateTime? @db.Date
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  id                           Int       @id @default(autoincrement())
+  risk_id                      String?   @db.VarChar(50)
+  risk_description             String?
+  risk_details                 String?
+  owners                       String?   @db.VarChar(35)
+  ap_code                      String?   @db.VarChar(50)
+  substantive_test             String?
+  objective                    String?
+  procedures                   String?
+  description                  String?
+  application                  String?
+  risk                         Int?
+  check_yn                     String?   @db.VarChar(10)
+  method                       String?   @db.VarChar(100)
+  preparer                     String?   @db.VarChar(255)
+  finding_result               String?
+  finding_description          String?
+  recommendation               String?
+  auditee                      String?   @db.VarChar(255)
+  completion_status            String?   @db.VarChar(50)
+  completion_date              DateTime? @db.Date
+  created_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime? @default(now()) @db.Timestamptz(6)
+  report_audit_period_start    DateTime? @db.Date
+  report_audit_period_end      DateTime? @db.Date
+  report_audit_fieldwork_start DateTime? @db.Date
+  report_audit_fieldwork_end   DateTime? @db.Date
 
   @@map("audit_finding_whs")
 }

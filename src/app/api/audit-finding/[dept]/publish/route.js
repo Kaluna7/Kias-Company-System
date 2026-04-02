@@ -21,6 +21,70 @@ const deptToSlug = {
   whs: "whs",
 };
 
+/** schedule_module_feedback.department_id for audit-finding module */
+const SCHEDULE_ID_BY_DEPT = {
+  finance: "A1.1",
+  accounting: "A1.2",
+  hrd: "A1.3",
+  "g&a": "A1.4",
+  ga: "A1.4",
+  sdp: "A1.5",
+  tax: "A1.6",
+  "l&p": "A1.7",
+  lp: "A1.7",
+  mis: "A1.8",
+  merch: "A1.9",
+  ops: "A1.10",
+  whs: "A1.11",
+};
+
+/** Normalize to UTC midnight date for @db.Date fields */
+function toDateAtUtcMidnight(d) {
+  if (d == null) return null;
+  const x = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(x.getTime())) return null;
+  return new Date(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()));
+}
+
+async function loadConfiguredAuditFindingSchedule(deptRaw) {
+  const key = String(deptRaw || "").toLowerCase();
+  const deptId = SCHEDULE_ID_BY_DEPT[key];
+  if (!deptId) return null;
+  const client = await pool.connect();
+  try {
+    const reg = await client.query("SELECT to_regclass($1) AS t", ["public.schedule_module_feedback"]);
+    if (!reg?.rows?.[0]?.t) return null;
+    let r = await client.query(
+      `SELECT start_date::date AS start_date, end_date::date AS end_date
+       FROM public.schedule_module_feedback
+       WHERE module_key = 'audit-finding' AND department_id = $1 AND is_configured = true
+       ORDER BY updated_at DESC NULLS LAST, id DESC
+       LIMIT 1`,
+      [deptId],
+    );
+    let row = r.rows?.[0];
+    if (!row?.start_date || !row?.end_date) {
+      r = await client.query(
+        `SELECT start_date::date AS start_date, end_date::date AS end_date
+         FROM public.schedule_module_feedback
+         WHERE module_key = 'audit-finding' AND department_id = $1
+           AND start_date IS NOT NULL AND end_date IS NOT NULL
+         ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, id DESC
+         LIMIT 1`,
+        [deptId],
+      );
+      row = r.rows?.[0];
+    }
+    if (!row?.start_date || !row?.end_date) return null;
+    return { start: row.start_date, end: row.end_date };
+  } catch (e) {
+    console.warn("loadConfiguredAuditFindingSchedule:", e?.message);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
 function qIdent(name) {
   if (!/^[a-z0-9_]+$/i.test(name)) throw new Error(`Invalid identifier: ${name}`);
   return name;
@@ -251,6 +315,11 @@ export async function PUT(req, { params }) {
     const publishTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
     const canPersistSnapshot = supportsFindingSnapshotFields(dept);
 
+    const scheduleSnap = await loadConfiguredAuditFindingSchedule(dept);
+    const snapPeriodStart = scheduleSnap?.start ? toDateAtUtcMidnight(scheduleSnap.start) : null;
+    const snapPeriodEnd = scheduleSnap?.end ? toDateAtUtcMidnight(scheduleSnap.end) : null;
+    const snapFieldworkEnd = toDateAtUtcMidnight(publishTimestamp);
+
     // Update findings: set completion_status to COMPLETED dan simpan snapshot
     // dari audit-program / risk-assessment sebelum source dihapus.
     for (const finding of readyFindings) {
@@ -265,6 +334,10 @@ export async function PUT(req, { params }) {
         completion_status: "COMPLETED",
         completion_date: finding.completion_date ?? publishTimestamp,
         updated_at: publishTimestamp,
+        report_audit_period_start: snapPeriodStart,
+        report_audit_period_end: snapPeriodEnd,
+        report_audit_fieldwork_start: snapPeriodStart,
+        report_audit_fieldwork_end: snapFieldworkEnd,
       };
 
       if (canPersistSnapshot) {
@@ -290,7 +363,7 @@ export async function PUT(req, { params }) {
         const client = await pool.connect();
         try {
           await client.query(
-            `UPDATE ${metaTable} SET preparer_status = NULL, final_status = NULL, finding_result = NULL, finding_result_file_name = NULL, updated_at = NOW()`
+            `UPDATE ${metaTable} SET preparer_status = NULL, final_status = NULL, finding_result = NULL, finding_result_file_name = NULL, prepare = NULL, prepare_date = NULL, review = NULL, review_date = NULL, updated_at = NOW()`
           );
         } finally {
           client.release();
