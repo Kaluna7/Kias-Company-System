@@ -20,7 +20,6 @@ const BASE_AUDIT_ITEMS = [
   { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
   { id: "B3", title: "Evidences", category: "execution", href: "/Page/evidence/" },
   { id: "C3", title: "Guidelines", category: "review", href: "/Page/guidelines/" },
-  { id: "L1", title: "Leaderboard", category: "review", href: "/Page/leaderboard/" },
 ];
 
 function getCategoryIcon(category) {

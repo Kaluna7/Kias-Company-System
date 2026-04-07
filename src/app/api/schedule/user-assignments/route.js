@@ -19,9 +19,8 @@ const DEPT_KEY_BY_SCHEDULE_ID = {
 };
 
 // Map deptKey to department name as shown in SOP Review page (matching buttonSopReview config)
-// Note: Config has "Finnance" (typo), but we need to match it
 const DEPT_NAME_BY_KEY = {
-  "finance": "Finnance", // Match typo in config
+  "finance": "Finance",
   "accounting": "Accounting",
   "hrd": "HRD",
   "g&a": "General Affair",

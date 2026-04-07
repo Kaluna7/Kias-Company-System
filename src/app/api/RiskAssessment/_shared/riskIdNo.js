@@ -36,5 +36,3 @@ export async function backfillRiskIdNoForRows(delegate, rows) {
       : r
   );
 }
-
-

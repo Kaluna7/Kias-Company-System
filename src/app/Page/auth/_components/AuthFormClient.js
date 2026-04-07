@@ -29,7 +29,7 @@ export default function AuthFormClient() {
       });
 
       if (res?.error) {
-        setErrorMsg(res.error || "Invalid credentials");
+        setErrorMsg(res.error || "Your email or password wrong, please try again");
         return;
       }
 
@@ -37,7 +37,7 @@ export default function AuthFormClient() {
       router.refresh();
     } catch (err) {
       console.error("[CLIENT] signIn error:", err);
-      setErrorMsg("An error occurred. Try again.");
+      setErrorMsg("Error, please try again in 1 minute");
     } finally {
       setIsLoading(false);
     }

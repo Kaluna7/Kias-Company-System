@@ -623,7 +623,7 @@ model audit_finding_tax {
   check_yn            String?   @db.VarChar(10)
   method              String?   @db.VarChar(100)
   preparer            String?   @db.VarChar(255)
-  finding_result      String?  
+  finding_result      String? 
   finding_description String?
   recommendation      String?
   auditee             String?   @db.VarChar(255)

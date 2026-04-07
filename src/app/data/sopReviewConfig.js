@@ -1,7 +1,7 @@
 export const buttonSopReview = [
     {
       logo: "/images/Finance.png",
-      name: "Finnance",
+      name: "Finance",
       href: "/Page/sop-review/finance/",
     },
     {

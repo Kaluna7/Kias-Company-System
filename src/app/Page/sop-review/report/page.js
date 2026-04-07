@@ -5,7 +5,6 @@ import { buttonSopReview } from "@/app/data/sopReviewConfig";
 export const dynamic = "force-dynamic";
 
 const DEPT_TO_API = {
-  Finnance: { api: "finance", dept: "FINANCE" },
   Finance: { api: "finance", dept: "FINANCE" },
   Accounting: { api: "accounting", dept: "ACCOUNTING" },
   HRD: { api: "hrd", dept: "HRD" },

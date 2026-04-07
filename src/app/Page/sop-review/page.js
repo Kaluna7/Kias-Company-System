@@ -12,7 +12,6 @@ export const dynamic = "force-dynamic";
 // Map department name to API endpoint
 function getDepartmentApiPath(name) {
   const deptMap = {
-    "Finnance": "finance",
     "Finance": "finance",
     "Accounting": "accounting",
     "HRD": "hrd",
@@ -31,7 +30,6 @@ function getDepartmentApiPath(name) {
 // Map card label to assignment dept key from API (/api/schedule/user-assignments)
 function getDeptKeyFromCardName(name) {
   const keyMap = {
-    "Finnance": "finance",
     "Finance": "finance",
     "Accounting": "accounting",
     "HRD": "hrd",
@@ -168,7 +166,7 @@ async function SopReviewGrid({ yearParam }) {
     let normalized = String(name).toLowerCase().trim();
     // Remove "Sec." prefix if present
     normalized = normalized.replace(/^sec\.\s*/i, "");
-    // Handle "Finance" vs "Finnance" typo
+    // Legacy schedule rows may still say "Finnance"; match either spelling
     if (normalized === "finance" || normalized === "finnance") {
       return ["finance", "finnance"];
     }
@@ -176,7 +174,6 @@ async function SopReviewGrid({ yearParam }) {
   };
 
   // Create Set of allowed department names for quick lookup
-  // Handle both "Finance" and "Finnance" (typo in config)
   const allowedDeptNames = new Set(
     allowedDepartments.map(d => {
       const normalized = normalizeDeptName(d.name);

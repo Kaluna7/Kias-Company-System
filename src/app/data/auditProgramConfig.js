@@ -1,7 +1,7 @@
 export const buttonAuditProgram = [
     {
       logo: "/images/Finance.png",
-      name: "Finnance",
+      name: "Finance",
       href: "/Page/audit-program/finance/",
     },
     {

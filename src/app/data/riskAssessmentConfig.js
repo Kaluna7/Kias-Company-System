@@ -1,7 +1,7 @@
 export const buttonRiskAssessment = [
   {
     logo: "/images/Finance.png",
-    name: "Finnance",
+    name: "Finance",
     href: "/Page/risk-assessment-dashboard/finance/",
   },
   {
