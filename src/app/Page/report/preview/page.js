@@ -75,6 +75,13 @@ const AUDIT_APPROACH_PAGE_SAFE_PX = 240;
 const AUDIT_APPROACH_FIRST_PAGE_EXTRA_PX = 100;
 const EXECUTIVE_SUMMARY_PARAGRAPH_SPLIT_CHARS = 320;
 const CONCLUSION_PARAGRAPH_SPLIT_CHARS = 280;
+const SOP_RELATED_ROW_SPLIT_CHARS = 260;
+const SOP_REVIEW_ROW_SPLIT_CHARS = 0;
+const AUDIT_RISK_DETAILS_SPLIT_CHARS = 150;
+const AUDIT_SUBSTANTIVE_TEST_SPLIT_CHARS = 0;
+const AUDIT_METHODOLOGY_SPLIT_CHARS = 0;
+const AUDIT_FINDING_RESULT_SPLIT_CHARS = 0;
+const AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS = 150;
 
 function escapeHtml(text) {
   return String(text ?? "")
@@ -124,6 +131,74 @@ function splitConclusionTextIntoChunks(text) {
     splitLongPlainText(paragraph, CONCLUSION_PARAGRAPH_SPLIT_CHARS).filter(Boolean),
   );
 }
+
+function splitTableCellText(text, maxChars) {
+  const value = String(text ?? "").trim();
+  if (!value) return [];
+  if (!maxChars || maxChars < 1) return [value];
+  return splitLongPlainText(value, maxChars).filter(Boolean);
+}
+
+function estimateWrappedLines(text, charsPerLine) {
+  const value = String(text ?? "");
+  if (!value.trim()) return 1;
+  return value
+    .split(/\r?\n/)
+    .reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / Math.max(1, charsPerLine))), 0);
+}
+
+function expandSopRowsForPagination(rows = []) {
+  return rows.flatMap((row) => {
+    const sopChunks = splitTableCellText(row.sopRelated, SOP_RELATED_ROW_SPLIT_CHARS);
+    const reviewChunks = splitTableCellText(row.reviewComment, SOP_REVIEW_ROW_SPLIT_CHARS);
+    const parts = Math.max(sopChunks.length, reviewChunks.length, 1);
+
+    return Array.from({ length: parts }, (_, idx) => ({
+      ...row,
+      no: idx === 0 ? row.no : "",
+      sopRelated: sopChunks[idx] || "",
+      reviewComment: reviewChunks[idx] || "",
+      auditeeComment: idx === 0 ? row.auditeeComment : "",
+      followUpDetail: idx === 0 ? row.followUpDetail : "",
+      __continuedRow: idx > 0,
+    }));
+  });
+}
+
+function expandAuditRowsForPagination(rows = []) {
+  return rows.flatMap((row) => {
+    const riskDetailsChunks = splitTableCellText(row.riskDetails, AUDIT_RISK_DETAILS_SPLIT_CHARS);
+    const substantiveTestChunks = splitTableCellText(row.substantiveTest, AUDIT_SUBSTANTIVE_TEST_SPLIT_CHARS);
+    const methodologyChunks = splitTableCellText(row.methodology, AUDIT_METHODOLOGY_SPLIT_CHARS);
+    const findingResultChunks = splitTableCellText(row.findingResult, AUDIT_FINDING_RESULT_SPLIT_CHARS);
+    const findingDescriptionChunks = splitTableCellText(row.findingDescription, AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS);
+    const parts = Math.max(
+      riskDetailsChunks.length,
+      substantiveTestChunks.length,
+      methodologyChunks.length,
+      findingResultChunks.length,
+      findingDescriptionChunks.length,
+      1,
+    );
+
+    return Array.from({ length: parts }, (_, idx) => ({
+      ...row,
+      no: idx === 0 ? row.no : "",
+      riskId: idx === 0 ? row.riskId : "",
+      riskLevel: idx === 0 ? row.riskLevel : "",
+      apCode: idx === 0 ? row.apCode : "",
+      riskDetails: riskDetailsChunks[idx] || "",
+      substantiveTest: substantiveTestChunks[idx] || "",
+      methodology: methodologyChunks[idx] || "",
+      findingResult: findingResultChunks[idx] || "",
+      findingDescription: findingDescriptionChunks[idx] || "",
+      auditeeComment: idx === 0 ? row.auditeeComment : "",
+      followUpDetail: idx === 0 ? row.followUpDetail : "",
+      __continuedRow: idx > 0,
+    }));
+  });
+}
+
 
 function isSerializedEqual(a, b) {
   try {
@@ -784,6 +859,10 @@ function ReportPreviewPageContent() {
   const fieldUpdateTimerRef = useRef(null);
 
   const flushPendingFieldUpdates = () => {
+    if (fieldUpdateTimerRef.current) {
+      window.clearTimeout(fieldUpdateTimerRef.current);
+      fieldUpdateTimerRef.current = null;
+    }
     const pending = pendingFieldUpdatesRef.current;
     const entries = Object.entries(pending);
     if (entries.length === 0) return;
@@ -1726,17 +1805,31 @@ function ReportPreviewPageContent() {
   // Tinggi area konten per halaman A4 (px), untuk pengukuran otomatis seperti Word.
   // Dibuat lebih konservatif agar baris terakhir tidak menyentuh footer; jika tinggi konten
   // melebihi batas ini, sisa baris otomatis pindah ke halaman berikutnya.
-  const FINDING_SOP_TABLE_HEIGHT_PX = 640;
-  const FINDING_AUDIT_TABLE_HEIGHT_PX = 640;
-  const FINDING_FIRST_PAGE_TOP_BUFFER_PX = 80;
-  const FINDING_FIRST_PAGE_EXEC_SUMMARY_BUFFER_PX = 120;
+  const FINDING_SOP_TABLE_HEIGHT_PX = 660;
+  // Audit table dibuat sedikit lebih konservatif karena kolom lebih banyak dan
+  // teks panjang lebih mudah mendorong konten mendekati footer.
+  const FINDING_AUDIT_TABLE_HEIGHT_PX = 620;
+  const FINDING_FIRST_PAGE_TOP_BUFFER_PX = 48;
+  const FINDING_FIRST_PAGE_EXEC_SUMMARY_BUFFER_PX = 84;
+  const FINDING_TABLE_ROW_GUARD_PX = 6;
+  const FINDING_TABLE_PAGE_END_GUARD_PX = 8;
+  const FINDING_AUDIT_SECTION_CHROME_PX = 40;
+  const paginatedFindingSections = useMemo(
+    () =>
+      findingSections.map((section) => ({
+        ...section,
+        sopRows: [...(section.sopRows || [])],
+        auditRows: [...(section.auditRows || [])],
+      })),
+    [findingSections],
+  );
 
   /**
    * Ukur tinggi riil tabel dan bagi chunk agar tiap halaman terisi penuh (seperti Word).
    * Dipanggil setelah measurement block di-render.
    */
   useEffect(() => {
-    if (!findingSections.length || !measureContainerRef.current) return;
+    if (!paginatedFindingSections.length || !measureContainerRef.current) return;
     const container = measureContainerRef.current;
     let cancelled = false;
     const sopChunksByDept = {};
@@ -1746,30 +1839,38 @@ function ReportPreviewPageContent() {
       if (!rows.length) return [];
       const tbody = tableEl?.querySelector("tbody");
       const trs = tbody?.querySelectorAll("tr");
-      if (!trs?.length) return [rows];
+      if (!trs?.length) {
+        return [
+          {
+            rows: [...rows],
+            height: 0,
+            limit: Math.max(120, firstLimitHeight - FINDING_TABLE_PAGE_END_GUARD_PX),
+          },
+        ];
+      }
       const heights = Array.from(trs).map((tr) => tr.getBoundingClientRect().height);
       const chunks = [];
       let chunk = [];
       let sum = 0;
-      let currentLimit = Math.max(120, firstLimitHeight);
+      let currentLimit = Math.max(120, firstLimitHeight - FINDING_TABLE_PAGE_END_GUARD_PX);
       for (let i = 0; i < rows.length; i++) {
-        const h = heights[i] ?? 40;
+        const h = (heights[i] ?? 40) + FINDING_TABLE_ROW_GUARD_PX;
         if (sum + h > currentLimit && chunk.length > 0) {
-          chunks.push(chunk);
+          chunks.push({ rows: chunk, height: sum, limit: currentLimit });
           chunk = [];
           sum = 0;
-          currentLimit = Math.max(120, nextLimitHeight);
+          currentLimit = Math.max(120, nextLimitHeight - FINDING_TABLE_PAGE_END_GUARD_PX);
         }
         chunk.push(rows[i]);
         sum += h;
       }
-      if (chunk.length > 0) chunks.push(chunk);
+      if (chunk.length > 0) chunks.push({ rows: chunk, height: sum, limit: currentLimit });
       return chunks;
     };
 
     const runMeasure = () => {
       if (cancelled || !container.isConnected) return;
-      findingSections.forEach((section) => {
+      paginatedFindingSections.forEach((section) => {
         const firstPageBuffer =
           FINDING_FIRST_PAGE_TOP_BUFFER_PX +
           (section.executiveSummary ? FINDING_FIRST_PAGE_EXEC_SUMMARY_BUFFER_PX : 0);
@@ -1803,7 +1904,7 @@ function ReportPreviewPageContent() {
     });
     return () => { cancelled = true; };
   }, [
-    findingSections,
+    paginatedFindingSections,
     FINDING_AUDIT_TABLE_HEIGHT_PX,
     FINDING_FIRST_PAGE_EXEC_SUMMARY_BUFFER_PX,
     FINDING_FIRST_PAGE_TOP_BUFFER_PX,
@@ -1819,7 +1920,7 @@ function ReportPreviewPageContent() {
     run();
     const timer = window.setTimeout(run, 0);
     return () => window.clearTimeout(timer);
-  }, [findingSections, measuredChunks]);
+  }, [paginatedFindingSections, measuredChunks]);
 
   /** Hanya Conclusion: zona aman (px) di atas footer; isi halaman dulu baru next page. */
   const CONCLUSION_SAFE_ZONE_PX = 50;
@@ -1965,7 +2066,7 @@ function ReportPreviewPageContent() {
     auditRowsPerPage: AUDIT_ROWS_PER_PAGE,
     maxSopRowsWithAudit: MAX_SOP_ROWS_WITH_AUDIT,
     safeZoneRem: FINDING_SAFE_ZONE_REM,
-  } = getFindingPageLimits({ maxRowsPerPage: 15, safeZoneRem: 6 });
+  } = getFindingPageLimits({ maxRowsPerPage: 15, safeZoneRem: 4.5 });
 
   // Kapasitas halaman (unit): batas total "tinggi" per halaman. Baris panjang = unit besar.
   const SOP_PAGE_CAPACITY_UNITS = 18;
@@ -1982,27 +2083,60 @@ function ReportPreviewPageContent() {
    * asal jumlah baris di halaman itu dibatasi (lihat chunkRowsByContent).
    */
   function getSopRowWeight(row) {
-    const len =
-      (row.sopRelated || "").length +
-      (row.reviewComment || "").length +
-      (row.auditeeComment || "").length +
-      (row.followUpDetail || "").length;
-    if (len <= 100) return 1;
-    if (len <= 220) return 2;
-    if (len <= 300) return 3;
-    return WEIGHT_VERY_LONG;
+    const sopLines = estimateWrappedLines(row.sopRelated, 60);
+    const reviewLines = estimateWrappedLines(row.reviewComment, 24);
+    const auditeeLines = estimateWrappedLines(row.auditeeComment, 22);
+    const followUpLines = estimateWrappedLines(row.followUpDetail, 22);
+    const maxLines = Math.max(sopLines, reviewLines, auditeeLines, followUpLines);
+    const totalLines = sopLines + reviewLines + auditeeLines + followUpLines;
+
+    if (maxLines >= 26 || totalLines >= 44) return 14;
+    if (maxLines >= 20 || totalLines >= 34) return 12;
+    if (maxLines >= 14 || totalLines >= 25) return 10;
+    if (maxLines >= 10 || totalLines >= 18) return 8;
+    if (maxLines >= 7 || totalLines >= 12) return 6;
+    if (maxLines >= 4 || totalLines >= 7) return WEIGHT_VERY_LONG;
+    if (maxLines >= 2 || totalLines >= 4) return 2;
+    return 1;
   }
 
   function getAuditRowWeight(row) {
-    const len =
-      (row.findingDescription || "").length +
-      (row.riskDetails || "").length +
-      (row.auditeeComment || "").length +
-      (row.followUpDetail || "").length;
-    if (len <= 80) return 1;
-    if (len <= 200) return 2;
-    if (len <= 300) return 3;
-    return WEIGHT_VERY_LONG;
+    const riskLines = estimateWrappedLines(row.riskDetails, 18);
+    const codeLines = estimateWrappedLines(row.apCode, 14);
+    const substantiveLines = estimateWrappedLines(row.substantiveTest, 12);
+    const methodologyLines = estimateWrappedLines(row.methodology, 13);
+    const resultLines = estimateWrappedLines(row.findingResult, 12);
+    const descriptionLines = estimateWrappedLines(row.findingDescription, 18);
+    const auditeeLines = estimateWrappedLines(row.auditeeComment, 14);
+    const followUpLines = estimateWrappedLines(row.followUpDetail, 14);
+    const maxLines = Math.max(
+      riskLines,
+      codeLines,
+      substantiveLines,
+      methodologyLines,
+      resultLines,
+      descriptionLines,
+      auditeeLines,
+      followUpLines,
+    );
+    const totalLines =
+      riskLines +
+      codeLines +
+      substantiveLines +
+      methodologyLines +
+      resultLines +
+      descriptionLines +
+      auditeeLines +
+      followUpLines;
+
+    if (maxLines >= 24 || totalLines >= 56) return 14;
+    if (maxLines >= 18 || totalLines >= 42) return 12;
+    if (maxLines >= 13 || totalLines >= 30) return 10;
+    if (maxLines >= 9 || totalLines >= 22) return 8;
+    if (maxLines >= 6 || totalLines >= 15) return 6;
+    if (maxLines >= 4 || totalLines >= 10) return WEIGHT_VERY_LONG;
+    if (maxLines >= 2 || totalLines >= 5) return 2;
+    return 1;
   }
 
   /**
@@ -2038,9 +2172,13 @@ function ReportPreviewPageContent() {
     return chunks;
   }
 
+  function getChunkUnits(rows, getWeight) {
+    return (rows || []).reduce((sum, row) => sum + getWeight(row), 0);
+  }
+
   // Map untuk nomor sub‑section 5.x per department (5.1 Finance, 5.2 Accounting, dst.)
   const deptIndexMap = {};
-  findingSections.forEach((sec, i) => {
+  paginatedFindingSections.forEach((sec, i) => {
     deptIndexMap[sec.deptKey] = i + 1;
   });
 
@@ -2051,27 +2189,35 @@ function ReportPreviewPageContent() {
    */
   const findingPages = (() => {
     const pages = [];
-    findingSections.forEach((section) => {
-      const sopChunks =
+    paginatedFindingSections.forEach((section) => {
+      const sopChunkMetas =
         measuredChunks?.sop?.[section.deptKey]?.length > 0
-          ? measuredChunks.sop[section.deptKey].map((chunk) => [...chunk])
+          ? measuredChunks.sop[section.deptKey].map((chunk) => ({
+              rows: [...(chunk.rows || [])],
+              height: chunk.height ?? 0,
+              limit: chunk.limit ?? FINDING_SOP_TABLE_HEIGHT_PX,
+            }))
           : chunkRowsByContent(
               section.sopRows,
               getSopRowWeight,
               SOP_ROWS_PER_PAGE,
               SOP_PAGE_CAPACITY_UNITS
-            );
-      const auditChunks =
+            ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
+      const auditChunkMetas =
         measuredChunks?.audit?.[section.deptKey]?.length > 0
-          ? measuredChunks.audit[section.deptKey].map((chunk) => [...chunk])
+          ? measuredChunks.audit[section.deptKey].map((chunk) => ({
+              rows: [...(chunk.rows || [])],
+              height: chunk.height ?? 0,
+              limit: chunk.limit ?? FINDING_AUDIT_TABLE_HEIGHT_PX,
+            }))
           : chunkRowsByContent(
               section.auditRows,
               getAuditRowWeight,
               AUDIT_ROWS_PER_PAGE,
               AUDIT_PAGE_CAPACITY_UNITS
-            );
+            ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
 
-      if (sopChunks.length === 0 && auditChunks.length === 0) return;
+      if (sopChunkMetas.length === 0 && auditChunkMetas.length === 0) return;
 
       // Flag: header 5 / 5.x Department hanya di halaman pertama dept; judul SOP/Audit hanya di chunk pertama
       let isFirstPageForDept = true;
@@ -2091,12 +2237,34 @@ function ReportPreviewPageContent() {
       //    di bawah ambang batas (MAX_SOP_ROWS_WITH_AUDIT), maka chunk Audit pertama
       //    boleh ditempatkan DI BAWAH SOP di halaman yang sama. Kalau tidak, seluruh Audit
       //    pindah ke halaman berikutnya supaya tidak terpotong.
-      if (sopChunks.length > 0) {
-        sopChunks.forEach((chunk, index) => {
-          const isLastSopChunk = index === sopChunks.length - 1;
+      if (sopChunkMetas.length > 0) {
+        sopChunkMetas.forEach((chunkMeta, index) => {
+          const chunk = chunkMeta.rows;
+          const isLastSopChunk = index === sopChunkMetas.length - 1;
           let auditRows = [];
-          if (isLastSopChunk && auditChunks.length > 0 && chunk.length <= MAX_SOP_ROWS_WITH_AUDIT) {
-            auditRows = auditChunks.shift() || [];
+          if (isLastSopChunk && auditChunkMetas.length > 0 && chunk.length <= MAX_SOP_ROWS_WITH_AUDIT) {
+            const candidateAuditMeta = auditChunkMetas[0] || null;
+            const candidateAuditRows = candidateAuditMeta?.rows || [];
+            const canFitUnderSop =
+              candidateAuditRows.length > 0 &&
+              (() => {
+                if (
+                  typeof chunkMeta.height === "number" &&
+                  chunkMeta.limit &&
+                  typeof candidateAuditMeta?.height === "number"
+                ) {
+                  const remainingHeight = Math.max(0, chunkMeta.limit - chunkMeta.height);
+                  return remainingHeight >= candidateAuditMeta.height + FINDING_AUDIT_SECTION_CHROME_PX;
+                }
+
+                const sopChunkUnits = getChunkUnits(chunk, getSopRowWeight);
+                const combinedUnits =
+                  sopChunkUnits + getChunkUnits(candidateAuditRows, getAuditRowWeight);
+                return combinedUnits <= Math.min(SOP_PAGE_CAPACITY_UNITS, AUDIT_PAGE_CAPACITY_UNITS) - 2;
+              })();
+            if (canFitUnderSop) {
+              auditRows = (auditChunkMetas.shift() || {}).rows || [];
+            }
           }
           const { isFirstSopChunk, isFirstAuditChunk } = markSopAndAuditFlags(chunk, auditRows);
 
@@ -2114,8 +2282,8 @@ function ReportPreviewPageContent() {
 
       // 2) Jika tidak ada SOP (hanya Audit), atau masih ada sisa Audit setelah SOP selesai,
       //    tampilkan sebagai halaman-halaman lanjut yang hanya berisi Audit Review.
-      if (sopChunks.length === 0 && auditChunks.length > 0) {
-        const firstAudit = auditChunks.shift() || [];
+      if (sopChunkMetas.length === 0 && auditChunkMetas.length > 0) {
+        const firstAudit = (auditChunkMetas.shift() || {}).rows || [];
         const { isFirstSopChunk, isFirstAuditChunk } = markSopAndAuditFlags([], firstAudit);
         pages.push({
           dept: section,
@@ -2128,7 +2296,8 @@ function ReportPreviewPageContent() {
         isFirstPageForDept = false;
       }
 
-      auditChunks.forEach((chunk) => {
+      auditChunkMetas.forEach((chunkMeta) => {
+        const chunk = chunkMeta.rows || [];
         const { isFirstSopChunk, isFirstAuditChunk } = markSopAndAuditFlags([], chunk);
         pages.push({
           dept: section,
@@ -3601,55 +3770,59 @@ function ReportPreviewPageContent() {
                     </thead>
                     <tbody>
                       {page.sopRows.map((row, rIdx) => (
-                        <tr key={`sop-${page.dept.deptKey}-${idx}-${rIdx}`} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="border border-gray-300 px-1.5 py-0.5 text-center align-top">
+                        <tr key={`sop-${page.dept.deptKey}-${row.sourceIndex ?? row.no ?? rIdx}`} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top"}>
                             {row.no}
                           </td>
-                          <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                            {row.sopRelated}
+                          <td className={row.__continuedRow ? (row.sopRelated ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.sopRelated || ""}
                           </td>
-                          <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                            {row.reviewComment || "-"}
+                          <td className={row.__continuedRow ? (row.reviewComment ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.reviewComment || (row.__continuedRow ? "" : "-")}
                           </td>
-                          <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                            <textarea
-                              data-plain-autoresize
-                              className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                              rows={1}
-                              placeholder="Auditee comment"
-                              defaultValue={row.auditeeComment || ""}
-                              onInput={(e) => {
-                                autoResizePlainTextarea(e.target);
-                                enqueueRowFieldUpdate(
-                                  "sop",
-                                  page.dept.deptKey,
-                                  row.sourceIndex ?? rIdx,
-                                  "auditeeComment",
-                                  e.target.value,
-                                );
-                              }}
-                              onBlur={flushPendingFieldUpdates}
-                            />
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.__continuedRow ? null : (
+                              <textarea
+                                data-plain-autoresize
+                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
+                                rows={1}
+                                placeholder="Auditee comment"
+                                defaultValue={row.auditeeComment || ""}
+                                onInput={(e) => {
+                                  autoResizePlainTextarea(e.target);
+                                  enqueueRowFieldUpdate(
+                                    "sop",
+                                    page.dept.deptKey,
+                                    row.sourceIndex ?? rIdx,
+                                    "auditeeComment",
+                                    e.target.value,
+                                  );
+                                }}
+                                onBlur={flushPendingFieldUpdates}
+                              />
+                            )}
                           </td>
-                          <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                            <textarea
-                              data-plain-autoresize
-                              className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                              rows={1}
-                              placeholder="Follow-up detail"
-                              defaultValue={row.followUpDetail || ""}
-                              onInput={(e) => {
-                                autoResizePlainTextarea(e.target);
-                                enqueueRowFieldUpdate(
-                                  "sop",
-                                  page.dept.deptKey,
-                                  row.sourceIndex ?? rIdx,
-                                  "followUpDetail",
-                                  e.target.value,
-                                );
-                              }}
-                              onBlur={flushPendingFieldUpdates}
-                            />
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.__continuedRow ? null : (
+                              <textarea
+                                data-plain-autoresize
+                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
+                                rows={1}
+                                placeholder="Follow-up detail"
+                                defaultValue={row.followUpDetail || ""}
+                                onInput={(e) => {
+                                  autoResizePlainTextarea(e.target);
+                                  enqueueRowFieldUpdate(
+                                    "sop",
+                                    page.dept.deptKey,
+                                    row.sourceIndex ?? rIdx,
+                                    "followUpDetail",
+                                    e.target.value,
+                                  );
+                                }}
+                                onBlur={flushPendingFieldUpdates}
+                              />
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -3730,60 +3903,77 @@ function ReportPreviewPageContent() {
                     </thead>
                     <tbody>
                       {page.auditRows.map((row, aIdx) => (
-                        <tr
-                          key={`audit-${page.dept.deptKey}-${idx}-${aIdx}`}
-                          className={aIdx % 2 === 0 ? "bg-white" : "bg-blue-50"}
-                        >
-                          <td className="border border-blue-800 px-1.5 py-0.5 text-center align-top">
+                        <tr key={`audit-${page.dept.deptKey}-${row.sourceIndex ?? row.no ?? aIdx}`} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top"}>
                             {row.no}
                           </td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">{row.riskId || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.riskDetails || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden">{row.riskLevel ?? "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">{row.apCode || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.substantiveTest || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.methodology || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.findingResult || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.findingDescription || "-"}</td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words">
-                            <textarea
-                              data-plain-autoresize
-                              className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                              rows={1}
-                              placeholder="Auditee comment"
-                              defaultValue={row.auditeeComment || ""}
-                              onInput={(e) => {
-                                autoResizePlainTextarea(e.target);
-                                enqueueRowFieldUpdate(
-                                  "audit",
-                                  page.dept.deptKey,
-                                  row.sourceIndex ?? aIdx,
-                                  "auditeeComment",
-                                  e.target.value,
-                                );
-                              }}
-                              onBlur={flushPendingFieldUpdates}
-                            />
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>
+                            {row.riskId || ""}
                           </td>
-                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words">
-                            <textarea
-                              data-plain-autoresize
-                              className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                              rows={1}
-                              placeholder="Follow-up detail"
-                              defaultValue={row.followUpDetail || ""}
-                              onInput={(e) => {
-                                autoResizePlainTextarea(e.target);
-                                enqueueRowFieldUpdate(
-                                  "audit",
-                                  page.dept.deptKey,
-                                  row.sourceIndex ?? aIdx,
-                                  "followUpDetail",
-                                  e.target.value,
-                                );
-                              }}
-                              onBlur={flushPendingFieldUpdates}
-                            />
+                          <td className={row.__continuedRow ? (row.riskDetails ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.riskDetails || ""}
+                          </td>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>
+                            {row.riskLevel ?? ""}
+                          </td>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>
+                            {row.apCode || ""}
+                          </td>
+                          <td className={row.__continuedRow ? (row.substantiveTest ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.substantiveTest || ""}
+                          </td>
+                          <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.methodology || ""}
+                          </td>
+                          <td className={row.__continuedRow ? (row.findingResult ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.findingResult || ""}
+                          </td>
+                          <td className={row.__continuedRow ? (row.findingDescription ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                            {row.findingDescription || ""}
+                          </td>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
+                            {row.__continuedRow ? null : (
+                              <textarea
+                                data-plain-autoresize
+                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
+                                rows={1}
+                                placeholder="Auditee comment"
+                                defaultValue={row.auditeeComment || ""}
+                                onInput={(e) => {
+                                  autoResizePlainTextarea(e.target);
+                                  enqueueRowFieldUpdate(
+                                    "audit",
+                                    page.dept.deptKey,
+                                    row.sourceIndex ?? aIdx,
+                                    "auditeeComment",
+                                    e.target.value,
+                                  );
+                                }}
+                                onBlur={flushPendingFieldUpdates}
+                              />
+                            )}
+                          </td>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
+                            {row.__continuedRow ? null : (
+                              <textarea
+                                data-plain-autoresize
+                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
+                                rows={1}
+                                placeholder="Follow-up detail"
+                                defaultValue={row.followUpDetail || ""}
+                                onInput={(e) => {
+                                  autoResizePlainTextarea(e.target);
+                                  enqueueRowFieldUpdate(
+                                    "audit",
+                                    page.dept.deptKey,
+                                    row.sourceIndex ?? aIdx,
+                                    "followUpDetail",
+                                    e.target.value,
+                                  );
+                                }}
+                                onBlur={flushPendingFieldUpdates}
+                              />
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -4158,7 +4348,7 @@ function ReportPreviewPageContent() {
           aria-hidden="true"
         >
           <div className="px-16 text-[11px]">
-            {findingSections.map((section) => (
+            {paginatedFindingSections.map((section) => (
               <div key={section.deptKey}>
                 {section.sopRows.length > 0 && (
                   <div className="mb-8">
@@ -4186,18 +4376,18 @@ function ReportPreviewPageContent() {
                         </thead>
                         <tbody>
                           {section.sopRows.map((row, rIdx) => (
-                            <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                              <td className="border border-gray-300 px-1.5 py-0.5 text-center align-top">{row.no}</td>
-                              <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words">{row.sopRelated}</td>
-                              <td className="border border-gray-300 px-1.5 py-0.5 align-top">{row.reviewComment || "-"}</td>
-                              <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
+                            <tr key={rIdx} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
+                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top"}>{row.no}</td>
+                              <td className={row.__continuedRow ? (row.sopRelated ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words"}>{row.sopRelated || ""}</td>
+                              <td className={row.__continuedRow ? (row.reviewComment ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words"}>{row.reviewComment || (row.__continuedRow ? "" : "-")}</td>
+                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
                                 <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                  {row.auditeeComment || "-"}
+                                  {row.__continuedRow ? "" : (row.auditeeComment || "-")}
                                 </div>
                               </td>
-                              <td className="border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">
+                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
                                 <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                  {row.followUpDetail || "-"}
+                                  {row.__continuedRow ? "" : (row.followUpDetail || "-")}
                                 </div>
                               </td>
                             </tr>
@@ -4244,24 +4434,24 @@ function ReportPreviewPageContent() {
                       </thead>
                       <tbody>
                         {section.auditRows.map((row, aIdx) => (
-                          <tr key={aIdx} className={aIdx % 2 === 0 ? "bg-white" : "bg-blue-50"}>
-                            <td className="border border-blue-800 px-1.5 py-0.5 text-center align-top">{row.no}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">{row.riskId || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.riskDetails || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden">{row.riskLevel ?? "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden">{row.apCode || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.substantiveTest || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.methodology || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.findingResult || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden">{row.findingDescription || "-"}</td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words">
+                          <tr key={aIdx} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top"}>{row.no}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>{row.riskId || ""}</td>
+                            <td className={row.__continuedRow ? (row.riskDetails ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.riskDetails || ""}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>{row.riskLevel ?? ""}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>{row.apCode || ""}</td>
+                            <td className={row.__continuedRow ? (row.substantiveTest ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.substantiveTest || ""}</td>
+                            <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.methodology || ""}</td>
+                            <td className={row.__continuedRow ? (row.findingResult ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.findingResult || ""}</td>
+                            <td className={row.__continuedRow ? (row.findingDescription ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.findingDescription || ""}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
                               <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                {row.auditeeComment || "-"}
+                                {row.__continuedRow ? "" : (row.auditeeComment || "-")}
                               </div>
                             </td>
-                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words">
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
                               <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                {row.followUpDetail || "-"}
+                                {row.__continuedRow ? "" : (row.followUpDetail || "-")}
                               </div>
                             </td>
                           </tr>

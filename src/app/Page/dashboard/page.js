@@ -20,6 +20,7 @@ const BASE_AUDIT_ITEMS = [
   { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
   { id: "B3", title: "Evidences", category: "execution", href: "/Page/evidence/" },
   { id: "C3", title: "Guidelines", category: "review", href: "/Page/guidelines/" },
+  { id: "S1", title: "Sampling", category: "review", href: null, openSampling: true },
 ];
 
 function getCategoryIcon(category) {
@@ -27,6 +28,52 @@ function getCategoryIcon(category) {
 }
 function getCategoryColor(category) {
   return category === "planning" ? "from-blue-500 to-cyan-500" : category === "execution" ? "from-green-500 to-emerald-500" : "from-purple-500 to-indigo-500";
+}
+
+/** Plain-text export: row labels + wide spacing so .txt is easy to scan */
+function formatSamplingSequenceForTxt(nums, perRow = 8) {
+  if (!nums || nums.length === 0) return "";
+  const w = Math.max(3, String(Math.max(...nums)).length);
+  const pad = (n) => String(n).padStart(w, " ");
+  const lines = [];
+  let rowIdx = 1;
+  for (let i = 0; i < nums.length; i += perRow) {
+    const chunk = nums.slice(i, i + perRow);
+    const body = chunk.map(pad).join("      ");
+    const label = `Row ${String(rowIdx).padStart(2)}  |`;
+    lines.push(`${label}  ${body}`);
+    rowIdx++;
+  }
+  return lines.join("\n");
+}
+
+function buildSamplingExportNote({ conf, total, samplingRate, sampleSize, picked }) {
+  const W = 58;
+  const sep = "=".repeat(W);
+  const sub = "─".repeat(W);
+  const ratePct = (samplingRate * 100).toFixed(1).replace(/\.0$/, "");
+  const seqBlock = formatSamplingSequenceForTxt(picked, 8);
+  return [
+    sep,
+    "  KIAS — SAMPLING",
+    sep,
+    "",
+    "  PARAMETERS",
+    `  ${sub}`,
+    `    Confidence level ........................  ${conf}%`,
+    `    Total data (population) .................  ${total}`,
+    `    Sampling rate (100% − confidence) .......  ${ratePct}%`,
+    `    Sample size .............................  ${sampleSize}`,
+    "",
+    sep,
+    `  SAMPLING SEQUENCE  (${sampleSize} item${sampleSize === 1 ? "" : "s"})`,
+    `  (8 numbers per row; columns aligned for reading)`,
+    sep,
+    "",
+    seqBlock,
+    "",
+    sep,
+  ].join("\n");
 }
 
 /**
@@ -52,6 +99,11 @@ function DashboardPageContent() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
   const [isHelpSupportOpen, setIsHelpSupportOpen] = useState(false);
+  const [isSamplingOpen, setIsSamplingOpen] = useState(false);
+  const [samplingConfidence, setSamplingConfidence] = useState("");
+  const [samplingTotalData, setSamplingTotalData] = useState("");
+  const [samplingSequence, setSamplingSequence] = useState([]);
+  const [samplingNote, setSamplingNote] = useState("");
   const [profileName, setProfileName] = useState("");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
   const [editName, setEditName] = useState("");
@@ -84,7 +136,10 @@ function DashboardPageContent() {
   const canCreateEmployeeAccount = role === "admin";
 
   const auditItems = useMemo(
-    () => (isAdmin ? [...BASE_AUDIT_ITEMS, { id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" }] : BASE_AUDIT_ITEMS),
+    () =>
+      isAdmin
+        ? [{ id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" }, ...BASE_AUDIT_ITEMS]
+        : BASE_AUDIT_ITEMS,
     [isAdmin]
   );
 
@@ -233,6 +288,10 @@ function DashboardPageContent() {
   const handleFilterClick = useCallback((filterId) => setActiveCategory(filterId), []);
   const handleViewDetail = useCallback(
     (item) => {
+      if (item?.openSampling) {
+        setIsSamplingOpen(true);
+        return;
+      }
       if (!item?.href) return;
       const url = new URL(item.href, window.location.origin);
       if (selectedYear) {
@@ -242,6 +301,68 @@ function DashboardPageContent() {
     },
     [selectedYear, router],
   );
+
+  const closeSamplingModal = useCallback(() => {
+    setIsSamplingOpen(false);
+  }, []);
+
+  const runSamplingGenerate = useCallback(() => {
+    const conf = parseFloat(String(samplingConfidence).replace(",", "."), 10);
+    const total = parseInt(String(samplingTotalData).trim(), 10);
+    if (Number.isNaN(conf) || conf < 0 || conf > 100) {
+      toast.show("Confidence level must be between 0 and 100.", "error");
+      return;
+    }
+    if (Number.isNaN(total) || total < 1) {
+      toast.show("Total data must be a positive integer.", "error");
+      return;
+    }
+    const samplingRate = (100 - conf) / 100;
+    const rawSize = Math.round(total * samplingRate);
+    const sampleSize = Math.min(Math.max(0, rawSize), total);
+    if (sampleSize < 1) {
+      toast.show("Sample size is 0 for these inputs. Lower confidence or increase total data.", "error");
+      setSamplingSequence([]);
+      setSamplingNote("");
+      return;
+    }
+    const pool = Array.from({ length: total }, (_, i) => i + 1);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const picked = pool.slice(0, sampleSize).sort((a, b) => a - b);
+    setSamplingSequence(picked);
+    setSamplingNote(
+      buildSamplingExportNote({
+        conf,
+        total,
+        samplingRate,
+        sampleSize,
+        picked,
+      })
+    );
+    toast.show(`Generated ${sampleSize} random item(s).`, "success");
+  }, [samplingConfidence, samplingTotalData, toast]);
+
+  const exportSamplingTxt = useCallback(() => {
+    if (!samplingNote.trim()) {
+      toast.show("Nothing to export. Generate a sampling first.", "error");
+      return;
+    }
+    const blob = new Blob([samplingNote], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    a.href = url;
+    a.download = `sampling-${stamp}.txt`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.show("Download started.", "success");
+  }, [samplingNote, toast]);
   const toggleExpanded = useCallback((key) => {
     setExpandedModuleKey((prev) => (prev === key ? null : key));
   }, []);
@@ -1054,6 +1175,126 @@ function DashboardPageContent() {
               >
                 {confirmDialog.confirmLabel}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isSamplingOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm px-3 py-4 overflow-y-auto">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-4 my-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Sampling</h3>
+                <p className="mt-0.5 text-xs text-slate-600 leading-snug">
+                  Sample size = total × (100% − confidence). Client only, not saved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSamplingModal}
+                className="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Confidence level (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={samplingConfidence}
+                  onChange={(e) => setSamplingConfidence(e.target.value)}
+                  placeholder="e.g. 90"
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 focus:border-[#141D38] focus:ring-1 focus:ring-[#141D38]/25 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Total data</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={samplingTotalData}
+                  onChange={(e) => setSamplingTotalData(e.target.value)}
+                  placeholder="e.g. 100"
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 focus:border-[#141D38] focus:ring-1 focus:ring-[#141D38]/25 outline-none"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Implicit rate:{" "}
+                <span className="font-semibold text-slate-700">
+                  {(() => {
+                    const c = parseFloat(String(samplingConfidence).replace(",", "."), 10);
+                    if (Number.isNaN(c) || c < 0 || c > 100) return "—";
+                    return `${(100 - c).toFixed(1).replace(/\.0$/, "")}%`;
+                  })()}
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={runSamplingGenerate}
+                className="w-full rounded-lg bg-gradient-to-r from-[#141D38] to-[#2D3A5A] px-3 py-2 text-sm font-semibold text-white shadow-sm hover:shadow transition-shadow"
+              >
+                Generate
+              </button>
+
+              {samplingSequence.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                    Sampling sequence ({samplingSequence.length} items)
+                  </div>
+                  <div
+                    className="mt-2 grid grid-cols-4 sm:grid-cols-6 gap-1.5"
+                    role="list"
+                    aria-label="Sample indices"
+                  >
+                    {samplingSequence.map((n, idx) => (
+                      <span
+                        key={`${idx}-${n}`}
+                        role="listitem"
+                        className="tabular-nums flex min-h-[1.75rem] items-center justify-center rounded-md border border-slate-200/80 bg-white px-1 py-0.5 text-center text-[11px] font-mono font-medium text-slate-800 shadow-sm"
+                      >
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Note</label>
+                <textarea
+                  value={samplingNote}
+                  onChange={(e) => setSamplingNote(e.target.value)}
+                  rows={6}
+                  placeholder="Filled after Generate — edit if needed."
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#141D38] focus:ring-1 focus:ring-[#141D38]/25 outline-none resize-y min-h-[88px]"
+                />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={exportSamplingTxt}
+                  className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                  disabled={!samplingNote.trim()}
+                >
+                  Export .txt
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSamplingModal}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
