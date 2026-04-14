@@ -36,6 +36,8 @@ async function authorize(credentials) {
       [email]
     );
     const user = res.rows[0];
+    // Wrong email: no row. Wrong password: compare fails. NextAuth surfaces this as
+    // error "CredentialsSignin" to the client; the login UI maps it to a friendly message.
     if (!user) return null;
 
     const valid = await bcrypt.compare(password, user.password_hash);
