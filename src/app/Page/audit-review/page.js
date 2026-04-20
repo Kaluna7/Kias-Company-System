@@ -3,21 +3,17 @@
 import { Suspense, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 function AuditReviewHomePageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
   const yearQuery = yearParam ? `?year=${encodeURIComponent(yearParam)}` : "";
 
   const handleBack = useCallback(() => {
-    if (typeof window === "undefined") return;
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    window.location.href = `/Page/dashboard${yearQuery}`;
-  }, [yearQuery]);
+    router.push(`/Page/dashboard${yearQuery}`);
+  }, [router, yearQuery]);
 
   const auditReviewDepts = [
     { id: "C1.1", label: "FINANCE", href: `/Page/audit-review/finance${yearQuery}` },
