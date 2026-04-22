@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import ConfirmModal from "../../features/ConfirmModal";
 import { useToast } from "@/app/contexts/ToastContext";
+import { deriveRiskPriorityScoreFromLevels, priorityHeatTailwindClass } from "@/app/utils/riskPriorityScore";
 
 export function DataTable({
   items,
@@ -193,14 +194,16 @@ export function DataTable({
                 ].map((val, i) => {
                   let extraClass = "";
 
-                  // highlight priority level
+                  // highlight priority level: ≥90 merah, 60–89 kuning, &lt;60 hijau
                   if (i === 9) {
-                    const num = parseInt(val, 10);
-                    if (!isNaN(num)) {
-                      if (num <= 2) extraClass = "bg-green-100 text-green-800 font-semibold";
-                      else if (num > 2 && num <= 6) extraClass = "bg-yellow-100 text-yellow-800 font-semibold";
-                      else if (num > 6) extraClass = "bg-red-100 text-red-800 font-semibold";
+                    const row = f;
+                    const fromLevels = deriveRiskPriorityScoreFromLevels(row.impact_level, row.probability_level);
+                    let heatScore = fromLevels;
+                    if (heatScore === null) {
+                      const raw = parseInt(val, 10);
+                      if (!Number.isNaN(raw)) heatScore = raw;
                     }
+                    extraClass = priorityHeatTailwindClass(heatScore);
                   }
 
                   const cellKey = `${f.risk_id ?? idx}-${i}`;

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@/generated/prisma";
+import { assignDerivedRiskPriorityToBody } from "../../_shared/riskPriorityPut";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -8,6 +9,12 @@ export async function PUT(req, { params }) {
     const body = await req.json();
     delete body.risk_id;
     delete body.risk_id_no;
+
+    const existing = await prisma.hrd.findUnique({ where: { risk_id: id } });
+    if (!existing) {
+      return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+    }
+    assignDerivedRiskPriorityToBody(body, existing);
 
     const updated = await prisma.hrd.update({
       where: { risk_id: id },

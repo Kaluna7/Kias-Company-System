@@ -1,5 +1,6 @@
 import { PrismaClient } from "@/generated/prisma";
 import { backfillRiskIdNoForRows, ensureRiskIdNo } from "../_shared/riskIdNo";
+import { deriveRiskPriorityScoreFromLevels } from "@/app/utils/riskPriorityScore";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -92,7 +93,7 @@ export async function POST(req) {
         impact_description: body.impact_description ?? null,
         impact_level: toIntOrNull(body.impact_level),
         probability_level: toIntOrNull(body.probability_level),
-        priority_level: toIntOrNull(body.priority_level),
+        priority_level: deriveRiskPriorityScoreFromLevels(body.impact_level, body.probability_level),
         mitigation_strategy: body.mitigation_strategy ?? null,
         owners: body.owners ?? null,
         root_cause_category: body.root_cause_category ?? null,

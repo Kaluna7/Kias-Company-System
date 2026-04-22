@@ -1,5 +1,6 @@
 // /app/api/RiskAssessment/finance/[id]/route.js  (atau sesuai path Anda)
 import { PrismaClient } from "@/generated/prisma";
+import { assignDerivedRiskPriorityToBody } from "../../_shared/riskPriorityPut";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -24,6 +25,12 @@ export async function PUT(req, { params }) {
     // jangan coba update primary id / generated fields
     delete body.risk_id;
     delete body.risk_id_no;
+
+    const existing = await prisma.finance.findUnique({ where: { risk_id: id } });
+    if (!existing) {
+      return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+    }
+    assignDerivedRiskPriorityToBody(body, existing);
 
     // Daftar field yang harus dipaksa jadi integer atau null
     const numericFields = [

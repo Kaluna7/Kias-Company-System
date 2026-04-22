@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { SELECT_OPTIONS as SELECT_OPTIONS_RAW, OPTIONAL_FIELDS as OPTIONAL_FIELDS_RAW } from "../../data/riskAssessmentConfig";
+import { deriveRiskPriorityScoreFromLevels, priorityHeatTailwindClass } from "@/app/utils/riskPriorityScore";
 
 const SELECT_OPTIONS = SELECT_OPTIONS_RAW || {};
 const OPTIONAL_FIELDS = new Set(Array.isArray(OPTIONAL_FIELDS_RAW) ? OPTIONAL_FIELDS_RAW : []);
@@ -57,6 +58,25 @@ export function GenericInputModal({
 
     try {
       const payload = { ...form };
+
+      const parseRiskLevel = (raw, label) => {
+        if (raw === "" || raw === undefined || raw === null) {
+          throw new Error(`${label} wajib diisi (angka 1–10).`);
+        }
+        const n = typeof raw === "number" ? raw : parseInt(String(raw).trim(), 10);
+        if (Number.isNaN(n)) {
+          throw new Error(`${label} harus berupa angka.`);
+        }
+        if (n < 1 || n > 10) {
+          throw new Error(`${label} harus antara 1 dan 10.`);
+        }
+        return n;
+      };
+      parseRiskLevel(payload.impact_level, "Impact Level");
+      parseRiskLevel(payload.probability_level, "Probability Level");
+
+      const derivedPriority = deriveRiskPriorityScoreFromLevels(payload.impact_level, payload.probability_level);
+      payload.priority_level = derivedPriority === null ? "" : String(derivedPriority);
       for (const nf of numericFields) {
         if (Object.prototype.hasOwnProperty.call(payload, nf)) {
           payload[nf] = payload[nf] === "" ? null : Number(payload[nf]);
@@ -116,6 +136,10 @@ export function GenericInputModal({
                     const isNumber = numericFields?.has(key);
                     const hasSelect = Array.isArray(SELECT_OPTIONS?.[key]);
                     const isSopRelatedField = key === "sop_related";
+                    const isAutoPriorityLevel = key === "priority_level";
+                    const isRiskLevelManual =
+                      key === "impact_level" || key === "probability_level";
+                    const priorityScore = deriveRiskPriorityScoreFromLevels(form.impact_level, form.probability_level);
 
                     if (isTextarea) {
                       // gunakan ukuran lebih besar jika label termasuk LARGE_TEXTAREA_LABELS
@@ -142,12 +166,20 @@ export function GenericInputModal({
                         <div className="flex items-start md:col-span-1 md:items-center">
                           <label className="text-sm font-medium text-gray-700">
                             {label}
-                            {!OPTIONAL_FIELDS.has(key) && !isSopRelatedField && <span className="text-red-500 ml-1">*</span>}
+                            {!OPTIONAL_FIELDS.has(key) && !isSopRelatedField && !isAutoPriorityLevel && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
                           </label>
                         </div>
 
                         <div className="min-w-0 md:col-span-3">
-                          {isSopRelatedField ? (
+                          {isAutoPriorityLevel ? (
+                            <div
+                              className={`flex h-11 w-full items-center justify-center rounded border border-gray-300 px-3 text-sm ${priorityHeatTailwindClass(priorityScore)}`}
+                            >
+                              {priorityScore === null ? "—" : String(priorityScore)}
+                            </div>
+                          ) : isSopRelatedField ? (
                             <div className="space-y-2">
                               <select
                                 value={sopRelatedChoice}
@@ -194,7 +226,9 @@ export function GenericInputModal({
                               onChange={(e) => onChange(key, e.target.value)}
                               placeholder={item.placeholder ?? ""}
                               type={isNumber ? "number" : "text"}
-                              min={isNumber ? 0 : undefined}
+                              min={isRiskLevelManual ? 1 : isNumber ? 0 : undefined}
+                              max={isRiskLevelManual ? 10 : undefined}
+                              step={isRiskLevelManual ? 1 : undefined}
                               required={!OPTIONAL_FIELDS.has(key)}
                               onWheel={isNumber ? (e) => e.currentTarget.blur() : undefined}
                               className="h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
