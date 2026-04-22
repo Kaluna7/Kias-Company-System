@@ -1250,19 +1250,25 @@ function DashboardPageContent() {
                     Sampling sequence ({samplingSequence.length} items)
                   </div>
                   <div
-                    className="mt-2 grid grid-cols-4 sm:grid-cols-6 gap-1.5"
-                    role="list"
-                    aria-label="Sample indices"
+                    className="mt-2 max-h-[12rem] overflow-y-auto overscroll-y-contain rounded-md border border-transparent pr-0.5 [scrollbar-gutter:stable]"
+                    role="region"
+                    aria-label="Sample indices scroll area"
                   >
-                    {samplingSequence.map((n, idx) => (
-                      <span
-                        key={`${idx}-${n}`}
-                        role="listitem"
-                        className="tabular-nums flex min-h-[1.75rem] items-center justify-center rounded-md border border-slate-200/80 bg-white px-1 py-0.5 text-center text-[11px] font-mono font-medium text-slate-800 shadow-sm"
-                      >
-                        {n}
-                      </span>
-                    ))}
+                    <div
+                      className="grid grid-cols-4 sm:grid-cols-6 gap-1.5"
+                      role="list"
+                      aria-label="Sample indices"
+                    >
+                      {samplingSequence.map((n, idx) => (
+                        <span
+                          key={`${idx}-${n}`}
+                          role="listitem"
+                          className="tabular-nums flex min-h-[1.75rem] items-center justify-center rounded-md border border-slate-200/80 bg-white px-1 py-0.5 text-center text-[11px] font-mono font-medium text-slate-800 shadow-sm"
+                        >
+                          {n}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
