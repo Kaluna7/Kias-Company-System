@@ -253,7 +253,7 @@ export default function LpClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadLossPrevention(viewDraft ? "draft" : "published");
+                loadLossPrevention(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -278,6 +278,7 @@ export default function LpClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 
 
 

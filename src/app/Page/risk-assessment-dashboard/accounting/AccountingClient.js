@@ -251,7 +251,7 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadAccounting(viewDraft ? "draft" : "published");
+                loadAccounting(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -280,5 +280,6 @@ export default function AccountingClient({ initialData = [], initialMeta = null 
     </main>
   );
 }
+
 
 

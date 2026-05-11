@@ -253,7 +253,7 @@ export default function MerchClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadMerchandise(viewDraft ? "draft" : "published");
+                loadMerchandise(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -278,6 +278,7 @@ export default function MerchClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 
 
 

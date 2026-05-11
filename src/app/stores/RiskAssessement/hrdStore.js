@@ -40,8 +40,6 @@ export const useHrdStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create hrd");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ hrd: [newItem, ...state.hrd] }));
       return newItem;
     } catch (err) {
       console.error("createHrd error:", err);

@@ -40,8 +40,6 @@ export const useOperationalStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create operational");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ operational: [newItem, ...state.operational] }));
       return newItem;
     } catch (err) {
       console.error("createOperational error:", err);

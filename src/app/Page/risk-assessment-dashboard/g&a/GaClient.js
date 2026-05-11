@@ -253,7 +253,7 @@ export default function GaClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadGeneralAffair(viewDraft ? "draft" : "published");
+                loadGeneralAffair(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -278,6 +278,7 @@ export default function GaClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 
 
 

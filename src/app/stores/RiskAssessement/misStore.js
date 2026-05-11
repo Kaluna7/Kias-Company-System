@@ -39,8 +39,6 @@ export const useMisStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to mis");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ mis: [newItem, ...state.mis] }));
       return newItem;
     } catch (err) {
       console.error("createGeneralAffair error:", err);

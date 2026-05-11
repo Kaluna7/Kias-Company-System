@@ -39,8 +39,6 @@ export const useGeneralAffairStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create general affair");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ generalAffair: [newItem, ...state.generalAffair] }));
       return newItem;
     } catch (err) {
       console.error("createGeneralAffair error:", err);

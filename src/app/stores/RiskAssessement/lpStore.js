@@ -40,16 +40,12 @@ export const useLossPreventionStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create loss prevention");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ lp: [newItem, ...state.lp] }));
       return newItem;
     } catch (err) {
       console.error("createLossPrevention error:", err);
       throw err;
     }
   },
-
-
 
 
   moveToDraft: async (id) => {

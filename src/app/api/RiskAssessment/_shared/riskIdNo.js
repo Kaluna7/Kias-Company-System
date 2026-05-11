@@ -31,26 +31,23 @@ export function parseFinanceRiskIdSuffix(riskIdNo) {
   return parseGapRiskIdSuffix(riskIdNo, FINANCE_RISK_PREFIX);
 }
 
-export async function nextGapRiskIdNo(prisma, prismaKey, prefix, status = "published") {
+export async function nextGapRiskIdNo(prisma, prismaKey, prefix) {
   const delegate = prismaDelegate(prisma, prismaKey);
-  const where = status ? { status } : {};
   const rows = await delegate.findMany({
-    where,
     select: { risk_id_no: true },
   });
-  const used = new Set();
+  let maxSuffix = 0;
   for (const { risk_id_no } of rows) {
     const n = parseGapRiskIdSuffix(risk_id_no, prefix);
-    if (n != null) used.add(n);
+    if (n != null && n > maxSuffix) maxSuffix = n;
   }
-  let n = 1;
-  while (used.has(n)) n += 1;
-  return `${prefix}${n}`;
+  // Follow latest requirement: always continue from the current max sequence.
+  return `${prefix}${maxSuffix + 1}`;
 }
 
 export async function assignGapRiskIdNo(prisma, prismaKey, risk_id, status, prefix) {
-  const st = status || "published";
-  const risk_id_no = await nextGapRiskIdNo(prisma, prismaKey, prefix, st);
+  // Sequence must be global per department (published + draft).
+  const risk_id_no = await nextGapRiskIdNo(prisma, prismaKey, prefix);
   await prismaDelegate(prisma, prismaKey).update({
     where: { risk_id: Number(risk_id) },
     data: { risk_id_no },
@@ -66,8 +63,7 @@ export async function backfillGapRiskIdNoForRows(prisma, prismaKey, rows, prefix
     .filter((r) => r && !r.risk_id_no)
     .sort((a, b) => Number(a.risk_id) - Number(b.risk_id));
   for (const r of missing) {
-    const st = r.status || "published";
-    const risk_id_no = await nextGapRiskIdNo(prisma, prismaKey, prefix, st);
+    const risk_id_no = await nextGapRiskIdNo(prisma, prismaKey, prefix);
     await delegate.update({
       where: { risk_id: Number(r.risk_id) },
       data: { risk_id_no },

@@ -253,7 +253,7 @@ export default function MisClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadMis(viewDraft ? "draft" : "published");
+                loadMis(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -278,5 +278,6 @@ export default function MisClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 
 

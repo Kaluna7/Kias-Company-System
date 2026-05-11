@@ -41,7 +41,6 @@ export const useFinanceStore = create((set , get) => ({
         throw new Error(errBody?.error || "Failed to create finance");
       }
       const newItem = await res.json();
-      set((state) => ({ finance: [newItem, ...state.finance] }));
       return newItem;
     } catch (err) {
       console.error("createFinance error:", err);

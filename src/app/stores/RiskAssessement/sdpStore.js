@@ -39,8 +39,6 @@ export const useStorePlanningStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create store design planning");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ sdp: [newItem, ...state.sdp] }));
       return newItem;
     } catch (err) {
       console.error("createStorePlanning error:", err);

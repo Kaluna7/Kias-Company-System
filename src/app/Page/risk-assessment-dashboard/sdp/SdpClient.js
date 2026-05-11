@@ -253,7 +253,7 @@ export default function SdpClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadStorePlanning(viewDraft ? "draft" : "published");
+                loadStorePlanning(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -278,5 +278,6 @@ export default function SdpClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 
 

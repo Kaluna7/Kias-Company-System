@@ -40,8 +40,6 @@ export const useAccountingStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create accounting");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ accounting: [newItem, ...state.accounting] }));
       return newItem;
     } catch (err) {
       console.error("createAccounitng error:", err);

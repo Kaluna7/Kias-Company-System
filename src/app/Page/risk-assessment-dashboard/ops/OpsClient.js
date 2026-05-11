@@ -253,7 +253,7 @@ export default function OpsClient({ initialData = [], initialMeta = null }) {
               onClose={() => {
                 closePopUp();
                 setSelectedItem(null);
-                loadOperational(viewDraft ? "draft" : "published");
+                loadOperational(viewDraft ? "draft" : "published", 1, 50, yearParam || undefined);
               }}
               defaultData={selectedItem}
             />
@@ -278,6 +278,7 @@ export default function OpsClient({ initialData = [], initialMeta = null }) {
     </main>
   );
 }
+
 
 
 

@@ -41,8 +41,6 @@ export const useTaxStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create tax");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ tax: [newItem, ...state.tax] }));
       return newItem;
     } catch (err) {
       console.error("createTax error:", err);

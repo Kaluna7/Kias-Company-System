@@ -39,8 +39,6 @@ export const useMerchandiseStore = create((set, get) => ({
         throw new Error(errBody?.error || "Failed to create merchandise");
       }
       const newItem = await res.json();
-      // newItem already contains risk_code from server
-      set((state) => ({ merchandise: [newItem, ...state.merchandise] }));
       return newItem;
     } catch (err) {
       console.error("createMerchandise error:", err);
