@@ -94,12 +94,17 @@ export function DataTable({
         });
         if (!res.ok) throw new Error("Failed to update status");
       } else if (action === "draft") {
-        // Use /status (same as publish) — nested /draft route can 404 in some dev setups (Turbopack).
-        const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/status`, {
+        // Prefer /status, but fallback to /draft for environments where one route is flaky.
+        let res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/status`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "draft" }),
         });
+        if (!res.ok && (res.status === 404 || res.status === 405)) {
+          res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/draft`, {
+            method: "PUT",
+          });
+        }
         if (!res.ok) throw new Error("Failed to move to draft");
       } else {
         const res = await fetch(`/api/RiskAssessment/${apiPath}/${id}/status`, {

@@ -22,6 +22,10 @@ export async function PUT(req, { params }) {
       return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
     }
     assignDerivedRiskPriorityToBody(body, existing);
+    // Keep current status unless explicitly changed via dedicated status endpoints.
+    if (!Object.prototype.hasOwnProperty.call(body, "status")) {
+      body.status = existing.status;
+    }
 
     const numericFields = [
       "impact_level",
