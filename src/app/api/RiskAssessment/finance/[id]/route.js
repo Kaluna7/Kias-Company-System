@@ -1,6 +1,7 @@
 // /app/api/RiskAssessment/finance/[id]/route.js  (atau sesuai path Anda)
 import { PrismaClient } from "@/generated/prisma";
 import { assignDerivedRiskPriorityToBody } from "../../_shared/riskPriorityPut";
+import { resequenceGapRiskIdNoForApiPath } from "../../_shared/riskIdNo";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -79,6 +80,7 @@ export async function DELETE(req, { params }) {
     await prisma.finance.delete({
       where: { risk_id: id },
     });
+    await resequenceGapRiskIdNoForApiPath(prisma, "finance");
 
     return new Response(JSON.stringify({ message: "Finance record deleted successfully" }), { status: 200 });
   } catch (err) {

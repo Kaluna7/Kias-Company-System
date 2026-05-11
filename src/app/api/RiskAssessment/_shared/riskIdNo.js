@@ -86,6 +86,41 @@ export async function backfillGapRiskIdNoForApiPath(prisma, apiPath, rows) {
   return backfillGapRiskIdNoForRows(prisma, cfg.prismaKey, rows, cfg.prefix);
 }
 
+export async function resequenceGapRiskIdNo(prisma, prismaKey, prefix) {
+  const delegate = prismaDelegate(prisma, prismaKey);
+  const rows = await delegate.findMany({
+    select: { risk_id: true, risk_id_no: true },
+  });
+  if (!rows.length) return;
+
+  const normalized = rows
+    .map((r) => ({ ...r, suffix: parseGapRiskIdSuffix(r.risk_id_no, prefix) }))
+    .sort((a, b) => {
+      const aHas = a.suffix != null;
+      const bHas = b.suffix != null;
+      if (aHas && bHas && a.suffix !== b.suffix) return a.suffix - b.suffix;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return Number(a.risk_id) - Number(b.risk_id);
+    });
+
+  for (let i = 0; i < normalized.length; i += 1) {
+    const row = normalized[i];
+    const expected = `${prefix}${i + 1}`;
+    if (row.risk_id_no !== expected) {
+      await delegate.update({
+        where: { risk_id: Number(row.risk_id) },
+        data: { risk_id_no: expected },
+      });
+    }
+  }
+}
+
+export async function resequenceGapRiskIdNoForApiPath(prisma, apiPath) {
+  const cfg = RISK_GAP_CONFIG[apiPath];
+  if (!cfg) throw new Error(`Unknown risk assessment api path: ${apiPath}`);
+  return resequenceGapRiskIdNo(prisma, cfg.prismaKey, cfg.prefix);
+}
+
 export async function ensureRiskIdNo(delegate, risk_id, risk_id_no) {
   if (risk_id_no) return risk_id_no;
   const next = makeRiskIdNo(risk_id);

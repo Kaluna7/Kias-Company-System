@@ -1,6 +1,24 @@
 // app/lib/exportExcel.js
 import * as XLSX from "xlsx-js-style";
 
+const RISK_ASSESSMENT_EXPORT_COLUMNS = [
+  { header: "RISK ID NO.", key: "risk_id_no" },
+  { header: "Category", key: "category" },
+  { header: "Sub Department", key: "sub_department" },
+  { header: "SOP Related", key: "sop_related" },
+  { header: "Risk Description", key: "risk_description" },
+  { header: "Risk Details", key: "risk_details" },
+  { header: "Impact Description", key: "impact_description" },
+  { header: "Impact Level", key: "impact_level" },
+  { header: "Probability Level", key: "probability_level" },
+  { header: "Priority Level", key: "priority_level" },
+  { header: "Mitigation Strategy", key: "mitigation_strategy" },
+  { header: "Owners", key: "owners" },
+  { header: "Root Cause Category", key: "root_cause_category" },
+  { header: "Onset Timeframe", key: "onset_timeframe" },
+  { header: "Status", key: "status" },
+];
+
 /**
  * Export array of objects ke Excel dengan styling
  * @param {Array} data - array of objects
@@ -53,21 +71,50 @@ export function exportToStyledExcel(
     ? "Published"
     : "Draft";
 
+  const riskIdPrefixByComponent = {
+    finance: "A.2.1.",
+    accounting: "A.2.2.",
+    hrd: "A.2.3.",
+    "g&a": "A.2.4.",
+    sdp: "A.2.5.",
+    tax: "A.2.6.",
+    "l&p": "A.2.7.",
+    mis: "A.2.8.",
+    merchandise: "A.2.9.",
+    operational: "A.2.10.",
+    warehouse: "A.2.11.",
+  };
+
   // Nama file otomatis
   const fileName = `${componentName}_${statusLabel}_${dateStr}.xlsx`;
 
   // Normalisasi kolom
+  const isRiskAssessmentComponent =
+    Object.prototype.hasOwnProperty.call(
+      riskIdPrefixByComponent,
+      String(componentName || "").toLowerCase()
+    );
+
   const normalizedCols =
     Array.isArray(columns) && columns.length > 0
       ? columns.map((col) =>
           typeof col === "string" ? { header: col, key: col } : col
         )
+      : isRiskAssessmentComponent
+      ? RISK_ASSESSMENT_EXPORT_COLUMNS
       : Object.keys(data[0]).map((k) => ({ header: k, key: k }));
 
   // Susun data sesuai urutan kolom
   const dataForExcel = data.map((item) =>
     normalizedCols.reduce((acc, col) => {
-      acc[col.header] = item[col.key] ?? "";
+      if (col.key === "risk_id_no" && isRiskAssessmentComponent) {
+        const prefix =
+          riskIdPrefixByComponent[String(componentName || "").toLowerCase()] ??
+          "A.2.1.";
+        acc[col.header] = item[col.key] ?? `${prefix}${item.risk_id ?? ""}`;
+      } else {
+        acc[col.header] = item[col.key] ?? "";
+      }
       return acc;
     }, {})
   );

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@/generated/prisma";
 import { assignDerivedRiskPriorityToBody } from "../../_shared/riskPriorityPut";
+import { resequenceGapRiskIdNoForApiPath } from "../../_shared/riskIdNo";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
@@ -67,6 +68,7 @@ export async function DELETE(req, { params }) {
     await prisma.accounting.delete({
       where: { risk_id: id },
     });
+    await resequenceGapRiskIdNoForApiPath(prisma, "accounting");
 
     return new Response(JSON.stringify({ message: "Accounting record deleted successfully" }), { status: 200 });
   } catch (err) {
