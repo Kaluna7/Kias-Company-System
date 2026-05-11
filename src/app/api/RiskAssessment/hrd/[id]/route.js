@@ -3,6 +3,13 @@ import { assignDerivedRiskPriorityToBody } from "../../_shared/riskPriorityPut";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
+function toIntOrNull(v) {
+  if (v === undefined || v === null || v === "") return null;
+  if (typeof v === "number") return Number.isInteger(v) ? v : Math.trunc(v);
+  const n = parseInt(String(v).trim(), 10);
+  return Number.isNaN(n) ? null : n;
+}
+
 export async function PUT(req, { params }) {
   try {
     const id = parseInt((await params).id, 10);
@@ -15,6 +22,18 @@ export async function PUT(req, { params }) {
       return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
     }
     assignDerivedRiskPriorityToBody(body, existing);
+
+    const numericFields = [
+      "impact_level",
+      "probability_level",
+      "priority_level",
+    ];
+
+    for (const nf of numericFields) {
+      if (nf in body) {
+        body[nf] = toIntOrNull(body[nf]);
+      }
+    }
 
     const updated = await prisma.hrd.update({
       where: { risk_id: id },
