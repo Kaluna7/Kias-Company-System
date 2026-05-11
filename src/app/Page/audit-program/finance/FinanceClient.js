@@ -38,6 +38,7 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
   const [isPlanningMode, setIsPlanningMode] = useState(false);
   const [isMoveToDraftMode, setIsMoveToDraftMode] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [viewDraft, setViewDraft] = useState(false);
 
   // Set initial data dari server
@@ -59,6 +60,12 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
     ];
     
     if (viewDraft) {
+      items.push({
+        name: "Edit Data",
+        action: () => {
+          setIsEditMode(true);
+        },
+      });
       items.push({
         name: "Move to Publish",
         action: () => {
@@ -136,6 +143,7 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
       setIsPlanningMode(false);
       setIsMoveToDraftMode(false);
       setIsDeleteMode(false);
+      setIsEditMode(false);
     };
     window.addEventListener("close-planning-mode", handler);
     return () => window.removeEventListener("close-planning-mode", handler);
@@ -157,9 +165,10 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
   }, []);
 
   // submit AP ke backend
-  const handleSubmitNewFinanceAp = async (finance_risk_id, payload) => {
+  const handleSubmitFinanceAp = async (finance_risk_id, payload) => {
+    const isEditAp = Boolean(payload?.ap_id);
     const res = await fetch("/api/AuditProgram/finance/", {
-      method: "POST",
+      method: isEditAp ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         finance_risk_id,
@@ -179,6 +188,7 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
     });
     setShowModal({ open: false, mode: null, selectedRow: null });
     setIsPlanningMode(false);
+    setIsEditMode(false);
   };
 
   const listFormAp = [
@@ -248,11 +258,20 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
               isPlanningMode={isPlanningMode}
               isMoveToDraftMode={isMoveToDraftMode}
               isDeleteMode={isDeleteMode}
+              isEditMode={isEditMode}
               viewDraft={viewDraft}
               sortBy={sortBy}
               sortDir={sortDir}
               onChangeSort={setSort}
               onMoveToDraft={viewDraft ? moveToPublish : moveToDraft}
+              onEditAp={(apRow) => {
+                if (!apRow?.ap_id) return;
+                setShowModal({
+                  open: true,
+                  mode: "edit-ap",
+                  selectedRow: apRow,
+                });
+              }}
               onDelete={async (riskId, departmentApi) => {
                 try {
                   const res = await fetch(`/api/AuditProgram/${departmentApi}/${riskId}`, {
@@ -280,20 +299,34 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
       </div>
 
       {/* Modal Add AP */}
-      {showModal.open && showModal.mode === "add-ap" && (
+      {showModal.open && (showModal.mode === "add-ap" || showModal.mode === "edit-ap") && (
         <GenericInputModal
-          title={`Add AP for ${showModal.selectedRow?.risk_id_no ?? ""}`}
+          title={`${showModal.mode === "edit-ap" ? "Edit AP for" : "Add AP for"} ${showModal.selectedRow?.risk_id_no ?? ""}`}
           onClose={() =>
             setShowModal({ open: false, mode: null, selectedRow: null })
           }
           onSubmit={(payload) =>
-            handleSubmitNewFinanceAp(showModal.selectedRow?.risk_id, payload)
+            handleSubmitFinanceAp(showModal.selectedRow?.risk_id, {
+              ...payload,
+              ...(showModal.mode === "edit-ap" ? { ap_id: showModal.selectedRow?.ap_id } : {}),
+            })
           }
           listForm={listFormAp}
           labelToKey={labelToKeyAp}
           textareaLabels={textareaLabels}
           numericFields={new Set()}
-          initialForm={null}
+          initialForm={
+            showModal.mode === "edit-ap"
+              ? {
+                  substantive_test: showModal.selectedRow?.substantive_test ?? "",
+                  objective: showModal.selectedRow?.objective ?? "",
+                  procedures: showModal.selectedRow?.procedures ?? "",
+                  method: showModal.selectedRow?.method ?? "",
+                  description: showModal.selectedRow?.description ?? "",
+                  application: showModal.selectedRow?.application ?? "",
+                }
+              : null
+          }
         />
       )}
     </main>

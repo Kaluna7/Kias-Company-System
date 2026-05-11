@@ -58,8 +58,10 @@ export const useLossPreventionStore = create((set, get) => ({
     }));
 
     try {
-      const res = await fetch(`/api/RiskAssessment/l&p/${id}/draft`, {
+      const res = await fetch(`/api/RiskAssessment/l&p/${id}/status`, {
         method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "draft" }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));

@@ -7,12 +7,14 @@ export default function DataTableAudit({
   isPlanningMode = false,
   isMoveToDraftMode = false,
   isDeleteMode = false,
+  isEditMode = false,
   viewDraft = false,
   sortBy = "risk_id_no",
   sortDir = "asc",
   onChangeSort,
   onMoveToDraft,
   onDelete,
+  onEditAp,
   departmentApi,
 }) {
   const [deleting, setDeleting] = useState({});
@@ -90,7 +92,7 @@ export default function DataTableAudit({
   return (
     <div className="w-full h-full flex flex-col p-2 sm:p-4 relative">
       {/* Close button di pojok kanan atas */}
-      {(isPlanningMode || isMoveToDraftMode || isDeleteMode) && (
+      {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
         <button
           onClick={() => {
             window.dispatchEvent(
@@ -138,7 +140,7 @@ export default function DataTableAudit({
               <th rowSpan="2" className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "100px", maxWidth: "150px" }}>Owner</th>
               <th colSpan="4" className="px-3 py-2 border border-gray-200 text-center align-top">Audit Program</th>
               <th colSpan="3" className="px-3 py-2 border border-gray-200 text-center align-top">Sampling</th>
-              {(isPlanningMode || isMoveToDraftMode || isDeleteMode) && (
+              {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
                 <th rowSpan="2" className="px-3 py-2 border border-gray-200 text-center align-top">Action</th>
               )}
             </tr>
@@ -291,12 +293,30 @@ export default function DataTableAudit({
                         </div>
                       </td>
                     )}
+
+                    {isEditMode && (
+                      <td className="px-3 py-2 border border-gray-200 text-center align-top">
+                        {ap.ap_id ? (
+                          <button
+                            type="button"
+                            onClick={() => onEditAp?.(ap)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 text-xs font-medium shadow-sm transition-colors duration-150"
+                            title={`Edit AP ${ap.ap_code || ""}`}
+                          >
+                            <Pencil size={14} />
+                            <span>Edit AP</span>
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ));
               })
             ) : (
               <tr>
-                <td colSpan={(isPlanningMode || isMoveToDraftMode || isDeleteMode) ? 14 : 13} className="text-center py-6 text-gray-500 border border-gray-200">
+                <td colSpan={(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) ? 14 : 13} className="text-center py-6 text-gray-500 border border-gray-200">
                   No data available
                 </td>
               </tr>

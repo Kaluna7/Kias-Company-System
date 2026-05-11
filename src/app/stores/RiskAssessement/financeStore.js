@@ -51,8 +51,10 @@ export const useFinanceStore = create((set , get) => ({
 
   moveToDraft: async (id) => {
     try {
-      const res = await fetch(`/api/RiskAssessment/finance/${id}/draft`, {
+      const res = await fetch(`/api/RiskAssessment/finance/${id}/status`, {
         method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "draft" }),
       });
       if (!res.ok) throw new Error("Failed to move to draft");
       const updated = await res.json();

@@ -57,8 +57,10 @@ export const useWarehouseStore = create((set, get) => ({
     }));
 
     try {
-      const res = await fetch(`/api/RiskAssessment/whs/${id}/draft`, {
+      const res = await fetch(`/api/RiskAssessment/whs/${id}/status`, {
         method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "draft" }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));

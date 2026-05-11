@@ -58,6 +58,7 @@ export function GenericInputModal({
 
     try {
       const payload = { ...form };
+      const fieldKeys = new Set(Object.values(labelToKey || {}));
 
       const parseRiskLevel = (raw, label) => {
         if (raw === "" || raw === undefined || raw === null) {
@@ -72,11 +73,17 @@ export function GenericInputModal({
         }
         return n;
       };
-      parseRiskLevel(payload.impact_level, "Impact Level");
-      parseRiskLevel(payload.probability_level, "Probability Level");
-
-      const derivedPriority = deriveRiskPriorityScoreFromLevels(payload.impact_level, payload.probability_level);
-      payload.priority_level = derivedPriority === null ? "" : String(derivedPriority);
+      // Risk assessment form includes impact/probability; Audit Program "Add AP" modal does not.
+      if (fieldKeys.has("impact_level")) {
+        parseRiskLevel(payload.impact_level, "Impact Level");
+      }
+      if (fieldKeys.has("probability_level")) {
+        parseRiskLevel(payload.probability_level, "Probability Level");
+      }
+      if (fieldKeys.has("priority_level") && fieldKeys.has("impact_level") && fieldKeys.has("probability_level")) {
+        const derivedPriority = deriveRiskPriorityScoreFromLevels(payload.impact_level, payload.probability_level);
+        payload.priority_level = derivedPriority === null ? "" : String(derivedPriority);
+      }
       for (const nf of numericFields) {
         if (Object.prototype.hasOwnProperty.call(payload, nf)) {
           payload[nf] = payload[nf] === "" ? null : Number(payload[nf]);
