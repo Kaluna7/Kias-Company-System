@@ -243,7 +243,7 @@ export default function LpClient({ initialData = [], initialMeta = null }) {
           onSearch={setSearchQuery}
           backHref={`/Page/risk-assessment-dashboard${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
         />
-        <div className="flex-1 w-full h-full overflow-hidden mt-20 md:mt-14">
+        <div className="flex flex-col flex-1 w-full h-full min-h-0 overflow-hidden mt-20 md:mt-14">
           {/* Search bar untuk mobile - di atas table */}
           <div className="md:hidden px-4 pt-4 pb-2">
             <Search onSearch={setSearchQuery} />

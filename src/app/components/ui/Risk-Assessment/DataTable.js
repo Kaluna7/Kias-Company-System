@@ -120,8 +120,8 @@ export function DataTable({
   const showActionCol = convertMode || editMode;
 
   return (
-    <div className="p-4 flex flex-col min-h-0">
-      <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0 flex-1 min-h-0" style={{ maxHeight: "calc(100vh - 220px)" }}>
+    <div className="p-4 flex flex-col min-h-0 h-full flex-1">
+      <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0 flex-1 min-h-0 h-full">
         <table className="border-collapse text-xs" style={{ minWidth: "1780px", tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             <col style={{ width: "80px" }} />
@@ -215,7 +215,7 @@ export function DataTable({
                   const cellKey = `${f.risk_id ?? idx}-${i}`;
                   if ([4, 5, 6, 10, 11, 12].includes(i)) {
                     return (
-                      <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words [overflow-wrap:anywhere] whitespace-pre-wrap align-top min-w-0 ${extraClass}`} title={typeof val === "string" ? val : undefined}>
+                      <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left [overflow-wrap:anywhere] whitespace-pre-wrap align-top min-w-0 ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                         {val}
                       </td>
                     );
