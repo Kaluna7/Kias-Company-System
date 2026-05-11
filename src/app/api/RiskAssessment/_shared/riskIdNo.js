@@ -36,13 +36,14 @@ export async function nextGapRiskIdNo(prisma, prismaKey, prefix) {
   const rows = await delegate.findMany({
     select: { risk_id_no: true },
   });
-  let maxSuffix = 0;
+  const used = new Set();
   for (const { risk_id_no } of rows) {
     const n = parseGapRiskIdSuffix(risk_id_no, prefix);
-    if (n != null && n > maxSuffix) maxSuffix = n;
+    if (n != null) used.add(n);
   }
-  // Follow latest requirement: always continue from the current max sequence.
-  return `${prefix}${maxSuffix + 1}`;
+  let next = 1;
+  while (used.has(next)) next += 1;
+  return `${prefix}${next}`;
 }
 
 export async function assignGapRiskIdNo(prisma, prismaKey, risk_id, status, prefix) {
