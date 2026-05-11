@@ -15,7 +15,7 @@ function toIntOrNull(v) {
 
 export async function PUT(req, { params }) {
   try {
-    const id = parseInt(params.id, 10);
+    const id = parseInt((await params).id, 10);
     if (!id || Number.isNaN(id)) {
       return new Response(JSON.stringify({ error: "Invalid id" }), { status: 400 });
     }
@@ -65,7 +65,7 @@ export async function PUT(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const id = parseInt(params.id, 10);
+    const id = parseInt((await params).id, 10);
     if (!id || Number.isNaN(id)) {
       return new Response(JSON.stringify({ error: "Invalid id" }), { status: 400 });
     }

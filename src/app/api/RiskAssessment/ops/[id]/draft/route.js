@@ -4,7 +4,7 @@ if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
 export async function PUT(req, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // update status ke draft
     const updated = await prisma.operational.update({

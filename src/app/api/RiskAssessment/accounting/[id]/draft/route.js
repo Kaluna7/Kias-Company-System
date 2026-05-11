@@ -4,7 +4,7 @@ if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
 
 export async function PUT(req, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const updated = await prisma.accounting.update({
       where: { risk_id: Number(id) }, 

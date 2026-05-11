@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { RISK_ID_PREFIX_BY_API_PATH } from "@/app/data/riskIdNoPrefixes";
 import ConfirmModal from "../../features/ConfirmModal";
 import { useToast } from "@/app/contexts/ToastContext";
 import { deriveRiskPriorityScoreFromLevels, priorityHeatTailwindClass } from "@/app/utils/riskPriorityScore";
@@ -49,6 +50,8 @@ export function DataTable({
         .some((val) => val.toString().toLowerCase().includes(q))
     );
   }, [items, searchQuery]);
+
+  const riskIdPrefix = RISK_ID_PREFIX_BY_API_PATH[apiPath] ?? "A.2.1.";
 
   if (!filteredItems || filteredItems.length === 0) {
     return (
@@ -116,7 +119,7 @@ export function DataTable({
   return (
     <div className="p-4 flex flex-col min-h-0">
       <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0 flex-1 min-h-0" style={{ maxHeight: "calc(100vh - 220px)" }}>
-        <table className="border-collapse text-xs" style={{ minWidth: "1600px", tableLayout: "fixed", width: "100%" }}>
+        <table className="border-collapse text-xs" style={{ minWidth: "1780px", tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             <col style={{ width: "80px" }} />
             <col style={{ width: "90px" }} />
@@ -128,10 +131,10 @@ export function DataTable({
             <col style={{ width: "90px" }} />
             <col style={{ width: "115px" }} />
             <col style={{ width: "105px" }} />
+            <col style={{ width: "120px" }} />
+            <col style={{ width: "220px" }} />
             <col style={{ width: "130px" }} />
-            <col style={{ width: "85px" }} />
-            <col style={{ width: "145px" }} />
-            <col style={{ width: "115px" }} />
+            <col style={{ width: "110px" }} />
             <col style={{ width: "85px" }} />
             {showActionCol && <col style={{ width: "120px" }} />}
           </colgroup>
@@ -155,7 +158,7 @@ export function DataTable({
                 "Onset Timeframe",
                 "Status",
               ].map((h) => (
-                <th key={h} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 whitespace-normal break-words align-top">
+                <th key={h} className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 whitespace-normal break-words align-top min-w-0">
                   {h}
                 </th>
               ))}
@@ -177,7 +180,7 @@ export function DataTable({
             {filteredItems.map((f, idx) => (
               <tr key={f.risk_id} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
                 {[
-                  f.risk_id_no ?? `A.2.1.${f.risk_id}`,
+                  f.risk_id_no ?? `${riskIdPrefix}${f.risk_id}`,
                   f.category ?? "-",
                   f.sub_department ?? "-",
                   f.sop_related ?? "-",
@@ -207,29 +210,29 @@ export function DataTable({
                   }
 
                   const cellKey = `${f.risk_id ?? idx}-${i}`;
-                  if ([4, 5, 6, 10, 12].includes(i)) {
+                  if ([4, 5, 6, 10, 11, 12].includes(i)) {
                     return (
-                      <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words whitespace-pre-wrap align-top ${extraClass}`} title={typeof val === "string" ? val : undefined}>
+                      <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-left break-words [overflow-wrap:anywhere] whitespace-pre-wrap align-top min-w-0 ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                         {val}
                       </td>
                     );
                   }
 
                   return (
-                    <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-center whitespace-nowrap ${extraClass}`} title={typeof val === "string" ? val : undefined}>
+                    <td key={cellKey} className={`p-1 text-xs text-gray-800 border border-gray-200 text-center break-words whitespace-normal min-w-0 max-w-full ${extraClass}`} title={typeof val === "string" ? val : undefined}>
                       {val}
                     </td>
                   );
                 })}
 
-                <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center">
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${f.status === "draft" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
+                <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center min-w-0 break-words">
+                  <span className={`inline-block max-w-full px-2 py-1 rounded-full text-xs font-semibold break-words ${f.status === "draft" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
                     {f.status ?? "published"}
                   </span>
                 </td>
 
                 {showActionCol && (
-                  <td className="p-1 text-center border border-gray-200 align-top">
+                  <td className="p-1 text-center border border-gray-200 align-top min-w-0">
                     <div className="flex items-center justify-center gap-2">
                       {/* jika editMode aktif & kita sedang melihat draft -> tampilkan tombol Edit dan Delete */}
                       {editMode && viewDraft && (

@@ -1,5 +1,5 @@
 import { PrismaClient } from "@/generated/prisma";
-import { backfillRiskIdNoForRows, ensureRiskIdNo } from "../_shared/riskIdNo";
+import { assignGapRiskIdNoForApiPath, backfillGapRiskIdNoForApiPath } from "../_shared/riskIdNo";
 import { deriveRiskPriorityScoreFromLevels } from "@/app/utils/riskPriorityScore";
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -38,7 +38,7 @@ export async function GET(req) {
       prisma.warehouse.count({ where: where ?? {} }),
     ]);
 
-    const safeWhs = await backfillRiskIdNoForRows(prisma.warehouse, warehouses);
+    const safeWhs = await backfillGapRiskIdNoForApiPath(prisma, "whs", warehouses);
 
     if (includeAps) {
       const flattened = safeWhs.map((p) => {
@@ -96,10 +96,16 @@ export async function POST(req) {
         owners: body.owners ?? null,
         root_cause_category: body.root_cause_category ?? null,
         onset_timeframe: body.onset_timeframe ?? null,
+        ...(body.status === "draft" ? { status: "draft" } : {}),
       },
     });
 
-    const risk_id_no = await ensureRiskIdNo(prisma.warehouse, created.risk_id, created.risk_id_no);
+    const risk_id_no = await assignGapRiskIdNoForApiPath(
+      prisma,
+      "whs",
+      created.risk_id,
+      created.status ?? "published"
+    );
     return new Response(JSON.stringify({ ...created, risk_id_no }), { status: 201 });
   } catch (err) {
     console.error("POST /api/warehouse error:", err);

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function PUT(req, { params }) {
   try {
-    const id = Number(params?.id || 0);
+    const id = Number((await params)?.id || 0);
     if (!id) {
       return NextResponse.json({ error: "Invalid merchandise risk_id" }, { status: 400 });
     }

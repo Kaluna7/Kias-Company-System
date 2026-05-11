@@ -916,7 +916,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\USER\\Desktop\\WHSmith Work\\kias\\src\\generated\\prisma",
+      "value": "C:\\Users\\USER\\Desktop\\WHSMITH DATA\\kias\\src\\generated\\prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -930,7 +930,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\USER\\Desktop\\WHSmith Work\\kias\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\USER\\Desktop\\WHSMITH DATA\\kias\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
