@@ -90,7 +90,7 @@ export default function DataTableAudit({
   }, [sortedData]);
 
   return (
-    <div className="w-full h-full flex flex-col p-2 sm:p-4 relative">
+    <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4 relative">
       {/* Close button di pojok kanan atas */}
       {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
         <button
@@ -111,8 +111,11 @@ export default function DataTableAudit({
           Geser tabel ke samping untuk melihat semua kolom.
         </div>
       </div>
-      <div className="flex-1 overflow-auto rounded-2xl shadow-sm border border-gray-200 bg-white">
-        <div className="overflow-x-auto min-h-0">
+      <div
+        className="flex-1 h-full min-h-0 overflow-auto rounded-2xl shadow-sm border border-gray-200 bg-white"
+        style={{ maxHeight: "calc(100dvh - 7.5rem)" }}
+      >
+        <div className="overflow-x-auto min-h-full">
           <table className="min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700" style={{ tableLayout: "auto" }}>
           <thead>
             <tr className="bg-gray-50 text-gray-700 font-semibold">
