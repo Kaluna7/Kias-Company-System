@@ -1,15 +1,15 @@
-stage('Deploy') {
-  steps {
-    sh '''
-      echo "DEPLOY START"
+pipeline {
+    agent any
 
-      cd /root/Kias-Company-System
-
-      git pull origin main
-
-      docker compose down --remove-orphans
-
-      docker compose up -d --build
-    '''
-  }
+    stages {
+        stage('Deploy') {
+            steps {
+                sh '''
+                    echo "DEPLOY START"
+                    docker compose down
+                    docker compose up -d --build
+                '''
+            }
+        }
+    }
 }
