@@ -9,7 +9,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "3000"  
+      - "3001:3000"
     environment:
       DATABASE_URL: postgresql://postgres:12345@db:5432/kias
     volumes:
