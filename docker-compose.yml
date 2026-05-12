@@ -11,8 +11,9 @@ services:
     ports:
       - "3001:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:12345@db:5432/kias
+      DATABASE_URL: postgresql://postgres:12345@localhost:5432/kias
       NEXTAUTH_SECRET: supersecret_kias_2026
+      NEXTAUTH_URL: http://76.13.20.134:3001
     volumes:
       - /var/www/kias-uploads:/app/public/uploads
 
