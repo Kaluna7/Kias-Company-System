@@ -1,24 +1,15 @@
-pipeline {
-    agent any
+stage('Deploy') {
+  steps {
+    sh '''
+      echo "DEPLOY START"
 
-    stages {
-        stage('Deploy') {
-            steps {
-                sh '''
-                echo "WORKSPACE:"
-                pwd
+      cd /root/Kias-Company-System
 
-                echo "LIST FILE:"
-                ls -la
+      git pull origin main
 
-                echo "DEPLOY START"
+      docker compose down --remove-orphans
 
-                docker compose down || true
-                docker compose up -d --build
-
-                docker image prune -f
-                '''
-            }
-        }
-    }
+      docker compose up -d --build
+    '''
+  }
 }
