@@ -3,7 +3,6 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import schedulePool from "@/app/lib/db";
 
 // Simple chat table:
 // public.schedule_chat_messages (
@@ -16,7 +15,12 @@ import schedulePool from "@/app/lib/db";
 //   created_at TIMESTAMPTZ
 // )
 
-async function ensureChatTable() {
+async function getSchedulePool() {
+  const { default: schedulePool } = await import("@/app/lib/db");
+  return schedulePool;
+}
+
+async function ensureChatTable(schedulePool) {
   const client = await schedulePool.connect();
   try {
     await client.query(`
@@ -37,11 +41,12 @@ async function ensureChatTable() {
 
 export async function GET(req) {
   try {
+    const schedulePool = await getSchedulePool();
     const session = await getServerSession(authOptions);
     const currentName = (session?.user?.name || "").trim();
     const currentRole = (session?.user?.role || "").toLowerCase();
 
-    await ensureChatTable();
+    await ensureChatTable(schedulePool);
 
     const url = new URL(req.url);
     const sinceIdRaw = url.searchParams.get("sinceId");
@@ -104,6 +109,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
+    const schedulePool = await getSchedulePool();
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json(
@@ -138,7 +144,7 @@ export async function POST(req) {
       );
     }
 
-    await ensureChatTable();
+    await ensureChatTable(schedulePool);
 
     const senderName = (session.user.name || "").trim();
     const senderRole = (session.user.role || "").trim();
@@ -177,6 +183,7 @@ export async function POST(req) {
 
 export async function DELETE(req) {
   try {
+    const schedulePool = await getSchedulePool();
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json(
@@ -196,7 +203,7 @@ export async function DELETE(req) {
       );
     }
 
-    await ensureChatTable();
+    await ensureChatTable(schedulePool);
     const currentName = (session.user.name || "").trim();
     const role = (session.user.role || "").toLowerCase();
     const isAdmin = role === "admin" || role === "reviewer";
