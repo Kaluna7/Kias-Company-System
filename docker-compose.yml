@@ -1,9 +1,29 @@
-version: '3.8'
+version: "3.8"
 
 services:
   app:
     build: .
     container_name: kias-app
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - db
     ports:
       - "3000:3000"
+    volumes:
+      - /var/www/kias-uploads:/app/public/uploads
+
+  db:
+    image: postgres:15
+    container_name: postgres_db
     restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: kias
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
