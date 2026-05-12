@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "dev:ngrok": "next dev --turbopack --hostname 0.0.0.0",
     "build": "next build --turbopack",
-    "postinstall": "prisma generate --schema=./prisma/schema.prisma",
+    "postinstall": "",
     "start": "next start",
     "lint": "eslint",
     "ngrok": "npx ngrok http 3000"
