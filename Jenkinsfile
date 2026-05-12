@@ -5,10 +5,10 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                cd /root/Kias-Company-System
-                git fetch origin
-                git reset --hard origin/main
-                docker-compose up -d --build
+                pwd
+                ls -la
+
+                docker compose up -d --build
                 docker image prune -f
                 '''
             }
