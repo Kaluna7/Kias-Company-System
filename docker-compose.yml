@@ -5,33 +5,16 @@ services:
     build: .
     container_name: kias-app
     restart: always
-    depends_on:
-      db:
-        condition: service_healthy
     ports:
       - "3001:3000"
     environment:
-      DATABASE_URL=postgresql://postgres:12345@db:5432/kias
+      DATABASE_URL: postgresql://postgres:12345@postgres_db:5432/kias
       NEXTAUTH_SECRET: supersecret_kias_2026
       NEXTAUTH_URL: http://76.13.20.134:3001
     volumes:
       - /var/www/kias-uploads:/app/public/uploads
 
-  db:
-    image: postgres:15
-    container_name: kias-db
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 12345
-      POSTGRES_DB: kias
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  postgres_data:
+networks:
+  default:
+    external: true
+    name: bridge
