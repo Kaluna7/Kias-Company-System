@@ -38,6 +38,7 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
   const [isPlanningMode, setIsPlanningMode] = useState(false);
   const [isMoveToDraftMode, setIsMoveToDraftMode] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [viewDraft, setViewDraft] = useState(false);
 
   useEffect(() => {
@@ -57,6 +58,12 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
     ];
     
     if (viewDraft) {
+      items.push({
+        name: "Edit Data",
+        action: () => {
+          setIsEditMode(true);
+        },
+      });
       items.push({
         name: "Move to Publish",
         action: () => {
@@ -130,6 +137,7 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
       setIsPlanningMode(false);
       setIsMoveToDraftMode(false);
       setIsDeleteMode(false);
+      setIsEditMode(false);
     };
     window.addEventListener("close-planning-mode", handler);
     return () => window.removeEventListener("close-planning-mode", handler);
@@ -149,9 +157,10 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
     return () => window.removeEventListener("open-modal", handler);
   }, []);
 
-  const handleSubmitNewAccountingAp = async (accounting_risk_id, payload) => {
+  const handleSubmitAccountingAp = async (accounting_risk_id, payload) => {
+    const isEditAp = Boolean(payload?.ap_id);
     const res = await fetch("/api/AuditProgram/accounting/", {
-      method: "POST",
+      method: isEditAp ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         accounting_risk_id,
@@ -171,6 +180,7 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
     });
     setShowModal({ open: false, mode: null, selectedRow: null });
     setIsPlanningMode(false);
+    setIsEditMode(false);
   };
 
   const listFormAp = [
@@ -239,11 +249,41 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
               isPlanningMode={isPlanningMode}
               isMoveToDraftMode={isMoveToDraftMode}
               isDeleteMode={isDeleteMode}
+              isEditMode={isEditMode}
               viewDraft={viewDraft}
               sortBy={sortBy}
               sortDir={sortDir}
               onChangeSort={setSort}
               onMoveToDraft={viewDraft ? moveToPublish : moveToDraft}
+              onEditAp={(apRow) => {
+                if (!apRow?.ap_id) return;
+                setShowModal({
+                  open: true,
+                  mode: "edit-ap",
+                  selectedRow: apRow,
+                });
+              }}
+              onDeleteAp={async (apRow, deptApi) => {
+                try {
+                  const res = await fetch(`/api/AuditProgram/${deptApi}/ap/${apRow.ap_id}`, {
+                    method: "DELETE",
+                  });
+                  if (!res.ok) {
+                    const error = await res.json().catch(() => ({ error: "Failed to delete AP" }));
+                    throw new Error(error.error || "Failed to delete AP");
+                  }
+                  await fetchAccountingData({
+                    q: "",
+                    page: 1,
+                    pageSize: 50,
+                    status: viewDraft ? "draft" : "published",
+                    year: yearParam || undefined,
+                  });
+                } catch (err) {
+                  if (typeof window !== "undefined" && window.__showToast) window.__showToast(`Error deleting AP: ${err.message}`, "error"); else alert(`Error deleting AP: ${err.message}`);
+                  throw err;
+                }
+              }}
               onDelete={async (riskId, departmentApi) => {
                 try {
                   const res = await fetch(`/api/AuditProgram/${departmentApi}/${riskId}`, {
@@ -270,20 +310,34 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
         </div>
       </div>
 
-      {showModal.open && showModal.mode === "add-ap" && (
+      {showModal.open && (showModal.mode === "add-ap" || showModal.mode === "edit-ap") && (
         <GenericInputModal
-          title={`Add AP for ${showModal.selectedRow?.risk_id_no ?? ""}`}
+          title={`${showModal.mode === "edit-ap" ? "Edit AP for" : "Add AP for"} ${showModal.selectedRow?.risk_id_no ?? ""}`}
           onClose={() =>
             setShowModal({ open: false, mode: null, selectedRow: null })
           }
           onSubmit={(payload) =>
-            handleSubmitNewAccountingAp(showModal.selectedRow?.risk_id, payload)
+            handleSubmitAccountingAp(showModal.selectedRow?.risk_id, {
+              ...payload,
+              ...(showModal.mode === "edit-ap" ? { ap_id: showModal.selectedRow?.ap_id } : {}),
+            })
           }
           listForm={listFormAp}
           labelToKey={labelToKeyAp}
           textareaLabels={textareaLabels}
           numericFields={new Set()}
-          initialForm={null}
+          initialForm={
+            showModal.mode === "edit-ap"
+              ? {
+                  substantive_test: showModal.selectedRow?.substantive_test ?? "",
+                  objective: showModal.selectedRow?.objective ?? "",
+                  procedures: showModal.selectedRow?.procedures ?? "",
+                  method: showModal.selectedRow?.method ?? "",
+                  description: showModal.selectedRow?.description ?? "",
+                  application: showModal.selectedRow?.application ?? "",
+                }
+              : null
+          }
         />
       )}
     </main>

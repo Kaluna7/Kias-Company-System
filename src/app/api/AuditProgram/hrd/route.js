@@ -162,3 +162,48 @@ export async function POST(req) {
   }
 }
 
+export async function PUT(req) {
+  try {
+    const body = await req.json();
+    const hrd_risk_id = Number(body.hrd_risk_id || 0);
+    const ap_id = Number(body.ap_id || 0);
+
+    if (!hrd_risk_id) {
+      return NextResponse.json({ error: "hrd_risk_id is required" }, { status: 400 });
+    }
+    if (!ap_id) {
+      return NextResponse.json({ error: "ap_id is required" }, { status: 400 });
+    }
+
+    const parent = await prisma.hrd.findUnique({ where: { risk_id: hrd_risk_id } });
+    if (!parent) {
+      return NextResponse.json({ error: `HRD parent with risk_id=${hrd_risk_id} not found` }, { status: 400 });
+    }
+
+    const existing = await prisma.hrdAp.findUnique({ where: { ap_id } });
+    if (!existing) {
+      return NextResponse.json({ error: `AP with ap_id=${ap_id} not found` }, { status: 404 });
+    }
+    if (existing.hrd_risk_id !== hrd_risk_id) {
+      return NextResponse.json({ error: "ap_id does not belong to this hrd_risk_id" }, { status: 400 });
+    }
+
+    const updated = await prisma.hrdAp.update({
+      where: { ap_id },
+      data: {
+        substantive_test: body.substantive_test ?? null,
+        objective: body.objective ?? null,
+        procedures: body.procedures ?? null,
+        method: body.method ?? null,
+        description: body.description ?? null,
+        application: body.application ?? null,
+      },
+    });
+
+    return NextResponse.json({ data: updated }, { status: 200 });
+  } catch (err) {
+    console.error("PUT /api/AuditProgram/hrd error:", err);
+    return NextResponse.json({ error: String(err?.message || err) }, { status: 500 });
+  }
+}
+

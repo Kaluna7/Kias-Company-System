@@ -162,3 +162,48 @@ export async function POST(req) {
   }
 }
 
+export async function PUT(req) {
+  try {
+    const body = await req.json();
+    const warehouse_risk_id = Number(body.warehouse_risk_id || 0);
+    const ap_id = Number(body.ap_id || 0);
+
+    if (!warehouse_risk_id) {
+      return NextResponse.json({ error: "warehouse_risk_id is required" }, { status: 400 });
+    }
+    if (!ap_id) {
+      return NextResponse.json({ error: "ap_id is required" }, { status: 400 });
+    }
+
+    const parent = await prisma.warehouse.findUnique({ where: { risk_id: warehouse_risk_id } });
+    if (!parent) {
+      return NextResponse.json({ error: `Warehouse parent with risk_id=${warehouse_risk_id} not found` }, { status: 400 });
+    }
+
+    const existing = await prisma.warehouseAp.findUnique({ where: { ap_id } });
+    if (!existing) {
+      return NextResponse.json({ error: `AP with ap_id=${ap_id} not found` }, { status: 404 });
+    }
+    if (existing.warehouse_risk_id !== warehouse_risk_id) {
+      return NextResponse.json({ error: "ap_id does not belong to this warehouse_risk_id" }, { status: 400 });
+    }
+
+    const updated = await prisma.warehouseAp.update({
+      where: { ap_id },
+      data: {
+        substantive_test: body.substantive_test ?? null,
+        objective: body.objective ?? null,
+        procedures: body.procedures ?? null,
+        method: body.method ?? null,
+        description: body.description ?? null,
+        application: body.application ?? null,
+      },
+    });
+
+    return NextResponse.json({ data: updated }, { status: 200 });
+  } catch (err) {
+    console.error("PUT /api/AuditProgram/whs error:", err);
+    return NextResponse.json({ error: String(err?.message || err) }, { status: 500 });
+  }
+}
+

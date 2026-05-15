@@ -272,6 +272,27 @@ export default function FinanceClient({ initialData, initialSortBy = "risk_id_no
                   selectedRow: apRow,
                 });
               }}
+              onDeleteAp={async (apRow, deptApi) => {
+                try {
+                  const res = await fetch(`/api/AuditProgram/${deptApi}/ap/${apRow.ap_id}`, {
+                    method: "DELETE",
+                  });
+                  if (!res.ok) {
+                    const error = await res.json().catch(() => ({ error: "Failed to delete AP" }));
+                    throw new Error(error.error || "Failed to delete AP");
+                  }
+                  await fetchFinanceData({
+                    q: "",
+                    page: 1,
+                    pageSize: 50,
+                    status: viewDraft ? "draft" : "published",
+                    year: yearParam || undefined,
+                  });
+                } catch (err) {
+                  if (typeof window !== "undefined" && window.__showToast) window.__showToast(`Error deleting AP: ${err.message}`, "error"); else alert(`Error deleting AP: ${err.message}`);
+                  throw err;
+                }
+              }}
               onDelete={async (riskId, departmentApi) => {
                 try {
                   const res = await fetch(`/api/AuditProgram/${departmentApi}/${riskId}`, {

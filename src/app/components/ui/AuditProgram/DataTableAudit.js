@@ -14,6 +14,7 @@ export default function DataTableAudit({
   onChangeSort,
   onMoveToDraft,
   onDelete,
+  onDeleteAp,
   onEditAp,
   departmentApi,
 }) {
@@ -86,7 +87,14 @@ export default function DataTableAudit({
       map.get(key).aps.push(row);
     });
 
-    return Array.from(map.values());
+    return Array.from(map.values()).map((group) => {
+      group.aps.sort((a, b) => compareCode(a?.ap_code, b?.ap_code));
+      const hasRealAp = group.aps.some((ap) => ap.ap_id != null);
+      if (hasRealAp) {
+        group.aps = group.aps.filter((ap) => ap.ap_id != null);
+      }
+      return group;
+    });
   }, [sortedData]);
 
   return (
@@ -234,7 +242,7 @@ export default function DataTableAudit({
                     <td className="px-3 py-2 border border-gray-200 break-words align-top" style={{ maxWidth: "180px" }}>{ap.application}</td>
 
                     {/* ACTION: hanya muncul 1x per risk (rowSpan) */}
-                    {(isPlanningMode || isMoveToDraftMode || isDeleteMode) && apIndex === 0 && (
+                    {(isPlanningMode || isMoveToDraftMode) && apIndex === 0 && (
                       <td
                         rowSpan={rowSpan}
                         className="px-3 py-2 border border-gray-200 text-center align-top"
@@ -268,29 +276,80 @@ export default function DataTableAudit({
                             </button>
                           )}
 
-                          {/* Delete button - hanya muncul saat Delete Data mode */}
-                          {isDeleteMode && onDelete && departmentApi && (
+                        </div>
+                      </td>
+                    )}
+
+                    {isDeleteMode && apIndex === 0 && (
+                      <td
+                        rowSpan={rowSpan}
+                        className="px-3 py-2 border border-gray-200 text-center align-top"
+                      >
+                        <div className="flex flex-col items-center gap-2">
+                          {aps
+                            .filter((apItem) => apItem.ap_id)
+                            .map((apItem) => {
+                              const deleteKey = `ap-${departmentApi}-${apItem.ap_id}`;
+                              return (
+                                <button
+                                  key={apItem.ap_id}
+                                  type="button"
+                                  onClick={() => {
+                                    const label = apItem.ap_code || "this AP";
+                                    if (
+                                      confirm(
+                                        `Delete ${label}? AP codes after it will be renumbered automatically.`
+                                      )
+                                    ) {
+                                      setDeleting((prev) => ({ ...prev, [deleteKey]: true }));
+                                      onDeleteAp?.(apItem, departmentApi).finally(() => {
+                                        setDeleting((prev) => {
+                                          const next = { ...prev };
+                                          delete next[deleteKey];
+                                          return next;
+                                        });
+                                      });
+                                    }
+                                  }}
+                                  disabled={!onDeleteAp || !departmentApi || deleting[deleteKey]}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 text-xs font-medium shadow-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={`Delete AP ${apItem.ap_code || ""}`}
+                                >
+                                  <Trash2 size={14} />
+                                  <span>{deleting[deleteKey] ? "Deleting..." : `Delete ${apItem.ap_code || "AP"}`}</span>
+                                </button>
+                              );
+                            })}
+                          {aps.every((apItem) => !apItem.ap_id) && onDelete && departmentApi && (
                             <button
                               type="button"
                               onClick={() => {
-                                const deleteKey = `${departmentApi}-${risk.risk_id}`;
-                                if (confirm(`Are you sure you want to delete this draft record?`)) {
+                                const deleteKey = `risk-${departmentApi}-${risk.risk_id}`;
+                                if (
+                                  confirm(
+                                    `Delete entire draft risk ${risk.risk_id_no} and all its APs?`
+                                  )
+                                ) {
                                   setDeleting((prev) => ({ ...prev, [deleteKey]: true }));
                                   onDelete(risk.risk_id, departmentApi).finally(() => {
                                     setDeleting((prev) => {
-                                      const newState = { ...prev };
-                                      delete newState[deleteKey];
-                                      return newState;
+                                      const next = { ...prev };
+                                      delete next[deleteKey];
+                                      return next;
                                     });
                                   });
                                 }
                               }}
-                              disabled={deleting[`${departmentApi}-${risk.risk_id}`]}
+                              disabled={deleting[`risk-${departmentApi}-${risk.risk_id}`]}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 text-xs font-medium shadow-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={`Delete draft record ${risk.risk_id_no}`}
+                              title={`Delete draft risk ${risk.risk_id_no}`}
                             >
                               <Trash2 size={14} />
-                              <span>{deleting[`${departmentApi}-${risk.risk_id}`] ? "Deleting..." : "Delete"}</span>
+                              <span>
+                                {deleting[`risk-${departmentApi}-${risk.risk_id}`]
+                                  ? "Deleting..."
+                                  : "Delete Risk"}
+                              </span>
                             </button>
                           )}
                         </div>
