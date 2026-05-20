@@ -11,11 +11,12 @@ function ReportPageContent() {
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
   const handleCreateReport = () => {
-    // Buka halaman preview (cover) di tab baru, di sana akan muncul popup print
+    // Buka preview dalam mode auto-download Word.
     const url = new URL("/Page/report/preview", window.location.origin);
     if (Number.isFinite(year)) {
       url.searchParams.set("year", String(year));
     }
+    url.searchParams.set("download", "word");
     window.open(url.toString(), "_blank");
   };
 
@@ -78,7 +79,7 @@ function ReportPageContent() {
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              Create Report
+              Create & Download Word
             </button>
           </div>
         </main>

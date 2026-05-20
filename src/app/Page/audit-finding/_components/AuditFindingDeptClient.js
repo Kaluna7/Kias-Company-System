@@ -1111,7 +1111,7 @@ export default function AuditFindingDeptClient({
   }, []);
 
   return (
-    <main className="flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-[#E6F0FA]">
+    <main className="min-h-screen w-full bg-[#E6F0FA]">
       <div className="fixed z-40 top-3 left-4">
         <button
           onClick={handleBack}
@@ -1342,7 +1342,7 @@ export default function AuditFindingDeptClient({
 
       {/* Content */}
       <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
+        className={`flex min-h-screen flex-col px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
           isHeaderCollapsed ? "pt-16" : "pt-32"
         }`}
       >
@@ -1432,13 +1432,16 @@ export default function AuditFindingDeptClient({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="mb-4">
           <StickyHorizontalScrollTable
-            className="min-h-0 flex-1"
+            className="w-full"
             colGroup={AUDIT_FINDING_COL_GROUP}
             tableClassName="border-collapse text-xs"
             tableStyle={{ tableLayout: "fixed", width: AUDIT_FINDING_TABLE_WIDTH, minWidth: AUDIT_FINDING_TABLE_WIDTH }}
             measureDeps={[displayTableData.length, isEditMode, loading]}
+            internalVerticalScroll={false}
+            stickyHeader
+            stickyHeaderTopClass={isHeaderCollapsed ? "top-12" : "top-28"}
             header={
               <thead>
                 <tr className="bg-gray-100">

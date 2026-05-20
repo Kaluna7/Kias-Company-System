@@ -78,11 +78,13 @@ const EXECUTIVE_SUMMARY_PARAGRAPH_SPLIT_CHARS = 320;
 const CONCLUSION_PARAGRAPH_SPLIT_CHARS = 280;
 const SOP_RELATED_ROW_SPLIT_CHARS = 260;
 const SOP_REVIEW_ROW_SPLIT_CHARS = 0;
-const AUDIT_RISK_DETAILS_SPLIT_CHARS = 150;
+const AUDIT_RISK_DETAILS_SPLIT_CHARS = 90;
 const AUDIT_SUBSTANTIVE_TEST_SPLIT_CHARS = 0;
 const AUDIT_METHODOLOGY_SPLIT_CHARS = 0;
 const AUDIT_FINDING_RESULT_SPLIT_CHARS = 0;
-const AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS = 150;
+const AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS = 80;
+const AUDIT_AUDITEE_COMMENT_SPLIT_CHARS = 55;
+const AUDIT_FOLLOW_UP_DETAIL_SPLIT_CHARS = 55;
 
 function escapeHtml(text) {
   return String(text ?? "")
@@ -173,12 +175,16 @@ function expandAuditRowsForPagination(rows = []) {
     const methodologyChunks = splitTableCellText(row.methodology, AUDIT_METHODOLOGY_SPLIT_CHARS);
     const findingResultChunks = splitTableCellText(row.findingResult, AUDIT_FINDING_RESULT_SPLIT_CHARS);
     const findingDescriptionChunks = splitTableCellText(row.findingDescription, AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS);
+    const auditeeCommentChunks = splitTableCellText(row.auditeeComment, AUDIT_AUDITEE_COMMENT_SPLIT_CHARS);
+    const followUpDetailChunks = splitTableCellText(row.followUpDetail, AUDIT_FOLLOW_UP_DETAIL_SPLIT_CHARS);
     const parts = Math.max(
       riskDetailsChunks.length,
       substantiveTestChunks.length,
       methodologyChunks.length,
       findingResultChunks.length,
       findingDescriptionChunks.length,
+      auditeeCommentChunks.length,
+      followUpDetailChunks.length,
       1,
     );
 
@@ -193,8 +199,8 @@ function expandAuditRowsForPagination(rows = []) {
       methodology: methodologyChunks[idx] || "",
       findingResult: findingResultChunks[idx] || "",
       findingDescription: findingDescriptionChunks[idx] || "",
-      auditeeComment: idx === 0 ? row.auditeeComment : "",
-      followUpDetail: idx === 0 ? row.followUpDetail : "",
+      auditeeComment: auditeeCommentChunks[idx] || "",
+      followUpDetail: followUpDetailChunks[idx] || "",
       __continuedRow: idx > 0,
     }));
   });
@@ -811,6 +817,8 @@ function formatExecutiveSummaryItem(item) {
 function ReportPreviewPageContent() {
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
+  const downloadMode = searchParams.get("download");
+  const shouldAutoDownloadWord = downloadMode === "word";
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
   const [auditCoverage, setAuditCoverage] = useState(
@@ -858,6 +866,7 @@ function ReportPreviewPageContent() {
 
   const pendingFieldUpdatesRef = useRef({});
   const fieldUpdateTimerRef = useRef(null);
+  const hasAutoDownloadedWordRef = useRef(false);
 
   const flushPendingFieldUpdates = () => {
     if (fieldUpdateTimerRef.current) {
@@ -1820,7 +1829,7 @@ function ReportPreviewPageContent() {
   const FINDING_SOP_TABLE_HEIGHT_PX = 660;
   // Audit table dibuat sedikit lebih konservatif karena kolom lebih banyak dan
   // teks panjang lebih mudah mendorong konten mendekati footer.
-  const FINDING_AUDIT_TABLE_HEIGHT_PX = 620;
+  const FINDING_AUDIT_TABLE_HEIGHT_PX = 560;
   const FINDING_FIRST_PAGE_TOP_BUFFER_PX = 48;
   const FINDING_FIRST_PAGE_EXEC_SUMMARY_BUFFER_PX = 84;
   const FINDING_TABLE_ROW_GUARD_PX = 6;
@@ -1830,8 +1839,8 @@ function ReportPreviewPageContent() {
     () =>
       findingSections.map((section) => ({
         ...section,
-        sopRows: [...(section.sopRows || [])],
-        auditRows: [...(section.auditRows || [])],
+        sopRows: expandSopRowsForPagination(section.sopRows || []),
+        auditRows: expandAuditRowsForPagination(section.auditRows || []),
       })),
     [findingSections],
   );
@@ -1867,6 +1876,17 @@ function ReportPreviewPageContent() {
       let currentLimit = Math.max(120, firstLimitHeight - FINDING_TABLE_PAGE_END_GUARD_PX);
       for (let i = 0; i < rows.length; i++) {
         const h = (heights[i] ?? 40) + FINDING_TABLE_ROW_GUARD_PX;
+        if (h > currentLimit && chunk.length > 0) {
+          chunks.push({ rows: chunk, height: sum, limit: currentLimit });
+          chunk = [];
+          sum = 0;
+          currentLimit = Math.max(120, nextLimitHeight - FINDING_TABLE_PAGE_END_GUARD_PX);
+        }
+        if (h > currentLimit && chunk.length === 0) {
+          // Satu baris lebih tinggi dari halaman — tetap taruh sendiri supaya tidak menarik baris lain.
+          chunks.push({ rows: [rows[i]], height: h, limit: currentLimit });
+          continue;
+        }
         if (sum + h > currentLimit && chunk.length > 0) {
           chunks.push({ rows: chunk, height: sum, limit: currentLimit });
           chunk = [];
@@ -2408,6 +2428,126 @@ function ReportPreviewPageContent() {
   const handlePrint = () => {
     window.print();
   };
+
+  const inlineComputedStyles = (sourceNode, targetNode) => {
+    if (!(sourceNode instanceof Element) || !(targetNode instanceof Element)) return;
+    const computed = window.getComputedStyle(sourceNode);
+    const styleText = Array.from(computed)
+      .map((prop) => `${prop}:${computed.getPropertyValue(prop)};`)
+      .join("");
+    targetNode.setAttribute("style", styleText);
+
+    const sourceChildren = Array.from(sourceNode.children);
+    const targetChildren = Array.from(targetNode.children);
+    for (let i = 0; i < sourceChildren.length; i += 1) {
+      inlineComputedStyles(sourceChildren[i], targetChildren[i]);
+    }
+  };
+
+  const toAbsoluteUrl = (src) => {
+    try {
+      return new URL(src, window.location.origin).toString();
+    } catch {
+      return src;
+    }
+  };
+
+  const convertImageToDataUrl = async (imgEl) => {
+    const src = imgEl.getAttribute("src");
+    if (!src || src.startsWith("data:")) return;
+    const absoluteSrc = toAbsoluteUrl(src);
+    try {
+      const response = await fetch(absoluteSrc);
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      if (typeof dataUrl === "string") {
+        imgEl.setAttribute("src", dataUrl);
+      }
+    } catch {
+      imgEl.setAttribute("src", absoluteSrc);
+    }
+  };
+
+  const handleDownloadWord = async () => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    const pageNodes = Array.from(document.querySelectorAll(".break-after-page"));
+    if (pageNodes.length === 0) return;
+
+    const clonedPages = pageNodes
+      .map((node) => {
+        const clone = node.cloneNode(true);
+        if (!(clone instanceof HTMLElement)) return null;
+        clone.querySelectorAll(".print\\:hidden, [data-no-export='true']").forEach((el) => el.remove());
+        inlineComputedStyles(node, clone);
+        return clone;
+      })
+      .filter(Boolean);
+    if (clonedPages.length === 0) return;
+
+    await Promise.all(
+      clonedPages.flatMap((page) =>
+        Array.from(page.querySelectorAll("img")).map((img) => convertImageToDataUrl(img)),
+      ),
+    );
+
+    const pagesHtml = clonedPages.map((node) => node.outerHTML).join("\n");
+
+    const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="utf-8" />
+  <title>KIAS Consolidated Report ${year}</title>
+  <!--[if gte mso 9]>
+  <xml>
+    <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:DoNotOptimizeForBrowser/>
+    </w:WordDocument>
+  </xml>
+  <![endif]-->
+  <style>
+    @page { size: A4; margin: 0; }
+    body { margin: 0; padding: 0; background: #ffffff; }
+    table { border-collapse: collapse; }
+    .break-after-page { page-break-after: always; break-after: page; }
+    .break-after-page:last-child { page-break-after: auto; break-after: auto; }
+  </style>
+</head>
+<body>
+${pagesHtml}
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `KIAS-Consolidated-Report-${year}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  useEffect(() => {
+    if (!shouldAutoDownloadWord || hasAutoDownloadedWordRef.current) return;
+    if (loadingFindings) return;
+    if (findingSections.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      if (hasAutoDownloadedWordRef.current) return;
+      hasAutoDownloadedWordRef.current = true;
+      handleDownloadWord();
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [shouldAutoDownloadWord, loadingFindings, findingSections.length]);
 
   const periodStart = `JANUARY ${year}`;
   const periodEnd = `DECEMBER ${year}`;
@@ -3782,7 +3922,7 @@ function ReportPreviewPageContent() {
                     </thead>
                     <tbody>
                       {page.sopRows.map((row, rIdx) => (
-                        <tr key={`sop-${page.dept.deptKey}-${row.sourceIndex ?? row.no ?? rIdx}`} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
+                        <tr key={`sop-${page.dept.deptKey}-${idx}-${rIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top"}>
                             {row.no}
                           </td>
@@ -3877,7 +4017,7 @@ function ReportPreviewPageContent() {
                     </thead>
                     <tbody>
                       {page.auditRows.map((row, aIdx) => (
-                        <tr key={`audit-${page.dept.deptKey}-${row.sourceIndex ?? row.no ?? aIdx}`} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
+                        <tr key={`audit-${page.dept.deptKey}-${idx}-${aIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top"}>
                             {row.no}
                           </td>
@@ -3905,11 +4045,11 @@ function ReportPreviewPageContent() {
                           <td className={row.__continuedRow ? (row.findingDescription ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
                             {row.findingDescription || ""}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                            {row.__continuedRow ? "" : (row.auditeeComment || "-")}
+                          <td className={row.__continuedRow ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
+                            {row.auditeeComment || (row.__continuedRow ? "" : "-")}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                            {row.__continuedRow ? "" : (row.followUpDetail || "-")}
+                          <td className={row.__continuedRow ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
+                            {row.followUpDetail || (row.__continuedRow ? "" : "-")}
                           </td>
                         </tr>
                       ))}
@@ -4380,14 +4520,14 @@ function ReportPreviewPageContent() {
                             <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.methodology || ""}</td>
                             <td className={row.__continuedRow ? (row.findingResult ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.findingResult || ""}</td>
                             <td className={row.__continuedRow ? (row.findingDescription ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.findingDescription || ""}</td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
+                            <td className={row.__continuedRow ? (row.auditeeComment ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
                               <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                {row.__continuedRow ? "" : (row.auditeeComment || "-")}
+                                {row.auditeeComment || (row.__continuedRow ? "" : "-")}
                               </div>
                             </td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
+                            <td className={row.__continuedRow ? (row.followUpDetail ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
                               <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                {row.__continuedRow ? "" : (row.followUpDetail || "-")}
+                                {row.followUpDetail || (row.__continuedRow ? "" : "-")}
                               </div>
                             </td>
                           </tr>
@@ -4691,13 +4831,22 @@ function ReportPreviewPageContent() {
 
       {/* Tombol print (tidak ikut tercetak) */}
       <div className="mt-4 print:hidden">
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-[#141D38] to-[#2D3A5A] text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg hover:from-[#141D38]/90 hover:to-[#2D3A5A]/90 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2"
-        >
-          Print / Save as PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-[#141D38] to-[#2D3A5A] text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg hover:from-[#141D38]/90 hover:to-[#2D3A5A]/90 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2"
+          >
+            Print / Save as PDF
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadWord}
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg hover:from-emerald-700 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2"
+          >
+            Download Word
+          </button>
+        </div>
       </div>
     </div>
   );

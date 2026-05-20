@@ -13,6 +13,9 @@ export default function StickyHorizontalScrollTable({
   tableStyle,
   className = "",
   measureDeps = [],
+  internalVerticalScroll = true,
+  stickyHeader = false,
+  stickyHeaderTopClass = "top-0",
 }) {
   const panelRef = useRef(null);
   const bodyRef = useRef(null);
@@ -97,11 +100,15 @@ export default function StickyHorizontalScrollTable({
       </div>
       <div
         ref={panelRef}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+        className={`flex min-h-0 flex-1 flex-col rounded-2xl border border-gray-200 bg-white shadow-sm ${
+          internalVerticalScroll ? "overflow-hidden" : "overflow-visible"
+        }`}
       >
         <div
           ref={headerScrollRef}
-          className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className={`shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+            stickyHeader ? `sticky z-30 ${stickyHeaderTopClass}` : ""
+          }`}
           onScroll={() => syncHorizontalScroll("header")}
         >
           <table className={tableClassName} style={tableStyle}>
@@ -110,10 +117,15 @@ export default function StickyHorizontalScrollTable({
           </table>
         </div>
 
-        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div
+          ref={bodyRef}
+          className={`min-h-0 ${internalVerticalScroll ? "flex-1 overflow-y-auto" : "overflow-y-visible"} overflow-x-hidden`}
+        >
           <div
             ref={xScrollRef}
-            className="overflow-x-auto overflow-y-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className={`overflow-x-auto overflow-y-visible ${
+              internalVerticalScroll ? "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" : ""
+            }`}
             onScroll={() => syncHorizontalScroll("content")}
           >
             <table ref={tableRef} className={tableClassName} style={tableStyle}>
@@ -123,14 +135,16 @@ export default function StickyHorizontalScrollTable({
           </div>
         </div>
 
-        <div
-          ref={hBarRef}
-          className="sticky bottom-0 z-20 shrink-0 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-gray-50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
-          onScroll={() => syncHorizontalScroll("bar")}
-          aria-label="Scroll table horizontally"
-        >
-          <div style={{ width: tableScrollWidth, height: 16 }} />
-        </div>
+        {internalVerticalScroll && (
+          <div
+            ref={hBarRef}
+            className="sticky bottom-0 z-20 shrink-0 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-gray-50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+            onScroll={() => syncHorizontalScroll("bar")}
+            aria-label="Scroll table horizontally"
+          >
+            <div style={{ width: tableScrollWidth, height: 16 }} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -21,7 +21,14 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
   const { data: session } = useSession();
   const router = useRouter();
   const role = (session?.user?.role || "").toLowerCase();
-  const canEditPublished = role === "reviewer" || role === "admin";
+  const userIdentity = String(
+    session?.user?.username || session?.user?.name || session?.user?.email || "",
+  )
+    .trim()
+    .toLowerCase();
+  const isAdminB = role === "adminb" || userIdentity === "adminb" || userIdentity.startsWith("adminb@");
+  const canEditPublished = role === "reviewer" || role === "admin" || isAdminB;
+  const canEditReportDates = canEditPublished;
 
   const [rows, setRows] = useState(initialRows);
   const [scheduleData] = useState(initialScheduleData);
@@ -41,8 +48,12 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
 
   const [periodDatePickerOpen, setPeriodDatePickerOpen] = useState(false);
   const [selectedApiPath, setSelectedApiPath] = useState("finance");
+  const [selectedMetaId, setSelectedMetaId] = useState(null);
   const [tempPeriodStartDate, setTempPeriodStartDate] = useState("");
   const [tempPeriodEndDate, setTempPeriodEndDate] = useState("");
+  const [tempFieldworkStartDate, setTempFieldworkStartDate] = useState("");
+  const [tempFieldworkEndDate, setTempFieldworkEndDate] = useState("");
+  const [savingReportDates, setSavingReportDates] = useState(false);
 
   const getScheduleDepartmentId = (deptName) => {
     const deptMap = {
@@ -84,12 +95,26 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     }
   };
 
-  const openPeriodDatePicker = (apiPath, startVal, endVal) => {
-    const startDate = startVal && startVal !== "#####" ? String(startVal).slice(0, 10) : "";
-    const endDate = endVal && endVal !== "#####" ? String(endVal).slice(0, 10) : "";
-    setSelectedApiPath(apiPath || "finance");
-    setTempPeriodStartDate(startDate);
-    setTempPeriodEndDate(endDate);
+  const normalizeDateInput = (value) => {
+    if (!value || value === "#####" || value === "no-period") return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  };
+
+  const openPeriodDatePicker = (group) => {
+    const item = group?.items?.[0] || {};
+    const metaId = item?._detail?.meta?.id ?? null;
+    setSelectedApiPath(group?.apiPath || item?.apiPath || "finance");
+    setSelectedMetaId(metaId != null ? Number(metaId) : null);
+    setTempPeriodStartDate(normalizeDateInput(group?.audit_period_start || item?.audit_period_start));
+    setTempPeriodEndDate(normalizeDateInput(group?.audit_period_end || item?.audit_period_end));
+    setTempFieldworkStartDate(
+      normalizeDateInput(item?._detail?.meta?.audit_fieldwork_start_date || item?.audit_fieldwork_start),
+    );
+    setTempFieldworkEndDate(
+      normalizeDateInput(item?._detail?.meta?.audit_fieldwork_end_date || item?.audit_fieldwork_end),
+    );
     setPeriodDatePickerOpen(true);
   };
 
@@ -119,7 +144,20 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       toast.show(`Audit Period End must be on/before ${selectedScheduleBounds.max}`, "error");
       return;
     }
+    if (tempFieldworkStartDate && tempFieldworkEndDate && new Date(tempFieldworkStartDate) > new Date(tempFieldworkEndDate)) {
+      toast.show("Audit Fieldwork Start cannot be after Audit Fieldwork End!", "error");
+      return;
+    }
+    if (tempFieldworkStartDate && tempPeriodStartDate && tempFieldworkStartDate < tempPeriodStartDate) {
+      toast.show("Audit Fieldwork Start must be on/after Audit Period Start!", "error");
+      return;
+    }
+    if (tempFieldworkEndDate && tempPeriodEndDate && tempFieldworkEndDate > tempPeriodEndDate) {
+      toast.show("Audit Fieldwork End must be on/before Audit Period End!", "error");
+      return;
+    }
     try {
+      setSavingReportDates(true);
       const res = await fetch(`/api/SopReview/${selectedApiPath}/audit-period`, {
         method: "POST",
         credentials: "include",
@@ -131,18 +169,60 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
         toast.show("Failed to save data: " + (data.error || "Unknown error"), "error");
         return;
       }
+
+      if (selectedMetaId != null && (tempFieldworkStartDate || tempFieldworkEndDate)) {
+        const patchRes = await fetch(`/api/SopReview/${selectedApiPath}/published`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            updates: [
+              {
+                meta_id: selectedMetaId,
+                meta: {
+                  audit_fieldwork_start_date: tempFieldworkStartDate || null,
+                  audit_fieldwork_end_date: tempFieldworkEndDate || null,
+                },
+                steps: [],
+              },
+            ],
+          }),
+        });
+        const patchData = await patchRes.json().catch(() => ({}));
+        if (!patchRes.ok || !patchData.success) {
+          toast.show(
+            "Audit period saved, but fieldwork update failed: " + (patchData.error || patchRes.status),
+            "error",
+          );
+          return;
+        }
+      }
+
       setRows((prev) =>
         prev.map((r) =>
           r.apiPath === selectedApiPath
-            ? { ...r, audit_period_start: tempPeriodStartDate, audit_period_end: tempPeriodEndDate }
+            ? {
+                ...r,
+                audit_period_start: tempPeriodStartDate,
+                audit_period_end: tempPeriodEndDate,
+                meta: {
+                  ...(r.meta || {}),
+                  audit_fieldwork_start_date: tempFieldworkStartDate || null,
+                  audit_fieldwork_end_date: tempFieldworkEndDate || null,
+                },
+                audit_fieldwork_start_date: tempFieldworkStartDate || null,
+                audit_fieldwork_end_date: tempFieldworkEndDate || null,
+              }
             : r
         )
       );
       setPeriodDatePickerOpen(false);
-      toast.show("Audit Period dates saved successfully!", "success");
+      toast.show("Audit Period & Fieldwork dates saved successfully!", "success");
     } catch (err) {
       console.error("Error saving audit period:", err);
       toast.show("Error saving data: " + err.message, "error");
+    } finally {
+      setSavingReportDates(false);
     }
   };
 
@@ -177,7 +257,11 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       const publishedAtStr = publishedAt ? String(publishedAt) : "no-publish";
       const groupKey = `${metaId}|||${periodStart}|||${periodEnd}|||${r.department}|||${publishedAtStr}|||${r.apiPath}`;
       if (!groups[groupKey]) {
-        const auditFieldworkStart = periodStart !== "no-period" ? formatDateForDisplay(periodStart) : "#####";
+        const auditFieldworkStart = meta?.audit_fieldwork_start_date
+          ? formatDateForDisplay(meta.audit_fieldwork_start_date)
+          : periodStart !== "no-period"
+            ? formatDateForDisplay(periodStart)
+            : "#####";
         const auditFieldworkEnd = meta?.audit_fieldwork_end_date ? formatDateForDisplay(meta.audit_fieldwork_end_date) : "#####";
         const auditFieldworkEndDate = meta?.audit_fieldwork_end_date ? new Date(meta.audit_fieldwork_end_date) : null;
         const auditPeriodEndDate = periodEnd !== "no-period" ? new Date(periodEnd) : null;
@@ -196,7 +280,11 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
           published_at: publishedAt,
         };
       }
-      const itemAuditFieldworkStart = periodStart !== "no-period" ? formatDateForDisplay(periodStart) : "#####";
+      const itemAuditFieldworkStart = meta?.audit_fieldwork_start_date
+        ? formatDateForDisplay(meta.audit_fieldwork_start_date)
+        : periodStart !== "no-period"
+          ? formatDateForDisplay(periodStart)
+          : "#####";
       const itemAuditFieldworkEnd = meta?.audit_fieldwork_end_date ? formatDateForDisplay(meta.audit_fieldwork_end_date) : "#####";
       const auditFieldworkEndDate = meta?.audit_fieldwork_end_date ? new Date(meta.audit_fieldwork_end_date) : null;
       const auditPeriodEndDate = periodEnd !== "no-period" ? new Date(periodEnd) : null;
@@ -964,12 +1052,22 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                         {item.reviewer_comments || ""}
                       </td>
                       <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center">
-                        <button
-                          className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
-                          onClick={() => handleView(row)}
-                        >
-                          <span>View</span>
-                        </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          {canEditReportDates && (
+                            <button
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
+                              onClick={() => openPeriodDatePicker(row)}
+                            >
+                              <span>Edit Dates</span>
+                            </button>
+                          )}
+                          <button
+                            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
+                            onClick={() => handleView(row)}
+                          >
+                            <span>View</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1484,18 +1582,46 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                   max={selectedScheduleBounds.max}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Audit Fieldwork Start
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={tempFieldworkStartDate}
+                  onChange={(e) => setTempFieldworkStartDate(e.target.value)}
+                  min={tempPeriodStartDate || selectedScheduleBounds.min}
+                  max={tempPeriodEndDate || selectedScheduleBounds.max}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Audit Fieldwork End
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={tempFieldworkEndDate}
+                  onChange={(e) => setTempFieldworkEndDate(e.target.value)}
+                  min={tempFieldworkStartDate || tempPeriodStartDate || selectedScheduleBounds.min}
+                  max={tempPeriodEndDate || selectedScheduleBounds.max}
+                />
+              </div>
               <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-4 border-t border-slate-200">
                 <button
-                  className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-sm"
+                  className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-sm disabled:opacity-60"
                   onClick={() => setPeriodDatePickerOpen(false)}
+                  disabled={savingReportDates}
                 >
                   Cancel
                 </button>
                 <button
-                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm shadow-sm"
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm shadow-sm disabled:opacity-60"
                   onClick={saveAuditPeriod}
+                  disabled={savingReportDates}
                 >
-                  Save
+                  {savingReportDates ? "Saving..." : "Save"}
                 </button>
               </div>
             </div>
