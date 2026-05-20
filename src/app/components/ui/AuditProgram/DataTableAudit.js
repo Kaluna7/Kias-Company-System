@@ -20,6 +20,7 @@ export default function DataTableAudit({
 }) {
   const [deleting, setDeleting] = useState({});
   const bodyRef = useRef(null);
+  const headerScrollRef = useRef(null);
   const xScrollRef = useRef(null);
   const hBarRef = useRef(null);
   const tableRef = useRef(null);
@@ -30,9 +31,14 @@ export default function DataTableAudit({
     if (scrollSyncLock.current) return;
     scrollSyncLock.current = true;
     const left =
-      source === "bar" ? hBarRef.current?.scrollLeft ?? 0 : xScrollRef.current?.scrollLeft ?? 0;
+      source === "bar"
+        ? (hBarRef.current?.scrollLeft ?? 0)
+        : source === "header"
+          ? (headerScrollRef.current?.scrollLeft ?? 0)
+          : (xScrollRef.current?.scrollLeft ?? 0);
     if (xScrollRef.current) xScrollRef.current.scrollLeft = left;
     if (hBarRef.current) hBarRef.current.scrollLeft = left;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = left;
     requestAnimationFrame(() => {
       scrollSyncLock.current = false;
     });
@@ -135,6 +141,87 @@ export default function DataTableAudit({
   const headerThClass =
     "px-3 py-2 border border-gray-200 text-center align-top bg-gray-50";
 
+  const showActionCol =
+    isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode;
+
+  const tableClassName =
+    "min-w-[1280px] w-full border-separate border-spacing-0 text-xs sm:text-sm text-gray-700";
+  const tableStyle = { tableLayout: "fixed" };
+
+  const tableColGroup = (
+    <colgroup>
+      <col style={{ width: 48 }} />
+      <col style={{ width: 100 }} />
+      <col style={{ width: 180 }} />
+      <col style={{ width: 200 }} />
+      <col style={{ width: 100 }} />
+      <col style={{ width: 100 }} />
+      <col style={{ width: 130 }} />
+      <col style={{ width: 150 }} />
+      <col style={{ width: 200 }} />
+      <col style={{ width: 120 }} />
+      <col style={{ width: 150 }} />
+      <col style={{ width: 120 }} />
+      {showActionCol && <col style={{ width: 130 }} />}
+    </colgroup>
+  );
+
+  const tableHeader = (
+    <thead>
+      <tr className="bg-gray-50 text-gray-700 font-semibold">
+        <th
+          rowSpan={2}
+          className={`${headerThClass} cursor-pointer select-none`}
+          onClick={() => handleSort("risk_id")}
+        >
+          No{sortIndicator("risk_id")}
+        </th>
+        <th rowSpan={2} className={headerThClass}>
+          Risk ID No.
+        </th>
+        <th rowSpan={2} className={headerThClass}>
+          Risk Description
+        </th>
+        <th rowSpan={2} className={headerThClass}>
+          Risk Details
+        </th>
+        <th rowSpan={2} className={headerThClass}>
+          Owner
+        </th>
+        <th colSpan={4} className={headerThClass}>
+          Audit Program
+        </th>
+        <th colSpan={3} className={headerThClass}>
+          Sampling
+        </th>
+        {showActionCol && (
+          <th rowSpan={2} className={headerThClass}>
+            Action
+          </th>
+        )}
+      </tr>
+      <tr className="bg-gray-50 text-gray-700 font-semibold">
+        <th
+          className={`${headerThClass} cursor-pointer select-none`}
+          onClick={() => handleSort("ap_code")}
+        >
+          AP Code{sortIndicator("ap_code")}
+        </th>
+        <th
+          className={`${headerThClass} cursor-pointer select-none`}
+          onClick={() => handleSort("substantive_test")}
+        >
+          Substantive Test{sortIndicator("substantive_test")}
+        </th>
+        <th className={headerThClass}>Objective</th>
+        <th className={headerThClass}>Procedures</th>
+        <th className={headerThClass}>Method</th>
+        <th className={headerThClass}>Description</th>
+        <th className={headerThClass}>Application</th>
+      </tr>
+    </thead>
+  );
+
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4 relative">
       {/* Close button di pojok kanan atas */}
@@ -161,88 +248,26 @@ export default function DataTableAudit({
         className="flex flex-col flex-1 min-h-0 rounded-2xl shadow-sm border border-gray-200 bg-white overflow-hidden"
         style={{ maxHeight: "calc(100dvh - 7.5rem)" }}
       >
+        <div
+          ref={headerScrollRef}
+          className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 shadow-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={() => syncHorizontalScroll("header")}
+        >
+          <table className={tableClassName} style={tableStyle}>
+            {tableColGroup}
+            {tableHeader}
+          </table>
+        </div>
+
         <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           <div
             ref={xScrollRef}
             className="overflow-x-auto overflow-y-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             onScroll={() => syncHorizontalScroll("content")}
           >
-            <table
-              ref={tableRef}
-              className="min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700"
-              style={{ tableLayout: "auto" }}
-            >
-          <thead className="sticky top-0 z-20 shadow-[0_1px_0_0_rgb(229,231,235)]">
-            <tr className="bg-gray-50 text-gray-700 font-semibold">
-              <th
-                rowSpan="2"
-                className={`${headerThClass} cursor-pointer select-none`}
-                onClick={() => handleSort("risk_id")}
-              >
-                No{sortIndicator("risk_id")}
-              </th>
-              <th rowSpan="2" className={headerThClass}>
-                Risk ID No.
-              </th>
-              <th
-                rowSpan="2"
-                className={headerThClass}
-                style={{ minWidth: "150px", maxWidth: "250px" }}
-              >
-                Risk Description
-              </th>
-              <th rowSpan="2" className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
-                Risk Details
-              </th>
-              <th rowSpan="2" className={headerThClass} style={{ minWidth: "100px", maxWidth: "150px" }}>
-                Owner
-              </th>
-              <th colSpan="4" className={headerThClass}>
-                Audit Program
-              </th>
-              <th colSpan="3" className={headerThClass}>
-                Sampling
-              </th>
-              {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
-                <th rowSpan="2" className={headerThClass}>
-                  Action
-                </th>
-              )}
-            </tr>
-
-            <tr className="bg-gray-50 text-gray-700 font-semibold">
-              <th
-                className={`${headerThClass} cursor-pointer select-none`}
-                onClick={() => handleSort("ap_code")}
-              >
-                AP Code{sortIndicator("ap_code")}
-              </th>
-              <th
-                className={`${headerThClass} cursor-pointer select-none`}
-                onClick={() => handleSort("substantive_test")}
-                style={{ minWidth: "120px", maxWidth: "180px" }}
-              >
-                Substantive Test{sortIndicator("substantive_test")}
-              </th>
-              <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
-                Objective
-              </th>
-              <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
-                Procedures
-              </th>
-              <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
-                Method
-              </th>
-              <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
-                Description
-              </th>
-              <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
-                Application
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
+            <table ref={tableRef} className={tableClassName} style={tableStyle}>
+              {tableColGroup}
+              <tbody>
             {grouped.length > 0 ? (
               grouped.map((group, groupIndex) => {
                 const { risk, aps } = group;
