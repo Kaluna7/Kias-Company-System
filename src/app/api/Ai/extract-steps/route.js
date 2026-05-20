@@ -2,18 +2,35 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 
-const API_KEY = process.env.GOOGLE_API_KEY;
-/** Fixed model for extract-steps only; do not use GOOGLE_AI_MODEL so other features keep their env model. */
-const MODEL = "gemini-3-flash-preview";
-const BASE_URL = process.env.GOOGLE_AI_BASEURL || "https://generativelanguage.googleapis.com/v1beta";
-const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:generateContent`;
+const API_KEY = process.env.OPENAI_API_KEY;
+/** Fixed model for extract-steps only. */
+const MODEL = process.env.OPENAI_EXTRACT_STEPS_MODEL || "gpt-5.4";
+const BASE_URL = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+const OPENAI_URL = `${BASE_URL}/chat/completions`;
 
-async function callGemini(prompt) {
+async function callOpenAI(prompt) {
   try {
-    const body = { contents: [{ parts: [{ text: prompt }] }] };
-    const res = await fetch(GOOGLE_URL, {
+    const body = {
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "You extract SOP procedure steps and must output only JSON array.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 0,
+    };
+
+    const res = await fetch(OPENAI_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-goog-api-key": API_KEY },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
       body: JSON.stringify(body),
     });
     const raw = await res.text().catch(() => "");
@@ -23,7 +40,7 @@ async function callGemini(prompt) {
     } catch (e) {
       data = null;
     }
-    const candidate = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.candidates?.[0]?.text || raw || "";
+    const candidate = data?.choices?.[0]?.message?.content || raw || "";
     return { ok: res.ok, status: res.status, rawResponse: raw, generated: candidate, data };
   } catch (err) {
     return { ok: false, status: 500, error: String(err) };
@@ -103,7 +120,7 @@ function buildExtractStepsPrompt(fullText) {
 export async function POST(req) {
   try {
     if (!API_KEY) {
-      return NextResponse.json({ success: false, error: "Server missing GOOGLE_API_KEY" }, { status: 500 });
+      return NextResponse.json({ success: false, error: "Server missing OPENAI_API_KEY" }, { status: 500 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -121,11 +138,11 @@ export async function POST(req) {
     // Build prompt untuk extract steps
     const prompt = buildExtractStepsPrompt(fullText);
     
-    // Call Gemini AI
-    const aiRes = await callGemini(prompt);
+    // Call OpenAI
+    const aiRes = await callOpenAI(prompt);
     
     if (!aiRes.ok) {
-      console.error("Gemini API error:", aiRes.status, aiRes.error);
+      console.error("OpenAI API error:", aiRes.status, aiRes.error);
       return NextResponse.json({ 
         success: false, 
         error: `AI API error: ${aiRes.status}`,
