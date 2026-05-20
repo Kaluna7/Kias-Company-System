@@ -17,6 +17,7 @@ export default function EvidenceUploadProgressOverlay({
   totalFiles = 0,
   completedFiles = 0,
   errorMessage = "",
+  onCancel,
   onClose,
 }) {
   const [mounted, setMounted] = useState(false);
@@ -124,6 +125,15 @@ export default function EvidenceUploadProgressOverlay({
               />
             </div>
             <p className="text-sm font-bold text-[#141D38] tabular-nums">{pct}%</p>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
           </>
         )}
 

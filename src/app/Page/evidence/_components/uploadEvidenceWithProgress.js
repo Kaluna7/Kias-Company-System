@@ -3,10 +3,11 @@
  * @param {string} url
  * @param {FormData} formData
  * @param {(loaded: number, total: number) => void} [onProgress]
- * @param {{ fileSize?: number }} [options]
+ * @param {{ fileSize?: number, signal?: AbortSignal }} [options]
  */
 export function uploadEvidenceWithProgress(url, formData, onProgress, options = {}) {
   const expectedSize = options.fileSize || 0;
+  const signal = options.signal;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -52,6 +53,14 @@ export function uploadEvidenceWithProgress(url, formData, onProgress, options = 
     xhr.onerror = () => reject(new Error("Koneksi jaringan gagal saat upload."));
     xhr.ontimeout = () => reject(new Error("Upload timeout — coba lagi atau periksa koneksi."));
     xhr.onabort = () => reject(new Error("Upload dibatalkan."));
+
+    if (signal) {
+      if (signal.aborted) {
+        xhr.abort();
+      } else {
+        signal.addEventListener("abort", () => xhr.abort(), { once: true });
+      }
+    }
 
     xhr.send(formData);
   });

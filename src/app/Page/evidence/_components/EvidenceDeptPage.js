@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
@@ -8,6 +8,7 @@ import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
 import { uploadEvidenceWithProgress } from "./uploadEvidenceWithProgress";
 
 const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
+const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
 
 function isAllowedEvidenceFile(file) {
   const name = file?.name || "";
@@ -47,6 +48,7 @@ export default function EvidenceDeptPage({
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [evidenceMeta, setEvidenceMeta] = useState(null);
+  const uploadAbortRef = useRef(null);
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
   const effectiveYear = useMemo(() => {
@@ -204,6 +206,8 @@ export default function EvidenceDeptPage({
       const remainingSlots = 5 - existingCount;
       const rawCount = list.length;
       const selectedFiles = collectUploadFiles(list);
+      const oversizedFiles = selectedFiles.filter((f) => (f?.size || 0) > MAX_EVIDENCE_FILE_BYTES);
+      const selectedWithinSize = selectedFiles.filter((f) => (f?.size || 0) <= MAX_EVIDENCE_FILE_BYTES);
 
       if (selectedFiles.length === 0) {
         setError(
@@ -211,8 +215,12 @@ export default function EvidenceDeptPage({
         );
         return;
       }
+      if (selectedWithinSize.length === 0) {
+        setError("All selected files exceed 8 GB limit.");
+        return;
+      }
 
-      const filesToUpload = selectedFiles.slice(0, remainingSlots);
+      const filesToUpload = selectedWithinSize.slice(0, remainingSlots);
       const skippedUnsupported = rawCount - selectedFiles.length;
 
       setUploadingIndex(index);
@@ -232,6 +240,9 @@ export default function EvidenceDeptPage({
 
       if (skippedUnsupported > 0) {
         setError(`${skippedUnsupported} file(s) skipped (unsupported type).`);
+      }
+      if (oversizedFiles.length > 0) {
+        setError(`${oversizedFiles.length} file(s) skipped (size > 8 GB).`);
       }
       if (selectedFiles.length > remainingSlots) {
         setError(
@@ -258,6 +269,8 @@ export default function EvidenceDeptPage({
       };
 
       try {
+        const abortController = new AbortController();
+        uploadAbortRef.current = abortController;
         for (let fileIndex = 0; fileIndex < filesToUpload.length; fileIndex++) {
           const file = filesToUpload[fileIndex];
           const formData = new FormData();
@@ -296,7 +309,7 @@ export default function EvidenceDeptPage({
                 completedFiles: fileIndex,
               });
             },
-            { fileSize: file.size || 0 },
+            { fileSize: file.size || 0, signal: abortController.signal },
           );
 
           bytesCompleted += file.size || 0;
@@ -345,6 +358,7 @@ export default function EvidenceDeptPage({
           errorMessage: msg,
         });
       } finally {
+        uploadAbortRef.current = null;
         setUploadingIndex(null);
       }
     },
@@ -690,6 +704,15 @@ export default function EvidenceDeptPage({
         totalFiles={uploadOverlay?.totalFiles ?? 0}
         completedFiles={uploadOverlay?.completedFiles ?? 0}
         errorMessage={uploadOverlay?.errorMessage ?? ""}
+        onCancel={
+          uploadOverlay?.phase === "uploading"
+            ? () => {
+                if (uploadAbortRef.current) {
+                  uploadAbortRef.current.abort();
+                }
+              }
+            : undefined
+        }
         onClose={() => setUploadOverlay(null)}
       />
     </main>
