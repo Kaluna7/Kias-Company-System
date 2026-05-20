@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { Pencil, X, Trash2 } from "lucide-react";
 import { compareCode } from "@/app/utils/compareCode";
 
@@ -19,6 +19,25 @@ export default function DataTableAudit({
   departmentApi,
 }) {
   const [deleting, setDeleting] = useState({});
+  const bodyRef = useRef(null);
+  const xScrollRef = useRef(null);
+  const hBarRef = useRef(null);
+  const tableRef = useRef(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(1000);
+  const scrollSyncLock = useRef(false);
+
+  const syncHorizontalScroll = useCallback((source) => {
+    if (scrollSyncLock.current) return;
+    scrollSyncLock.current = true;
+    const left =
+      source === "bar" ? hBarRef.current?.scrollLeft ?? 0 : xScrollRef.current?.scrollLeft ?? 0;
+    if (xScrollRef.current) xScrollRef.current.scrollLeft = left;
+    if (hBarRef.current) hBarRef.current.scrollLeft = left;
+    requestAnimationFrame(() => {
+      scrollSyncLock.current = false;
+    });
+  }, []);
+
   const handleSort = (field) => {
     if (!onChangeSort) return;
     if (sortBy === field) {
@@ -97,6 +116,25 @@ export default function DataTableAudit({
     });
   }, [sortedData]);
 
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const updateWidth = () => setTableScrollWidth(table.scrollWidth);
+    updateWidth();
+
+    const ro = new ResizeObserver(updateWidth);
+    ro.observe(table);
+    window.addEventListener("resize", updateWidth);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  }, [grouped, isPlanningMode, isMoveToDraftMode, isDeleteMode, isEditMode]);
+
+  const headerThClass =
+    "px-3 py-2 border border-gray-200 text-center align-top bg-gray-50";
+
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4 relative">
       {/* Close button di pojok kanan atas */}
@@ -120,61 +158,87 @@ export default function DataTableAudit({
         </div>
       </div>
       <div
-        className="flex-1 h-full min-h-0 overflow-auto rounded-2xl shadow-sm border border-gray-200 bg-white"
+        className="flex flex-col flex-1 min-h-0 rounded-2xl shadow-sm border border-gray-200 bg-white overflow-hidden"
         style={{ maxHeight: "calc(100dvh - 7.5rem)" }}
       >
-        <div className="overflow-x-auto min-h-full">
-          <table className="min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700" style={{ tableLayout: "auto" }}>
-          <thead>
+        <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div
+            ref={xScrollRef}
+            className="overflow-x-auto overflow-y-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            onScroll={() => syncHorizontalScroll("content")}
+          >
+            <table
+              ref={tableRef}
+              className="min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700"
+              style={{ tableLayout: "auto" }}
+            >
+          <thead className="sticky top-0 z-20 shadow-[0_1px_0_0_rgb(229,231,235)]">
             <tr className="bg-gray-50 text-gray-700 font-semibold">
               <th
                 rowSpan="2"
-                className="px-3 py-2 border border-gray-200 text-center cursor-pointer select-none align-top"
+                className={`${headerThClass} cursor-pointer select-none`}
                 onClick={() => handleSort("risk_id")}
               >
                 No{sortIndicator("risk_id")}
               </th>
-              <th
-                rowSpan="2"
-                className="px-3 py-2 border border-gray-200 text-center align-top"
-              >
+              <th rowSpan="2" className={headerThClass}>
                 Risk ID No.
               </th>
               <th
                 rowSpan="2"
-                className="px-3 py-2 border border-gray-200 text-center align-top"
+                className={headerThClass}
                 style={{ minWidth: "150px", maxWidth: "250px" }}
               >
                 Risk Description
               </th>
-              <th rowSpan="2" className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "150px", maxWidth: "300px" }}>Risk Details</th>
-              <th rowSpan="2" className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "100px", maxWidth: "150px" }}>Owner</th>
-              <th colSpan="4" className="px-3 py-2 border border-gray-200 text-center align-top">Audit Program</th>
-              <th colSpan="3" className="px-3 py-2 border border-gray-200 text-center align-top">Sampling</th>
+              <th rowSpan="2" className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
+                Risk Details
+              </th>
+              <th rowSpan="2" className={headerThClass} style={{ minWidth: "100px", maxWidth: "150px" }}>
+                Owner
+              </th>
+              <th colSpan="4" className={headerThClass}>
+                Audit Program
+              </th>
+              <th colSpan="3" className={headerThClass}>
+                Sampling
+              </th>
               {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
-                <th rowSpan="2" className="px-3 py-2 border border-gray-200 text-center align-top">Action</th>
+                <th rowSpan="2" className={headerThClass}>
+                  Action
+                </th>
               )}
             </tr>
 
             <tr className="bg-gray-50 text-gray-700 font-semibold">
               <th
-                className="px-3 py-2 border border-gray-200 text-center cursor-pointer select-none align-top"
+                className={`${headerThClass} cursor-pointer select-none`}
                 onClick={() => handleSort("ap_code")}
               >
                 AP Code{sortIndicator("ap_code")}
               </th>
               <th
-                className="px-3 py-2 border border-gray-200 text-center cursor-pointer select-none align-top"
+                className={`${headerThClass} cursor-pointer select-none`}
                 onClick={() => handleSort("substantive_test")}
                 style={{ minWidth: "120px", maxWidth: "180px" }}
               >
                 Substantive Test{sortIndicator("substantive_test")}
               </th>
-              <th className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "150px", maxWidth: "250px" }}>Objective</th>
-              <th className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "150px", maxWidth: "300px" }}>Procedures</th>
-              <th className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "120px", maxWidth: "180px" }}>Method</th>
-              <th className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "150px", maxWidth: "250px" }}>Description</th>
-              <th className="px-3 py-2 border border-gray-200 text-center align-top" style={{ minWidth: "120px", maxWidth: "180px" }}>Application</th>
+              <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
+                Objective
+              </th>
+              <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
+                Procedures
+              </th>
+              <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
+                Method
+              </th>
+              <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
+                Description
+              </th>
+              <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
+                Application
+              </th>
             </tr>
           </thead>
 
@@ -385,6 +449,15 @@ export default function DataTableAudit({
             )}
           </tbody>
         </table>
+          </div>
+        </div>
+        <div
+          ref={hBarRef}
+          className="shrink-0 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-gray-50"
+          onScroll={() => syncHorizontalScroll("bar")}
+          aria-label="Scroll table horizontally"
+        >
+          <div style={{ width: tableScrollWidth, height: 14 }} />
         </div>
       </div>
     </div>
