@@ -160,6 +160,7 @@ export async function POST(req, { params }) {
     const session = await getServerSession(authOptions);
     const role = (session?.user?.role || "").toLowerCase();
     const canEditFinalStatus = role === "admin" || role === "reviewer";
+    const canEditReviewerFields = role === "admin" || role === "reviewer";
 
     const client = await pool.connect();
     try {
@@ -184,13 +185,23 @@ export async function POST(req, { params }) {
 
       await client.query("BEGIN");
 
+      const prevMetaR = await client.query(
+        `SELECT final_status, review, review_date FROM ${metaTable} ORDER BY id DESC LIMIT 1`,
+      );
+      const prevMeta = prevMetaR.rows[0] || null;
+
       // Final status: hanya admin/reviewer boleh mengubah; user lain pertahankan nilai terakhir (sebelum DELETE).
       let preservedFinalStatus = null;
       if (!canEditFinalStatus) {
-        const prevR = await client.query(
-          `SELECT final_status FROM ${metaTable} ORDER BY id DESC LIMIT 1`
-        );
-        preservedFinalStatus = prevR.rows[0]?.final_status ?? null;
+        preservedFinalStatus = prevMeta?.final_status ?? null;
+      }
+
+      // Review / review date: hanya admin/reviewer boleh mengubah.
+      let reviewToSave = review || null;
+      let reviewDateToSave = review_date || null;
+      if (!canEditReviewerFields) {
+        reviewToSave = prevMeta?.review ?? null;
+        reviewDateToSave = prevMeta?.review_date ?? null;
       }
 
       // If replace mode, delete all existing data first
@@ -219,8 +230,8 @@ export async function POST(req, { params }) {
         report_as || null,
         prepare || null,
         prepare_date || null,
-        review || null,
-        review_date || null,
+        reviewToSave,
+        reviewDateToSave,
       ];
       const r = await client.query(q, vals);
       await client.query("COMMIT");

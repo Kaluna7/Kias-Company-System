@@ -265,7 +265,7 @@ export async function PUT(req, { params }) {
             {
               success: false,
               error:
-                "Publish requires both Preparer Status and Final Status to be COMPLETE. Save the header on Audit Finding first.",
+                "Publish requires both Preparer Status and Final Status to be Complete. Save the header on Audit Finding first.",
             },
             { status: 403 },
           );

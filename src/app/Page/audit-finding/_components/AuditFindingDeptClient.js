@@ -138,6 +138,7 @@ export default function AuditFindingDeptClient({
   const isUser = role === "user";
   const canPublish = isAdmin || isReviewer;
   const canEditFinalStatus = isAdmin || isReviewer;
+  const canEditReviewerFields = isAdmin || isReviewer;
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
   const auditYear = useMemo(() => {
@@ -183,7 +184,7 @@ export default function AuditFindingDeptClient({
   /** Selalu mirror isi tabel terkini (termasuk dalam updater setState) supaya Save & Done tidak baca state yang ketinggalan satu render. */
   const tableDataRef = useRef(normalizeRows(initialData));
 
-  const statusOptions = useMemo(
+  const preparerStatusOptions = useMemo(
     () => [
       { value: "", label: "- Select -" },
       { value: "Draft", label: "Draft" },
@@ -192,7 +193,16 @@ export default function AuditFindingDeptClient({
       { value: "IN PROGRESS", label: "IN PROGRESS" },
       { value: "PENDING REVIEW", label: "PENDING REVIEW" },
     ],
-    []
+    [],
+  );
+
+  const finalStatusOptions = useMemo(
+    () => [
+      { value: "", label: "- Select -" },
+      { value: "Draft", label: "Draft" },
+      { value: "Complete", label: "Complete" },
+    ],
+    [],
   );
 
   const yesNoOptions = useMemo(
@@ -1146,7 +1156,7 @@ export default function AuditFindingDeptClient({
                       disabled={isReviewer}
                       className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
-                      {statusOptions.map((option) => (
+                      {preparerStatusOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -1179,7 +1189,7 @@ export default function AuditFindingDeptClient({
                       }
                       className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
-                      {statusOptions.map((option) => (
+                      {finalStatusOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -1259,8 +1269,12 @@ export default function AuditFindingDeptClient({
                         type="text"
                         value={review}
                         onChange={(e) => setReview(e.target.value)}
-                        disabled={isAdmin || isUser}
-                        readOnly={isAdmin || isUser}
+                        disabled={!canEditReviewerFields}
+                        title={
+                          !canEditReviewerFields
+                            ? "Only admin or reviewer can edit Review"
+                            : undefined
+                        }
                         className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Name"
                       />
@@ -1271,8 +1285,12 @@ export default function AuditFindingDeptClient({
                         type="date"
                         value={reviewDate}
                         onChange={(e) => setReviewDate(e.target.value)}
-                        disabled={isAdmin || isUser}
-                        readOnly={isAdmin || isUser}
+                        disabled={!canEditReviewerFields}
+                        title={
+                          !canEditReviewerFields
+                            ? "Only admin or reviewer can edit Review date"
+                            : undefined
+                        }
                         className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -1365,7 +1383,7 @@ export default function AuditFindingDeptClient({
         {canOpenPublishModal && !isMetaReadyForPublish && (
           <div className="mb-3 text-xs text-amber-800 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
             To publish, set both <span className="font-semibold">Preparer Status</span> and{" "}
-            <span className="font-semibold">Final Status</span> to <span className="font-semibold">COMPLETED</span> in
+            <span className="font-semibold">Final Status</span> to <span className="font-semibold">Complete</span> in
             the header above (they save automatically). Admin and reviewer only.
           </div>
         )}
@@ -1638,7 +1656,7 @@ export default function AuditFindingDeptClient({
                 <p className="text-sm text-slate-600 mt-2">
                   Publish is only allowed when both <span className="font-semibold">Preparer Status</span> and{" "}
                   <span className="font-semibold">Final Status</span> are{" "}
-                  <span className="font-semibold">COMPLETED</span> (saved in the header). Only{" "}
+                  <span className="font-semibold">Complete</span> (saved in the header). Only{" "}
                   <span className="font-semibold">admin</span> or <span className="font-semibold">reviewer</span> can
                   publish. Findings with <span className="font-semibold">CHECK (Y/N) = Yes</span> are published to Audit
                   Review.

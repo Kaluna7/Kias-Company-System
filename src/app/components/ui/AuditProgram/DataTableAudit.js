@@ -19,6 +19,7 @@ export default function DataTableAudit({
   departmentApi,
 }) {
   const [deleting, setDeleting] = useState({});
+  const panelRef = useRef(null);
   const bodyRef = useRef(null);
   const headerScrollRef = useRef(null);
   const xScrollRef = useRef(null);
@@ -43,6 +44,37 @@ export default function DataTableAudit({
       scrollSyncLock.current = false;
     });
   }, []);
+
+  const handleWheel = useCallback(
+    (e) => {
+      const scroller = xScrollRef.current;
+      if (!scroller) return;
+
+      const { deltaX, deltaY } = e;
+      const delta = e.shiftKey ? deltaY : deltaX;
+      const isHorizontalGesture =
+        e.shiftKey || (Math.abs(deltaX) > 0 && Math.abs(deltaX) >= Math.abs(deltaY));
+      if (!isHorizontalGesture || delta === 0) return;
+
+      const maxLeft = scroller.scrollWidth - scroller.clientWidth;
+      if (maxLeft <= 0) return;
+
+      const next = Math.min(maxLeft, Math.max(0, scroller.scrollLeft + delta));
+      if (next === scroller.scrollLeft) return;
+
+      scroller.scrollLeft = next;
+      syncHorizontalScroll("content");
+      e.preventDefault();
+    },
+    [syncHorizontalScroll],
+  );
+
+  useEffect(() => {
+    const root = panelRef.current;
+    if (!root) return;
+    root.addEventListener("wheel", handleWheel, { passive: false, capture: true });
+    return () => root.removeEventListener("wheel", handleWheel, { capture: true });
+  }, [handleWheel]);
 
   const handleSort = (field) => {
     if (!onChangeSort) return;
@@ -145,26 +177,8 @@ export default function DataTableAudit({
     isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode;
 
   const tableClassName =
-    "min-w-[1280px] w-full border-separate border-spacing-0 text-xs sm:text-sm text-gray-700";
-  const tableStyle = { tableLayout: "fixed" };
-
-  const tableColGroup = (
-    <colgroup>
-      <col style={{ width: 48 }} />
-      <col style={{ width: 100 }} />
-      <col style={{ width: 180 }} />
-      <col style={{ width: 200 }} />
-      <col style={{ width: 100 }} />
-      <col style={{ width: 100 }} />
-      <col style={{ width: 130 }} />
-      <col style={{ width: 150 }} />
-      <col style={{ width: 200 }} />
-      <col style={{ width: 120 }} />
-      <col style={{ width: 150 }} />
-      <col style={{ width: 120 }} />
-      {showActionCol && <col style={{ width: 130 }} />}
-    </colgroup>
-  );
+    "min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700";
+  const tableStyle = { tableLayout: "auto" };
 
   const tableHeader = (
     <thead>
@@ -179,13 +193,17 @@ export default function DataTableAudit({
         <th rowSpan={2} className={headerThClass}>
           Risk ID No.
         </th>
-        <th rowSpan={2} className={headerThClass}>
+        <th
+          rowSpan={2}
+          className={headerThClass}
+          style={{ minWidth: "150px", maxWidth: "250px" }}
+        >
           Risk Description
         </th>
-        <th rowSpan={2} className={headerThClass}>
+        <th rowSpan={2} className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
           Risk Details
         </th>
-        <th rowSpan={2} className={headerThClass}>
+        <th rowSpan={2} className={headerThClass} style={{ minWidth: "100px", maxWidth: "150px" }}>
           Owner
         </th>
         <th colSpan={4} className={headerThClass}>
@@ -210,20 +228,31 @@ export default function DataTableAudit({
         <th
           className={`${headerThClass} cursor-pointer select-none`}
           onClick={() => handleSort("substantive_test")}
+          style={{ minWidth: "120px", maxWidth: "180px" }}
         >
           Substantive Test{sortIndicator("substantive_test")}
         </th>
-        <th className={headerThClass}>Objective</th>
-        <th className={headerThClass}>Procedures</th>
-        <th className={headerThClass}>Method</th>
-        <th className={headerThClass}>Description</th>
-        <th className={headerThClass}>Application</th>
+        <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
+          Objective
+        </th>
+        <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
+          Procedures
+        </th>
+        <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
+          Method
+        </th>
+        <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
+          Description
+        </th>
+        <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
+          Application
+        </th>
       </tr>
     </thead>
   );
 
   return (
-    <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4 relative">
+    <div className="relative flex h-full min-h-0 w-full flex-col p-2 sm:p-4">
       {/* Close button di pojok kanan atas */}
       {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
         <button
@@ -239,22 +268,21 @@ export default function DataTableAudit({
           <X size={16} />
         </button>
       )}
-      <div className="md:hidden mb-2 px-1">
-        <div className="text-[11px] text-slate-500 bg-slate-100 border border-slate-200 rounded-md px-2 py-1">
+      <div className="mb-2 px-1 md:hidden">
+        <div className="rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
           Geser tabel ke samping untuk melihat semua kolom.
         </div>
       </div>
       <div
-        className="flex flex-col flex-1 min-h-0 rounded-2xl shadow-sm border border-gray-200 bg-white overflow-hidden"
-        style={{ maxHeight: "calc(100dvh - 7.5rem)" }}
+        ref={panelRef}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
       >
         <div
           ref={headerScrollRef}
-          className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 shadow-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           onScroll={() => syncHorizontalScroll("header")}
         >
           <table className={tableClassName} style={tableStyle}>
-            {tableColGroup}
             {tableHeader}
           </table>
         </div>
@@ -262,11 +290,10 @@ export default function DataTableAudit({
         <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           <div
             ref={xScrollRef}
-            className="overflow-x-auto overflow-y-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className="overflow-x-auto overflow-y-visible"
             onScroll={() => syncHorizontalScroll("content")}
           >
             <table ref={tableRef} className={tableClassName} style={tableStyle}>
-              {tableColGroup}
               <tbody>
             {grouped.length > 0 ? (
               grouped.map((group, groupIndex) => {

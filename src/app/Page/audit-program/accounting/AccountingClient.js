@@ -204,9 +204,8 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
   const textareaLabels = new Set(["Procedures", "Description"]);
 
   return (
-    <main className="flex flex-col w-full h-screen overflow-hidden">
-      <div className="flex flex-col flex-1 w-full h-full">
-        <SmallHeader
+    <main className="flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-slate-50">
+      <SmallHeader
           label={`Accounting Audit Program - ${viewDraft ? "Draft Data" : "Published Data"}`}
           backHref={`/Page/audit-program${yearParam ? `?year=${encodeURIComponent(yearParam)}` : ""}`}
           fileItems={fileItems}
@@ -222,8 +221,8 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
             })
           }
         />
-        <div className="flex-1 w-full h-full overflow-hidden mt-20 md:mt-14">
-          <div className="md:hidden px-4 pt-4 pb-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-14">
+          <div className="shrink-0 md:hidden px-3 py-2">
             <Search 
               onSearch={(v) =>
                 fetchAccountingData({
@@ -238,12 +237,13 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
           </div>
           
           {loading && (
-            <p className="text-center text-gray-500 py-6">Loading data...</p>
+            <p className="shrink-0 text-center text-gray-500 py-4">Loading data...</p>
           )}
           {error && (
-            <p className="text-center text-red-500 py-6">Error: {error}</p>
+            <p className="shrink-0 text-center text-red-500 px-3 py-4">Error: {error}</p>
           )}
           {!loading && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <DataTableAudit
               data={data}
               isPlanningMode={isPlanningMode}
@@ -306,9 +306,9 @@ export default function AccountingClient({ initialData, initialSortBy = "risk_id
               }}
               departmentApi="accounting"
             />
+            </div>
           )}
         </div>
-      </div>
 
       {showModal.open && (showModal.mode === "add-ap" || showModal.mode === "edit-ap") && (
         <GenericInputModal
