@@ -162,41 +162,62 @@ export default function EvidenceDeptPage({
   }, [departmentLabel, evidenceApiSlug, yearFilter, fetchApData]);
 
   const handleFileUpload = async (index, e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
 
     const row = apData[index];
-    if (Array.isArray(row.attachments) && row.attachments.length >= 5) {
+    const existingCount = Array.isArray(row.attachments) ? row.attachments.length : 0;
+    if (existingCount >= 5) {
       setError("Maximum 5 documents allowed for each AP.");
       e.target.value = "";
       return;
     }
 
+    const remainingSlots = 5 - existingCount;
+    const selectedFiles = Array.from(fileList);
+    const filesToUpload = selectedFiles.slice(0, remainingSlots);
+
     setUploadingIndex(index);
     setError("");
+    if (selectedFiles.length > remainingSlots) {
+      setError(
+        `Only ${remainingSlots} more document(s) can be added (maximum 5 per AP). Extra file(s) were skipped.`,
+      );
+    }
+
+    let updatedAttachments = Array.isArray(row.attachments) ? [...row.attachments] : [];
+    let hadFailure = false;
+
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("ap_id", row.ap_id);
-      formData.append("ap_code", row.ap_code);
-      formData.append("department", departmentLabel);
-      formData.append("year", String(effectiveYear));
+      for (const file of filesToUpload) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("ap_id", row.ap_id);
+        formData.append("ap_code", row.ap_code);
+        formData.append("department", departmentLabel);
+        formData.append("year", String(effectiveYear));
 
-      const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
-      const result = await response.json();
+        const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
+        const result = await response.json();
 
-      if (response.ok && result.success) {
+        if (response.ok && result.success) {
+          updatedAttachments = [
+            ...updatedAttachments,
+            {
+              url: result.fileUrl,
+              name: result.fileName || file.name,
+              uploaded_at: new Date().toISOString(),
+            },
+          ].slice(0, 5);
+        } else {
+          hadFailure = true;
+          setError(result.error || `Upload failed for ${file.name}`);
+          break;
+        }
+      }
+
+      if (updatedAttachments.length > existingCount) {
         const newData = [...apData];
-        const existingAttachments = Array.isArray(row.attachments) ? row.attachments : [];
-        const updatedAttachments = [
-          ...existingAttachments,
-          {
-            url: result.fileUrl,
-            name: result.fileName || file.name,
-            uploaded_at: new Date().toISOString(),
-          },
-        ].slice(0, 5);
-
         newData[index] = {
           ...row,
           attachment: updatedAttachments[0]?.url || "",
@@ -204,8 +225,8 @@ export default function EvidenceDeptPage({
           attachments: updatedAttachments,
         };
         setApData(newData);
-      } else {
-        setError(result.error || "Upload failed");
+      } else if (!hadFailure) {
+        setError("Upload failed");
       }
     } catch (error) {
       console.error("Error uploading file:", error);
@@ -508,6 +529,7 @@ export default function EvidenceDeptPage({
                             {uploadingIndex === index ? "Uploading..." : "UPLOAD"}
                             <input
                               type="file"
+                              multiple
                               className="hidden"
                               onChange={(e) => handleFileUpload(index, e)}
                               accept=".pdf,.zip,.doc,.docx,.xlsx,.xls"
