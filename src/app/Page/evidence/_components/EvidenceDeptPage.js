@@ -5,6 +5,26 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 
+const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
+
+function isAllowedEvidenceFile(file) {
+  const name = file?.name || "";
+  if (!name || name.startsWith(".") || name === "Thumbs.db" || name === ".DS_Store") return false;
+  const ext = name.includes(".") ? name.split(".").pop()?.toLowerCase() : "";
+  return Boolean(ext && ALLOWED_EVIDENCE_EXTENSIONS.has(ext));
+}
+
+function collectUploadFiles(fileList) {
+  const list = Array.isArray(fileList) ? fileList : Array.from(fileList || []);
+  return list
+    .filter(isAllowedEvidenceFile)
+    .sort((a, b) =>
+      (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name, undefined, {
+        sensitivity: "base",
+      }),
+    );
+}
+
 export default function EvidenceDeptPage({
   departmentLabel, // e.g. "ACCOUNTING"
   evidenceApiSlug, // e.g. "accounting"
@@ -161,80 +181,115 @@ export default function EvidenceDeptPage({
     fetchApData(1);
   }, [departmentLabel, evidenceApiSlug, yearFilter, fetchApData]);
 
-  const handleFileUpload = async (index, e) => {
+  const uploadFilesForRow = useCallback(
+    async (index, fileList) => {
+      const list = Array.isArray(fileList) ? fileList : Array.from(fileList || []);
+      if (list.length === 0) {
+        setError("No files selected.");
+        return;
+      }
+
+      const row = apData[index];
+      if (!row) return;
+
+      const existingCount = Array.isArray(row.attachments) ? row.attachments.length : 0;
+      if (existingCount >= 5) {
+        setError("Maximum 5 documents allowed for each AP.");
+        return;
+      }
+
+      const remainingSlots = 5 - existingCount;
+      const rawCount = list.length;
+      const selectedFiles = collectUploadFiles(list);
+
+      if (selectedFiles.length === 0) {
+        setError(
+          "No supported files. Allowed: PDF, ZIP, DOC, DOCX, XLS, XLSX.",
+        );
+        return;
+      }
+
+      const filesToUpload = selectedFiles.slice(0, remainingSlots);
+      const skippedUnsupported = rawCount - selectedFiles.length;
+
+      setUploadingIndex(index);
+      setError("");
+      if (skippedUnsupported > 0) {
+        setError(`${skippedUnsupported} file(s) skipped (unsupported type).`);
+      }
+      if (selectedFiles.length > remainingSlots) {
+        setError(
+          `Only ${remainingSlots} more document(s) can be added (maximum 5 per AP). Extra file(s) were skipped.`,
+        );
+      }
+
+      let updatedAttachments = Array.isArray(row.attachments) ? [...row.attachments] : [];
+      let hadFailure = false;
+
+      try {
+        for (const file of filesToUpload) {
+          const formData = new FormData();
+          const safeName = file.name || "upload.dat";
+          formData.append("file", file, safeName);
+          formData.append("original_name", safeName);
+          formData.append("ap_id", row.ap_id);
+          formData.append("ap_code", row.ap_code);
+          formData.append("department", departmentLabel);
+          formData.append("year", String(effectiveYear));
+
+          const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            updatedAttachments = [
+              ...updatedAttachments,
+              {
+                url: result.fileUrl,
+                name: result.fileName || file.name,
+                uploaded_at: new Date().toISOString(),
+              },
+            ].slice(0, 5);
+          } else {
+            hadFailure = true;
+            setError(result.error || `Upload failed for ${safeName}`);
+            break;
+          }
+        }
+
+        if (updatedAttachments.length > existingCount) {
+          const newData = [...apData];
+          newData[index] = {
+            ...row,
+            attachment: updatedAttachments[0]?.url || "",
+            file_name: updatedAttachments[0]?.name || "",
+            attachments: updatedAttachments,
+          };
+          setApData(newData);
+          setSuccessMessage(
+            `${updatedAttachments.length - existingCount} file(s) uploaded successfully.`,
+          );
+          setTimeout(() => setSuccessMessage(""), 4000);
+        } else if (!hadFailure) {
+          setError("Upload failed");
+        }
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        setError(error.message || "Upload failed");
+      } finally {
+        setUploadingIndex(null);
+      }
+    },
+    [apData, departmentLabel, effectiveYear, evidenceApiSlug],
+  );
+
+  const handleFileInputChange = async (index, e) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
-    const row = apData[index];
-    const existingCount = Array.isArray(row.attachments) ? row.attachments.length : 0;
-    if (existingCount >= 5) {
-      setError("Maximum 5 documents allowed for each AP.");
-      e.target.value = "";
-      return;
-    }
-
-    const remainingSlots = 5 - existingCount;
-    const selectedFiles = Array.from(fileList);
-    const filesToUpload = selectedFiles.slice(0, remainingSlots);
-
-    setUploadingIndex(index);
     setError("");
-    if (selectedFiles.length > remainingSlots) {
-      setError(
-        `Only ${remainingSlots} more document(s) can be added (maximum 5 per AP). Extra file(s) were skipped.`,
-      );
-    }
-
-    let updatedAttachments = Array.isArray(row.attachments) ? [...row.attachments] : [];
-    let hadFailure = false;
-
-    try {
-      for (const file of filesToUpload) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("ap_id", row.ap_id);
-        formData.append("ap_code", row.ap_code);
-        formData.append("department", departmentLabel);
-        formData.append("year", String(effectiveYear));
-
-        const response = await fetch(`/api/evidence/${evidenceApiSlug}`, { method: "POST", body: formData });
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          updatedAttachments = [
-            ...updatedAttachments,
-            {
-              url: result.fileUrl,
-              name: result.fileName || file.name,
-              uploaded_at: new Date().toISOString(),
-            },
-          ].slice(0, 5);
-        } else {
-          hadFailure = true;
-          setError(result.error || `Upload failed for ${file.name}`);
-          break;
-        }
-      }
-
-      if (updatedAttachments.length > existingCount) {
-        const newData = [...apData];
-        newData[index] = {
-          ...row,
-          attachment: updatedAttachments[0]?.url || "",
-          file_name: updatedAttachments[0]?.name || "",
-          attachments: updatedAttachments,
-        };
-        setApData(newData);
-      } else if (!hadFailure) {
-        setError("Upload failed");
-      }
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      setError(error.message || "Upload failed");
-    } finally {
-      setUploadingIndex(null);
-      e.target.value = "";
-    }
+    setSuccessMessage("");
+    await uploadFilesForRow(index, fileList);
+    e.target.value = "";
   };
 
   const handleDeleteAttachment = async (rowIndex, fileUrl) => {
@@ -521,18 +576,21 @@ export default function EvidenceDeptPage({
                         <td className="border border-gray-200 px-2 sm:px-4 py-3">
                           <label
                             className={`flex items-center justify-center gap-2 bg-[#141D38] hover:bg-[#141D38]/90 text-white px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 shadow-md hover:shadow-lg whitespace-nowrap ${
-                              isReviewer || (row.attachments && row.attachments.length >= 5)
+                              uploadingIndex === index ||
+                              isReviewer ||
+                              (row.attachments && row.attachments.length >= 5)
                                 ? "opacity-50 cursor-not-allowed"
                                 : "cursor-pointer"
                             }`}
+                            title="Pilih file ZIP atau dokumen (PDF, DOC, DOCX, XLS, XLSX). Bisa pilih banyak sekaligus."
                           >
                             {uploadingIndex === index ? "Uploading..." : "UPLOAD"}
                             <input
                               type="file"
                               multiple
                               className="hidden"
-                              onChange={(e) => handleFileUpload(index, e)}
-                              accept=".pdf,.zip,.doc,.docx,.xlsx,.xls"
+                              onChange={(e) => handleFileInputChange(index, e)}
+                              accept=".zip,.pdf,.doc,.docx,.xlsx,.xls"
                               disabled={
                                 uploadingIndex === index ||
                                 isReviewer ||

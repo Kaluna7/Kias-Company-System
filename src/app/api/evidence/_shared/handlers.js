@@ -110,7 +110,9 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const selectedYear = parseSelectedYear(formData.get("year"));
       const requestTimestamp = alignDateToSelectedYear(new Date(), selectedYear);
 
-      if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      if (!(file instanceof Blob) || file.size === 0) {
+        return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      }
 
       const upperDeptFinding = String(department || defaultDepartment || "").toUpperCase();
       const findingDelegatePost = getFindingDelegate(upperDeptFinding);
@@ -136,8 +138,12 @@ export function makeEvidenceHandlers(defaultDepartment) {
       if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true });
 
       const timestamp = Date.now();
-      const originalName = file.name;
-      const fileExtension = originalName.split(".").pop();
+      const originalName =
+        file instanceof File && file.name
+          ? file.name
+          : String(formData.get("original_name") || "upload.dat");
+      const extMatch = originalName.match(/\.([^.]+)$/);
+      const fileExtension = extMatch ? extMatch[1] : "dat";
       const fileName = `${ap_code || "file"}_${timestamp}.${fileExtension}`;
       const filePath = join(uploadsDir, fileName);
 
