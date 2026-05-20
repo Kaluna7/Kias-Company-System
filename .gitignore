@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Prisma engine partial downloads (Windows)
 src/generated/prisma/*.tmp*
+
+# User uploads (evidence, worksheet, audit-finding, etc.) — keep on server/disk only
+/public/uploads/

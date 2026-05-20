@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { canEditReviewerFields } from "@/lib/canEditReviewerFields";
 import { pool } from "./pool";
 import { requireSopEditor } from "./auth";
 
@@ -252,9 +255,30 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
         return NextResponse.json({ success: false, error: "Payload kosong. Sertakan minimal status." }, { status: 400 });
       }
 
+      const session = await getServerSession(authOptions);
+      const role = session?.user?.role;
+      const canEditReviewer = canEditReviewerFields(role);
+
       const client = await pool.connect();
       try {
         await ensureTable(client);
+
+        let reviewerCommentToSave = reviewer_comment || null;
+        let reviewerStatusToSave = reviewer_status || null;
+        let reviewerNameToSave = reviewer_name || null;
+        let reviewerDateToSave = reviewer_date || null;
+
+        if (!canEditReviewer) {
+          const prevR = await client.query(
+            `SELECT reviewer_comment, reviewer_status, reviewer_name, reviewer_date FROM ${metaTable} ORDER BY id DESC LIMIT 1`,
+          );
+          const prev = prevR.rows[0] || null;
+          reviewerCommentToSave = prev?.reviewer_comment ?? null;
+          reviewerStatusToSave = prev?.reviewer_status ?? null;
+          reviewerNameToSave = prev?.reviewer_name ?? null;
+          reviewerDateToSave = prev?.reviewer_date ?? null;
+        }
+
         const q = `
           INSERT INTO ${metaTable}
             (sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, updated_at)
@@ -267,10 +291,10 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
           preparer_status || null,
           preparer_name || null,
           preparer_date || null,
-          reviewer_comment || null,
-          reviewer_status || null,
-          reviewer_name || null,
-          reviewer_date || null,
+          reviewerCommentToSave,
+          reviewerStatusToSave,
+          reviewerNameToSave,
+          reviewerDateToSave,
         ];
         const r = await client.query(q, vals);
         return NextResponse.json({ success: true, inserted: r.rows[0] }, { status: 200 });

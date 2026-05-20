@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Pagination from "@/app/components/ui/Pagination";
 import { useToast } from "@/app/contexts/ToastContext";
 import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
+import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
 
 /** Preparer Status / Final Status must be COMPLETE (or Complete) before publish — same as dropdown value COMPLETED. */
 function isAuditFindingHeaderStatusComplete(raw) {
@@ -138,7 +139,7 @@ export default function AuditFindingDeptClient({
   const isUser = role === "user";
   const canPublish = isAdmin || isReviewer;
   const canEditFinalStatus = isAdmin || isReviewer;
-  const canEditReviewerFields = isAdmin || isReviewer;
+  const canEditReviewerFields = canEditReviewerFieldsFromRole(role);
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
   const auditYear = useMemo(() => {

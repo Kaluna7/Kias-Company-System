@@ -7,6 +7,7 @@ import nextDynamic from "next/dynamic";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
+import { exportSamplingToExcel } from "@/app/utils/exportSamplingExcel";
 
 const ChatSidebar = nextDynamic(() => import("./ChatSidebar"), { ssr: false });
 
@@ -28,52 +29,6 @@ function getCategoryIcon(category) {
 }
 function getCategoryColor(category) {
   return category === "planning" ? "from-blue-500 to-cyan-500" : category === "execution" ? "from-green-500 to-emerald-500" : "from-purple-500 to-indigo-500";
-}
-
-/** Plain-text export: row labels + wide spacing so .txt is easy to scan */
-function formatSamplingSequenceForTxt(nums, perRow = 8) {
-  if (!nums || nums.length === 0) return "";
-  const w = Math.max(3, String(Math.max(...nums)).length);
-  const pad = (n) => String(n).padStart(w, " ");
-  const lines = [];
-  let rowIdx = 1;
-  for (let i = 0; i < nums.length; i += perRow) {
-    const chunk = nums.slice(i, i + perRow);
-    const body = chunk.map(pad).join("      ");
-    const label = `Row ${String(rowIdx).padStart(2)}  |`;
-    lines.push(`${label}  ${body}`);
-    rowIdx++;
-  }
-  return lines.join("\n");
-}
-
-function buildSamplingExportNote({ conf, total, samplingRate, sampleSize, picked }) {
-  const W = 58;
-  const sep = "=".repeat(W);
-  const sub = "─".repeat(W);
-  const ratePct = (samplingRate * 100).toFixed(1).replace(/\.0$/, "");
-  const seqBlock = formatSamplingSequenceForTxt(picked, 8);
-  return [
-    sep,
-    "  KIAS — SAMPLING",
-    sep,
-    "",
-    "  PARAMETERS",
-    `  ${sub}`,
-    `    Confidence level ........................  ${conf}%`,
-    `    Total data (population) .................  ${total}`,
-    `    Sampling rate (100% − confidence) .......  ${ratePct}%`,
-    `    Sample size .............................  ${sampleSize}`,
-    "",
-    sep,
-    `  SAMPLING SEQUENCE  (${sampleSize} item${sampleSize === 1 ? "" : "s"})`,
-    `  (8 numbers per row; columns aligned for reading)`,
-    sep,
-    "",
-    seqBlock,
-    "",
-    sep,
-  ].join("\n");
 }
 
 /**
@@ -103,7 +58,7 @@ function DashboardPageContent() {
   const [samplingConfidence, setSamplingConfidence] = useState("");
   const [samplingTotalData, setSamplingTotalData] = useState("");
   const [samplingSequence, setSamplingSequence] = useState([]);
-  const [samplingNote, setSamplingNote] = useState("");
+  const [samplingMeta, setSamplingMeta] = useState(null);
   const [profileName, setProfileName] = useState("");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
   const [editName, setEditName] = useState("");
@@ -323,7 +278,7 @@ function DashboardPageContent() {
     if (sampleSize < 1) {
       toast.show("Sample size is 0 for these inputs. Lower confidence or increase total data.", "error");
       setSamplingSequence([]);
-      setSamplingNote("");
+      setSamplingMeta(null);
       return;
     }
     const pool = Array.from({ length: total }, (_, i) => i + 1);
@@ -332,37 +287,25 @@ function DashboardPageContent() {
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     const picked = pool.slice(0, sampleSize).sort((a, b) => a - b);
+    const meta = { conf, total, samplingRate, sampleSize, picked };
     setSamplingSequence(picked);
-    setSamplingNote(
-      buildSamplingExportNote({
-        conf,
-        total,
-        samplingRate,
-        sampleSize,
-        picked,
-      })
-    );
+    setSamplingMeta(meta);
     toast.show(`Generated ${sampleSize} random item(s).`, "success");
   }, [samplingConfidence, samplingTotalData, toast]);
 
-  const exportSamplingTxt = useCallback(() => {
-    if (!samplingNote.trim()) {
+  const exportSamplingExcel = useCallback(() => {
+    if (!samplingMeta?.picked?.length) {
       toast.show("Nothing to export. Generate a sampling first.", "error");
       return;
     }
-    const blob = new Blob([samplingNote], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
-    a.href = url;
-    a.download = `sampling-${stamp}.txt`;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.show("Download started.", "success");
-  }, [samplingNote, toast]);
+    try {
+      exportSamplingToExcel({ ...samplingMeta });
+      toast.show("Excel download started.", "success");
+    } catch (err) {
+      console.error("exportSamplingExcel:", err);
+      toast.show("Failed to export Excel.", "error");
+    }
+  }, [samplingMeta, toast]);
   const toggleExpanded = useCallback((key) => {
     setExpandedModuleKey((prev) => (prev === key ? null : key));
   }, []);
@@ -1250,48 +1193,38 @@ function DashboardPageContent() {
                     Sampling sequence ({samplingSequence.length} items)
                   </div>
                   <div
-                    className="mt-2 max-h-[12rem] overflow-y-auto overscroll-y-contain rounded-md border border-transparent pr-0.5 [scrollbar-gutter:stable]"
+                    className="mt-2 max-h-[12rem] overflow-y-auto overscroll-y-contain rounded-md border border-slate-200 bg-white [scrollbar-gutter:stable]"
                     role="region"
                     aria-label="Sample indices scroll area"
                   >
-                    <div
-                      className="grid grid-cols-4 sm:grid-cols-6 gap-1.5"
-                      role="list"
-                      aria-label="Sample indices"
-                    >
-                      {samplingSequence.map((n, idx) => (
-                        <span
-                          key={`${idx}-${n}`}
-                          role="listitem"
-                          className="tabular-nums flex min-h-[1.75rem] items-center justify-center rounded-md border border-slate-200/80 bg-white px-1 py-0.5 text-center text-[11px] font-mono font-medium text-slate-800 shadow-sm"
-                        >
-                          {n}
-                        </span>
-                      ))}
-                    </div>
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-600">
+                          <th className="px-2 py-1 text-left font-semibold">Baris</th>
+                          <th className="px-2 py-1 text-left font-semibold">Nomor sampel</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {samplingSequence.map((n, idx) => (
+                          <tr key={`${idx}-${n}`} className="border-t border-slate-100">
+                            <td className="px-2 py-1 text-slate-600 font-medium">Row {idx + 1}</td>
+                            <td className="px-2 py-1 tabular-nums font-mono font-medium text-slate-800">{n}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
 
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Note</label>
-                <textarea
-                  value={samplingNote}
-                  onChange={(e) => setSamplingNote(e.target.value)}
-                  rows={6}
-                  placeholder="Filled after Generate — edit if needed."
-                  className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#141D38] focus:ring-1 focus:ring-[#141D38]/25 outline-none resize-y min-h-[88px]"
-                />
-              </div>
-
               <div className="flex flex-wrap justify-end gap-1.5 pt-0.5">
                 <button
                   type="button"
-                  onClick={exportSamplingTxt}
+                  onClick={exportSamplingExcel}
                   className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
-                  disabled={!samplingNote.trim()}
+                  disabled={!samplingMeta?.picked?.length}
                 >
-                  Export .txt
+                  Download Excel
                 </button>
                 <button
                   type="button"

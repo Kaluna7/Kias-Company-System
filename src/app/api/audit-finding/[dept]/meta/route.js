@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { canEditReviewerFields } from "@/lib/canEditReviewerFields";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 
 function qIdent(name) {
@@ -160,7 +161,7 @@ export async function POST(req, { params }) {
     const session = await getServerSession(authOptions);
     const role = (session?.user?.role || "").toLowerCase();
     const canEditFinalStatus = role === "admin" || role === "reviewer";
-    const canEditReviewerFields = role === "admin" || role === "reviewer";
+    const canEditReviewer = canEditReviewerFields(role);
 
     const client = await pool.connect();
     try {
@@ -199,7 +200,7 @@ export async function POST(req, { params }) {
       // Review / review date: hanya admin/reviewer boleh mengubah.
       let reviewToSave = review || null;
       let reviewDateToSave = review_date || null;
-      if (!canEditReviewerFields) {
+      if (!canEditReviewer) {
         reviewToSave = prevMeta?.review ?? null;
         reviewDateToSave = prevMeta?.review_date ?? null;
       }

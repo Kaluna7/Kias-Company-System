@@ -87,8 +87,8 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
             className="w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-lg px-3 py-2 text-sm text-center transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
             placeholder="Reviewer..."
             // Allow admin and reviewer to adjust reviewer name; regular user sees read-only
-            disabled={isUser}
-            readOnly={isUser}
+            disabled={!(isReviewer || isAdmin)}
+            title={!(isReviewer || isAdmin) ? "Only admin or reviewer can edit Reviewer" : undefined}
           />
         </div>
       </td>

@@ -1,6 +1,9 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { canEditReviewerFields } from "@/lib/canEditReviewerFields";
 import pkg from "pg";
 const { Pool } = pkg;
 
@@ -69,10 +72,27 @@ export async function POST(req) {
       );
     }
 
+    const session = await getServerSession(authOptions);
+    const canEditReviewer = canEditReviewerFields(session?.user?.role);
+
     const client = await pool.connect();
     try {
-      // department_name adalah generated column, jadi tidak di-insert
-      // Kolom ini akan otomatis terisi dengan default value "Finance" oleh database
+      let reviewerCommentToSave = reviewer_comment || null;
+      let reviewerStatusToSave = reviewer_status || null;
+      let reviewerNameToSave = reviewer_name || null;
+      let reviewerDateToSave = reviewer_date || null;
+
+      if (!canEditReviewer) {
+        const prevR = await client.query(
+          `SELECT reviewer_comment, reviewer_status, reviewer_name, reviewer_date FROM sop_finance ORDER BY id DESC LIMIT 1`,
+        );
+        const prev = prevR.rows[0] || null;
+        reviewerCommentToSave = prev?.reviewer_comment ?? null;
+        reviewerStatusToSave = prev?.reviewer_status ?? null;
+        reviewerNameToSave = prev?.reviewer_name ?? null;
+        reviewerDateToSave = prev?.reviewer_date ?? null;
+      }
+
       const q = `
         INSERT INTO sop_finance
           (sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date)
@@ -85,10 +105,10 @@ export async function POST(req) {
         preparer_status || null,
         preparer_name || null,
         preparer_date || null,
-        reviewer_comment || null,
-        reviewer_status || null,
-        reviewer_name || null,
-        reviewer_date || null,
+        reviewerCommentToSave,
+        reviewerStatusToSave,
+        reviewerNameToSave,
+        reviewerDateToSave,
       ];
       const r = await client.query(q, vals);
       return NextResponse.json({ success: true, inserted: r.rows[0] }, { status: 200 });

@@ -16,6 +16,7 @@ import {
   pathSetFromStoredWorksheetAuditArea,
   parseWorksheetCustomAuditAreasJson,
 } from "@/app/data/worksheetAuditAreaTree";
+import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
 import {
   worksheetStatusWpAllowsPublish,
   worksheetFilePathAllowsPublish,
@@ -109,7 +110,7 @@ export default function WorksheetDeptPage({
   const role = (session?.user?.role || "").toLowerCase();
   const isUserRole = role === "user";
   /** Only admin & reviewer may edit reviewer name / date. */
-  const canEditReviewerFields = role === "admin" || role === "reviewer";
+  const canEditReviewerFields = canEditReviewerFieldsFromRole(role);
   /** Akun reviewer: hanya boleh mengisi sisi review (WP/status), bukan upload/preparer. */
   const isReviewerAccount = enableRoleRestrictions && role === "reviewer";
   const isAdminAccount = enableRoleRestrictions && role === "admin";

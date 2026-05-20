@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import { useSession } from "next-auth/react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 import { useToast } from "@/app/contexts/ToastContext";
+import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
 
 /* ========== Helpers ========== */
 
@@ -118,6 +120,8 @@ export default function SOPSidebar({
   onSopParsed,
 }) {
   const toast = useToast();
+  const { data: session } = useSession();
+  const canEditReviewer = canEditReviewerFieldsFromRole(session?.user?.role);
   const [selectedFile, setSelectedFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState("");
@@ -656,19 +660,23 @@ export default function SOPSidebar({
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-2">Comment</label>
             <textarea
-              className="w-full h-24 border border-slate-200 rounded-lg p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all resize-none"
+              className="w-full h-24 border border-slate-200 rounded-lg p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="Enter reviewer comments..."
               value={reviewerComment}
               onChange={(e) => onReviewerCommentChange?.(e.target.value)}
+              disabled={!canEditReviewer}
+              title={!canEditReviewer ? "Only admin or reviewer can edit Reviewer comments" : undefined}
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-2">SOP Review Status</label>
             <select
-              className="w-full border border-slate-200 bg-white px-3 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              className="w-full border border-slate-200 bg-white px-3 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
               value={reviewerStatus}
               onChange={(e) => onReviewerStatusChange?.(e.target.value)}
+              disabled={!canEditReviewer}
+              title={!canEditReviewer ? "Only admin or reviewer can edit Reviewer status" : undefined}
             >
               {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
@@ -678,19 +686,23 @@ export default function SOPSidebar({
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Reviewer Name</label>
               <input
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                 placeholder="Enter reviewer name..."
                 value={reviewerName}
                 onChange={(e) => onReviewerNameChange?.(e.target.value)}
+                disabled={!canEditReviewer}
+                title={!canEditReviewer ? "Only admin or reviewer can edit Reviewer name" : undefined}
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
               <input
                 type="date"
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                 value={reviewerDate}
                 onChange={(e) => onReviewerDateChange?.(e.target.value)}
+                disabled={!canEditReviewer}
+                title={!canEditReviewer ? "Only admin or reviewer can edit Reviewer date" : undefined}
               />
             </div>
           </div>

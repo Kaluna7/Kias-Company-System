@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
 
 /** Session required; role must be user, reviewer, or admin (worksheet editors). */
 export async function requireWorksheetEditorSession() {
@@ -36,5 +37,5 @@ export function isWorksheetPublisherRole(role) {
 
 /** Reviewer name / date on worksheet: only reviewer or admin (PATCH or POST). */
 export function canEditWorksheetReviewerFields(role) {
-  return role === "reviewer" || role === "admin";
+  return canEditReviewerFieldsFromRole(role);
 }
