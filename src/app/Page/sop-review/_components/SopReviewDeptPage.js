@@ -86,11 +86,28 @@ const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, is
             onChange={(e) => onUpdate(idx, { reviewer: e.target.value })}
             className="w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-lg px-3 py-2 text-sm text-center transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
             placeholder="Reviewer..."
-            // Allow admin and reviewer to adjust reviewer name; regular user sees read-only
             disabled={!(isReviewer || isAdmin)}
             title={!(isReviewer || isAdmin) ? "Only admin or reviewer can edit Reviewer" : undefined}
           />
         </div>
+      </td>
+      <td className="p-3 align-top border-r border-slate-200/40">
+        <textarea
+          value={row.auditee_comment || ""}
+          onChange={(e) => onUpdate(idx, { auditee_comment: e.target.value })}
+          className="w-full bg-transparent border border-transparent hover:border-amber-200 focus:border-amber-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          rows={2}
+          placeholder="Auditee comment for report..."
+        />
+      </td>
+      <td className="p-3 align-top border-r border-slate-200/40">
+        <textarea
+          value={row.follow_up_detail || ""}
+          onChange={(e) => onUpdate(idx, { follow_up_detail: e.target.value })}
+          className="w-full bg-transparent border border-transparent hover:border-orange-200 focus:border-orange-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+          rows={2}
+          placeholder="Follow-up detail for report..."
+        />
       </td>
       <td className="p-3 text-center align-top">
         <button
@@ -277,13 +294,15 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             setSchedulePreparerName(userName);
             setSchedulePreparerDate(startDate);
             
-            // Always set preparer from schedule (schedule takes priority)
-            if (userName) {
-              setPreparerName(userName);
-            }
-            if (startDate) {
-              setPreparerDate(startDate);
-              console.log(`[SOP Review] Set preparerDate to: ${startDate} from schedule per module`);
+            // Schedule lock applies to preparer (user) only — admin may override
+            if (isUser) {
+              if (userName) {
+                setPreparerName(userName);
+              }
+              if (startDate) {
+                setPreparerDate(startDate);
+                console.log(`[SOP Review] Set preparerDate to: ${startDate} from schedule per module`);
+              }
             }
           } else {
             console.warn(`[SOP Review] No schedule row found for ${apiPath} (deptId: ${API_PATH_TO_SCHEDULE_ID[apiPath]}) or not configured`);
@@ -330,6 +349,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             comment: r.comment || "",
             reviewer_feedback: r.reviewer_feedback || "",
             reviewer: r.reviewer || "",
+            auditee_comment: r.auditee_comment || "",
+            follow_up_detail: r.follow_up_detail || "",
           }));
           if (mounted) {
             const reindexed = reindex(normalized);
@@ -348,44 +369,37 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             setPreparerStatus(latest.preparer_status || "DRAFT");
             setReviewerStatus(latest.reviewer_status || "DRAFT");
             
-            // Schedule data takes priority for preparer (already set in schedule useEffect)
-            // IMPORTANT: Only use meta data if schedule data is NOT available
-            // If schedule per module has start_date, it should always be used
-            if (!sch.name) {
-              setPreparerName(latest.preparer_name || "");
-            }
-            // CRITICAL: Schedule per module start_date ALWAYS takes priority over meta data
-            // Only use meta preparer_date if schedule per module doesn't have start_date
-            if (sch.date) {
-              // Schedule per module has start_date, ALWAYS use it (override meta)
-              console.log(`[SOP Review] Schedule per module start_date found: ${sch.date}, ALWAYS using it instead of meta`);
-              // Force update preparerDate from schedule per module
-              setPreparerDate(sch.date);
-            } else {
-              // No schedule per module start_date, use meta as fallback
-              let preparerDateStr = "";
-              if (latest.preparer_date) {
-                const dateStr = String(latest.preparer_date);
-                if (dateStr.includes('T')) {
-                  preparerDateStr = dateStr.split('T')[0];
+            // Schedule lock for preparer (user) only; admin/reviewer load saved meta
+            const parseMetaPreparerDate = () => {
+              if (!latest.preparer_date) return "";
+              const dateStr = String(latest.preparer_date);
+              let preparerDateStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
+              if (!preparerDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const dateObj = new Date(latest.preparer_date);
+                if (!isNaN(dateObj.getTime())) {
+                  const year = dateObj.getUTCFullYear();
+                  const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+                  const day = String(dateObj.getUTCDate()).padStart(2, "0");
+                  preparerDateStr = `${year}-${month}-${day}`;
                 } else {
-                  preparerDateStr = dateStr.slice(0, 10);
-                }
-                // Ensure it's in YYYY-MM-DD format using UTC to avoid timezone shift
-                if (!preparerDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  const dateObj = new Date(latest.preparer_date);
-                  if (!isNaN(dateObj.getTime())) {
-                    const year = dateObj.getUTCFullYear();
-                    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-                    const day = String(dateObj.getUTCDate()).padStart(2, '0');
-                    preparerDateStr = `${year}-${month}-${day}`;
-                  } else {
-                    preparerDateStr = "";
-                  }
+                  preparerDateStr = "";
                 }
               }
-              setPreparerDate(preparerDateStr);
-              console.log(`[SOP Review] No schedule per module start_date, using meta preparer_date as fallback: ${preparerDateStr}`);
+              return preparerDateStr;
+            };
+
+            if (isUser) {
+              if (!sch.name) {
+                setPreparerName(latest.preparer_name || "");
+              }
+              if (sch.date) {
+                setPreparerDate(sch.date);
+              } else {
+                setPreparerDate(parseMetaPreparerDate());
+              }
+            } else {
+              setPreparerName(latest.preparer_name || sch.name || "");
+              setPreparerDate(parseMetaPreparerDate() || sch.date || "");
             }
             setReviewerComment(latest.reviewer_comment || "");
             setReviewerName(latest.reviewer_name || "");
@@ -395,8 +409,13 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           // Update last saved data reference after loading all data
           // This ensures auto-save doesn't trigger on initial load
           // IMPORTANT: Use schedule per module date if available (it takes priority)
-          const finalPreparerDate = sch.date || (latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "");
-          const finalPreparerName = sch.name || latest.preparer_name || "";
+          const metaPreparerDate = latest.preparer_date ? String(latest.preparer_date).slice(0, 10) : "";
+          const finalPreparerDate = isUser
+            ? sch.date || metaPreparerDate
+            : metaPreparerDate || sch.date || "";
+          const finalPreparerName = isUser
+            ? sch.name || latest.preparer_name || ""
+            : latest.preparer_name || sch.name || "";
           const loadedData = {
             sopData: loadedSopData,
             reviewerStatus: latest.reviewer_status || "DRAFT",
@@ -441,17 +460,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     return () => {
       mounted = false;
     };
-  }, [apiPath, auditYear]);
+  }, [apiPath, auditYear, isUser]);
   
-  // Ensure schedule per module date is always used (even after meta data loads or user tries to change it)
-  // This useEffect runs whenever schedulePreparerDate changes and ensures it overrides any meta data or user changes
+  // Keep schedule date locked for preparer (user) only
   useEffect(() => {
-    if (schedulePreparerDate) {
-      console.log(`[SOP Review] Ensuring schedule per module start_date is used: ${schedulePreparerDate}`);
-      // Always override preparerDate with schedule per module date
+    if (schedulePreparerDate && isUser) {
       setPreparerDate(schedulePreparerDate);
     }
-  }, [schedulePreparerDate]);
+  }, [schedulePreparerDate, isUser]);
   
   // Prevent user from changing preparerDate if schedule per module has start_date
   useEffect(() => {
@@ -476,6 +492,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           comment: it.comment || it.reviewer_comment || "",
           reviewer_feedback: it.reviewer_feedback || "",
           reviewer: it.reviewer || "",
+          auditee_comment: it.auditee_comment || "",
+          follow_up_detail: it.follow_up_detail || "",
         }))
         .filter((it) => {
           const key = (it.sop_related || "").toLowerCase();
@@ -523,6 +541,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           comment: "",
           reviewer_feedback: "",
           reviewer: "",
+          auditee_comment: "",
+          follow_up_detail: "",
         },
       ])
     );
@@ -540,6 +560,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       comment: it.comment || null,
       reviewer_feedback: it.reviewer_feedback || null,
       reviewer: it.reviewer || null,
+      auditee_comment: it.auditee_comment || null,
+      follow_up_detail: it.follow_up_detail || null,
     })), []);
 
   // Auto-save draft functionality
@@ -886,7 +908,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 className="overflow-x-auto overflow-y-auto flex-1 -mx-2 sm:mx-0 min-h-0"
                 style={{ WebkitOverflowScrolling: "touch", contain: "layout" }}
               >
-                <table className="min-w-[700px] w-full table-fixed border-collapse">
+                <table className="min-w-[1100px] w-full table-fixed border-collapse">
                   <thead className="bg-gradient-to-r from-slate-100 to-slate-50 sticky top-0 z-10">
                     <tr className="border-b border-slate-200/60">
                       <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-12 sticky left-0 bg-gradient-to-r from-slate-100 to-slate-50">
@@ -932,6 +954,22 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                           <span className="text-xs">REVIEWER</span>
                         </div>
                       </th>
+                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[160px]">
+                        <div className="flex items-center gap-2">
+                          <span className="w-4 h-4 bg-amber-100 rounded flex items-center justify-center">
+                            <span className="text-amber-600 text-xs">💬</span>
+                          </span>
+                          <span className="text-xs">AUDITEE COMMENT</span>
+                        </div>
+                      </th>
+                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[160px]">
+                        <div className="flex items-center gap-2">
+                          <span className="w-4 h-4 bg-orange-100 rounded flex items-center justify-center">
+                            <span className="text-orange-600 text-xs">📋</span>
+                          </span>
+                          <span className="text-xs">FOLLOW-UP DETAIL</span>
+                        </div>
+                      </th>
                       <th className="p-3 text-center font-bold text-slate-700 w-20">
                         <span className="text-xs">ACTIONS</span>
                       </th>
@@ -954,7 +992,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     ))}
                     {sopData.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="border-0">
+                        <td colSpan={9} className="border-0">
                           <div className="flex flex-col items-center justify-center py-16 px-4">
                             <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-4 shadow-lg">
                               <span className="text-3xl">📄</span>

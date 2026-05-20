@@ -5,6 +5,7 @@ import {
 } from "@/lib/auditFindingReportSchedule";
 import prisma from "@/app/lib/prisma";
 import ReportClient from "./ReportClient";
+import { compareByRiskId } from "@/app/utils/sortByRiskId";
 
 function normalizeScheduleDate(raw) {
   if (raw == null || raw === "") return null;
@@ -164,22 +165,11 @@ async function loadAuditFindingReportData(year) {
       });
     }
 
-    // Sort by department and publish date (fallback created_at)
+    // Sort by department, then Risk ID ascending (smallest to largest)
     filtered.sort((a, b) => {
-      if (a.department !== b.department) {
-        return a.department.localeCompare(b.department);
-      }
-      const da =
-        (a.updated_at ? new Date(a.updated_at) : null) ||
-        (a.completion_date ? new Date(a.completion_date) : null) ||
-        (a.created_at ? new Date(a.created_at) : null) ||
-        new Date(0);
-      const db =
-        (b.updated_at ? new Date(b.updated_at) : null) ||
-        (b.completion_date ? new Date(b.completion_date) : null) ||
-        (b.created_at ? new Date(b.created_at) : null) ||
-        new Date(0);
-      return db - da;
+      const deptCmp = String(a.department ?? "").localeCompare(String(b.department ?? ""));
+      if (deptCmp !== 0) return deptCmp;
+      return compareByRiskId(a, b);
     });
 
     return filtered;

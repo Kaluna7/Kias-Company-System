@@ -1,4 +1,5 @@
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
+import { sortByRiskId } from "@/app/utils/sortByRiskId";
 import AuditReviewDeptClient from "./_components/AuditReviewDeptClient";
 
 /** Always read fresh audit-review data from DB after edits (avoid stale Next.js fetch cache). */
@@ -50,10 +51,12 @@ async function loadAuditReviewData(dept, selectedYear = null) {
           : (Array.isArray(findingsJson.data) ? findingsJson.data : []);
         
         // Filter only completed findings
-        findings = dataArray.filter(row => {
-          const status = row.completion_status?.toUpperCase();
-          return status === "COMPLETED";
-        });
+        findings = sortByRiskId(
+          dataArray.filter((row) => {
+            const status = row.completion_status?.toUpperCase();
+            return status === "COMPLETED";
+          }),
+        );
       }
     } catch (err) {
       console.warn(`Error fetching findings for ${dept}:`, err);
@@ -153,7 +156,7 @@ async function loadAuditReviewData(dept, selectedYear = null) {
       );
       if (reviewedFindingsRes.ok) {
         const reviewedJson = await reviewedFindingsRes.json();
-        reviewedFindings = Array.isArray(reviewedJson.rows) ? reviewedJson.rows : [];
+        reviewedFindings = sortByRiskId(Array.isArray(reviewedJson.rows) ? reviewedJson.rows : []);
       }
       // Only fallback to latest when there is no explicit year filter.
       if (reviewedFindings.length === 0 && !Number.isInteger(selectedYear)) {
@@ -163,7 +166,7 @@ async function loadAuditReviewData(dept, selectedYear = null) {
         );
         if (latestRes.ok) {
           const latestJson = await latestRes.json();
-          reviewedFindings = Array.isArray(latestJson.rows) ? latestJson.rows : [];
+          reviewedFindings = sortByRiskId(Array.isArray(latestJson.rows) ? latestJson.rows : []);
         }
       }
     } catch (err) {

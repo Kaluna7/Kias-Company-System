@@ -35,9 +35,13 @@ async function ensureReportMetaIdColumn(stepsTable) {
       await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS report_meta_id INTEGER`);
     }
     await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS reviewer_feedback TEXT DEFAULT ''`);
+    await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS auditee_comment TEXT DEFAULT ''`);
+    await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS follow_up_detail TEXT DEFAULT ''`);
   } catch (e) {
     await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN report_meta_id INTEGER`).catch(() => {});
     await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN reviewer_feedback TEXT DEFAULT ''`).catch(() => {});
+    await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN auditee_comment TEXT DEFAULT ''`).catch(() => {});
+    await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN follow_up_detail TEXT DEFAULT ''`).catch(() => {});
   } finally {
     client.release();
   }
@@ -94,7 +98,7 @@ export async function GET(req, { params }) {
         const metaId = Number(meta.id);
         const steps = await selectMaybe(
           stepsTable,
-          `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer, published_at FROM ${stepsTable} WHERE report_meta_id = ${metaId} ORDER BY no ASC NULLS LAST, id ASC`,
+          `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail, published_at FROM ${stepsTable} WHERE report_meta_id = ${metaId} ORDER BY no ASC NULLS LAST, id ASC`,
         );
         publishes.push({ meta, rows: steps });
       }
@@ -102,7 +106,7 @@ export async function GET(req, { params }) {
     }
 
     const [rows, metaRows] = await Promise.all([
-      selectMaybe(stepsTable, `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer, published_at FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`),
+      selectMaybe(stepsTable, `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail, published_at FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`),
       selectMaybe(metaTable, `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at FROM ${metaTable} ORDER BY id DESC LIMIT 1`),
     ]);
 
@@ -277,8 +281,10 @@ export async function PATCH(req, { params }) {
                  status = $4,
                  comment = $5,
                  reviewer_feedback = $6,
-                 reviewer = $7
-             WHERE id = $1 AND report_meta_id = $8`,
+                 reviewer = $7,
+                 auditee_comment = $8,
+                 follow_up_detail = $9
+             WHERE id = $1 AND report_meta_id = $10`,
             [
               stepId,
               s.no != null ? Number(s.no) : null,
@@ -287,6 +293,8 @@ export async function PATCH(req, { params }) {
               s.comment != null ? String(s.comment) : "",
               s.reviewer_feedback != null ? String(s.reviewer_feedback) : "",
               s.reviewer != null ? String(s.reviewer) : "",
+              s.auditee_comment != null ? String(s.auditee_comment) : "",
+              s.follow_up_detail != null ? String(s.follow_up_detail) : "",
               metaId,
             ],
           );

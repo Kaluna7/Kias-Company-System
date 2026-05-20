@@ -645,8 +645,7 @@ export default function SOPHeader({
                       className="mt-1 w-full px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={preparerStatus}
                       onChange={(e) => onPreparerStatusChange?.(e.target.value)}
-                      // Admin and reviewer cannot change header; only preparer/user may
-                      disabled={isReviewer || isAdmin}
+                      disabled={isReviewer}
                       suppressHydrationWarning
                     >
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -660,8 +659,7 @@ export default function SOPHeader({
                       placeholder="Name"
                       value={preparerName}
                       onChange={(e) => onPreparerNameChange?.(e.target.value)}
-                      // Admin and reviewer cannot change header; user can, respecting schedule lock
-                      disabled={isReviewer || isAdmin || (isUser && schedulePreparerName)}
+                      disabled={isReviewer || (isUser && schedulePreparerName)}
                       readOnly={isUser && schedulePreparerName}
                       suppressHydrationWarning
                     />
@@ -670,19 +668,21 @@ export default function SOPHeader({
                       className="w-full border border-slate-300 bg-white px-3 py-2 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                       value={preparerDate || ""}
                       onChange={(e) => {
-                        // Prevent change if schedule per module has start_date and user is regular user
                         if (schedulePreparerDate && isUser) {
                           console.warn(`[SOP Header] Cannot change preparer date - it's set from schedule per module: ${schedulePreparerDate}`);
                           e.preventDefault();
                           e.stopPropagation();
-                          return false; // Ignore the change
+                          return false;
                         }
                         onPreparerDateChange?.(e.target.value);
                       }}
-                      // Admin and reviewer cannot change preparer date; user only, and not if schedule locked
-                      disabled={isReviewer || isAdmin || schedulePreparerDate}
-                      readOnly={schedulePreparerDate}
-                      title={schedulePreparerDate ? `Date is set from schedule per module: ${schedulePreparerDate}. Cannot be changed.` : ""}
+                      disabled={isReviewer || (schedulePreparerDate && isUser)}
+                      readOnly={schedulePreparerDate && isUser}
+                      title={
+                        schedulePreparerDate && isUser
+                          ? `Date is set from schedule per module: ${schedulePreparerDate}. Cannot be changed.`
+                          : undefined
+                      }
                       suppressHydrationWarning
                     />
                   </div>

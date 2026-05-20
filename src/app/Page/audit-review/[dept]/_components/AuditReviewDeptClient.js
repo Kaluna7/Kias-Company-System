@@ -4,6 +4,33 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
+import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
+
+const AUDIT_REVIEW_TABLE_WIDTH = 3276;
+const AUDIT_REVIEW_COL_GROUP = (
+  <colgroup>
+    <col style={{ width: 36 }} />
+    <col style={{ width: 140 }} />
+    <col style={{ width: 220 }} />
+    <col style={{ width: 100 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 280 }} />
+    <col style={{ width: 280 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 220 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 140 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 200 }} />
+    <col style={{ width: 200 }} />
+  </colgroup>
+);
 
 // Default options for SELECT fields based on Executive Summary template
 const OBJECTIVE_OPTIONS = [
@@ -94,6 +121,12 @@ function parseStoredArray(value) {
   }
 }
 
+function normalizeKeyFindingRows(findings) {
+  return sortByRiskId(Array.isArray(findings) ? findings : []).map((finding, idx) =>
+    normalizeKeyFindingRow(finding, idx),
+  );
+}
+
 function normalizeKeyFindingRow(finding, idx) {
   return {
     no: finding?.no ?? idx + 1,
@@ -118,6 +151,8 @@ function normalizeKeyFindingRow(finding, idx) {
     timeline: finding?.timeline || "",
     followUpStatus: normalizeFollowUpStatus(finding?.followUpStatus ?? finding?.follow_up_status ?? ""),
     auditee: finding?.auditee || "",
+    auditeeComment: finding?.auditeeComment || finding?.auditee_comment || "",
+    followUpDetail: finding?.followUpDetail || finding?.follow_up_detail || "",
   };
 }
 
@@ -135,8 +170,8 @@ function mergeReviewFindings(latestFindings = [], savedReviewFindings = []) {
     ? savedReviewFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx))
     : [];
 
-  if (normalizedSaved.length === 0) return normalizedLatest;
-  if (normalizedLatest.length === 0) return normalizedSaved;
+  if (normalizedSaved.length === 0) return normalizeKeyFindingRows(latestFindings);
+  if (normalizedLatest.length === 0) return normalizeKeyFindingRows(savedReviewFindings);
 
   const savedMap = new Map(normalizedSaved.map((finding) => [getFindingIdentity(finding), finding]));
   // Seluruh baris yang disimpan di audit-review (JSON) harus menang atas snapshot audit-finding
@@ -152,10 +187,7 @@ function mergeReviewFindings(latestFindings = [], savedReviewFindings = []) {
   const latestKeys = new Set(normalizedLatest.map((finding) => getFindingIdentity(finding)));
   const savedOnlyRows = normalizedSaved.filter((finding) => !latestKeys.has(getFindingIdentity(finding)));
 
-  return [...merged, ...savedOnlyRows].map((finding, idx) => ({
-    ...finding,
-    no: idx + 1,
-  }));
+  return normalizeKeyFindingRows([...merged, ...savedOnlyRows]);
 }
 
 export default function AuditReviewDeptClient({
@@ -307,7 +339,7 @@ export default function AuditReviewDeptClient({
     }
 
     if (initialFindings && initialFindings.length > 0) {
-      setKeyFindings(initialFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+      setKeyFindings(normalizeKeyFindingRows(initialFindings));
     }
   }, [initialReviewedFindings, initialFindings]);
 
@@ -502,6 +534,8 @@ export default function AuditReviewDeptClient({
         timeline: "",
         followUpStatus: FOLLOW_UP_STATUS_IN_PROGRESS,
         auditee: "",
+        auditeeComment: "",
+        followUpDetail: "",
       },
     ]);
   };
@@ -542,7 +576,7 @@ export default function AuditReviewDeptClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           auditYear,
-          findings: keyFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)),
+          findings: normalizeKeyFindingRows(keyFindings),
         }),
       });
 
@@ -564,7 +598,7 @@ export default function AuditReviewDeptClient({
 
       const findingsJson = await findingsRes.json().catch(() => ({}));
       if (Array.isArray(findingsJson.rows)) {
-        setKeyFindings(findingsJson.rows.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+        setKeyFindings(normalizeKeyFindingRows(findingsJson.rows));
       }
       setHasSavedReviewFindings(true);
       toast.show("Key findings saved.", "success");
@@ -634,7 +668,7 @@ export default function AuditReviewDeptClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           auditYear,
-          findings: keyFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx)),
+          findings: normalizeKeyFindingRows(keyFindings),
         }),
       });
 
@@ -656,7 +690,7 @@ export default function AuditReviewDeptClient({
 
       const findingsJson = await findingsRes.json().catch(() => ({}));
       if (Array.isArray(findingsJson.rows)) {
-        setKeyFindings(findingsJson.rows.map((finding, idx) => normalizeKeyFindingRow(finding, idx)));
+        setKeyFindings(normalizeKeyFindingRows(findingsJson.rows));
       }
       setHasSavedReviewFindings(true);
       setIsLocked(nextLocked);
@@ -692,6 +726,11 @@ export default function AuditReviewDeptClient({
   const tableAreaClass =
     "w-full min-w-0 text-[11px] leading-tight border border-slate-300 rounded px-1 py-0.5 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[2.5rem] disabled:opacity-50 disabled:cursor-not-allowed";
 
+  const displayFindings = useMemo(() => {
+    if (isTableEditMode) return keyFindings;
+    return normalizeKeyFindingRows(keyFindings);
+  }, [keyFindings, isTableEditMode]);
+
   return (
     <>
       <style jsx>{`
@@ -710,7 +749,7 @@ export default function AuditReviewDeptClient({
           background: #94a3b8;
         }
       `}</style>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-50/95 to-blue-50/80">
+      <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-gradient-to-br from-gray-50 via-slate-50/95 to-blue-50/80">
       <div className="fixed top-2 left-2 sm:top-4 sm:left-4 z-40">
         <button
           onClick={handleBack}
@@ -1030,7 +1069,7 @@ export default function AuditReviewDeptClient({
 
       {/* Content */}
       <div
-        className={`w-full px-3 sm:px-4 pb-4 flex flex-col h-full transition-all duration-500 ease-in-out ${
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden w-full px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
           isHeaderCollapsed ? "pt-14 sm:pt-16" : "pt-24 sm:pt-28 md:pt-32"
         }`}
       >
@@ -1042,7 +1081,7 @@ export default function AuditReviewDeptClient({
         )}
 
         {/* Header Card */}
-        <div className="mb-4">
+        <div className="mb-4 shrink-0">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1076,8 +1115,8 @@ export default function AuditReviewDeptClient({
         </div>
 
         {/* Table - responsive: horizontal scroll when narrow */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 bg-slate-50/80">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white rounded-xl shadow-lg border border-gray-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 bg-slate-50/80 shrink-0">
             <span className="text-xs font-semibold text-slate-600">Key findings</span>
             <button
               type="button"
@@ -1086,6 +1125,7 @@ export default function AuditReviewDeptClient({
                 if (isTableEditMode) {
                   void handleDoneTableEdit();
                 } else {
+                  setKeyFindings(normalizeKeyFindingRows(keyFindings));
                   setIsTableEditMode(true);
                 }
               }}
@@ -1094,33 +1134,43 @@ export default function AuditReviewDeptClient({
               {loading && isTableEditMode ? "Saving..." : isTableEditMode ? "Done" : "Edit"}
             </button>
           </div>
-          <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
-            <table className="w-full border-collapse text-xs min-w-[2200px]" style={{ tableLayout: "fixed" }}>
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "60px" }}>No.</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "140px" }}>AP No.</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "220px" }}>Substantive Test & Testing Status</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "100px" }}>RISK</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>PREPARER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>FINDING RESULT</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "280px" }}>FINDING DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "280px" }}>RECOMMENDATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>STATUS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "220px" }}>REVIEW NOTE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50 align-top" style={{ width: "160px" }}>REVIEW STATUS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>PREPARER RESPO</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>REFERENCE LIN</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>FOLLOW UP DUE DATE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "140px" }}>TIMELINE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>FOLLOW UP STATUS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "160px" }}>AUDITEE</th>
-                </tr>
-              </thead>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <StickyHorizontalScrollTable
+              className="min-h-0 flex-1"
+              colGroup={AUDIT_REVIEW_COL_GROUP}
+              tableClassName="border-collapse text-xs"
+              tableStyle={{ tableLayout: "fixed", width: AUDIT_REVIEW_TABLE_WIDTH, minWidth: AUDIT_REVIEW_TABLE_WIDTH }}
+              measureDeps={[displayFindings.length, isTableEditMode, loading]}
+              header={
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">No.</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AP No.</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">Substantive Test & Testing Status</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PREPARER</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING RESULT</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING DESCRIPTION</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RECOMMENDATION</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">STATUS</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">REVIEW NOTE</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50 align-top">REVIEW STATUS</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PREPARER RESPO</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">REFERENCE LIN</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FOLLOW UP DUE DATE</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">TIMELINE</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FOLLOW UP STATUS</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AUDITEE</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-amber-50 align-top">AUDITEE COMMENT</th>
+                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-amber-50 align-top">FOLLOW-UP DETAIL</th>
+                  </tr>
+                </thead>
+              }
+            >
               <tbody>
-                {keyFindings.length === 0 ? (
+                {displayFindings.length === 0 ? (
                   <tr>
-                    <td colSpan={17} className="p-8 text-center text-gray-500">
+                    <td colSpan={19} className="p-8 text-center text-gray-500">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-gray-600">No Data</p>
                         <p className="text-sm text-gray-400 mt-1">No findings available</p>
@@ -1128,7 +1178,7 @@ export default function AuditReviewDeptClient({
                     </td>
                   </tr>
                 ) : (
-                  keyFindings.map((finding, idx) => (
+                  displayFindings.map((finding, idx) => (
                     <tr key={idx} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
                       <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.no}</td>
                       <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
@@ -1379,11 +1429,39 @@ export default function AuditReviewDeptClient({
                           finding.auditee || "-"
                         )}
                       </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                        {isTableEditMode ? (
+                          <textarea
+                            value={finding.auditeeComment ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "auditeeComment", e.target.value)}
+                            className={`${tableFieldClass} resize-y min-h-[48px]`}
+                            rows={2}
+                            placeholder="Auditee comment for report..."
+                          />
+                        ) : (
+                          finding.auditeeComment || "-"
+                        )}
+                      </td>
+                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                        {isTableEditMode ? (
+                          <textarea
+                            value={finding.followUpDetail ?? ""}
+                            disabled={isInteractionDisabled}
+                            onChange={(e) => handleUpdateFinding(idx, "followUpDetail", e.target.value)}
+                            className={`${tableFieldClass} resize-y min-h-[48px]`}
+                            rows={2}
+                            placeholder="Follow-up detail for report..."
+                          />
+                        ) : (
+                          finding.followUpDetail || "-"
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
-            </table>
+            </StickyHorizontalScrollTable>
           </div>
         </div>
 

@@ -131,6 +131,8 @@ async function loadReportData(year) {
             comment: r.comment || "",
             reviewer_feedback: r.reviewer_feedback || "",
             reviewer: r.reviewer || "",
+            auditee_comment: r.auditee_comment || "",
+            follow_up_detail: r.follow_up_detail || "",
           })),
           audit_period_start,
           audit_period_end,

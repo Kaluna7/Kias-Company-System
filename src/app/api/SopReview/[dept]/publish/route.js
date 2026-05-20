@@ -69,6 +69,8 @@ async function ensureReportTables(client, slug, departmentName) {
       comment TEXT DEFAULT '',
       reviewer_feedback TEXT DEFAULT '',
       reviewer VARCHAR(255) DEFAULT '',
+      auditee_comment TEXT DEFAULT '',
+      follow_up_detail TEXT DEFAULT '',
       published_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
@@ -82,6 +84,14 @@ async function ensureReportTables(client, slug, departmentName) {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                      WHERE table_name = '${stepsTable}' AND column_name = 'reviewer_feedback') THEN
         ALTER TABLE ${stepsTable} ADD COLUMN reviewer_feedback TEXT DEFAULT '';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${stepsTable}' AND column_name = 'auditee_comment') THEN
+        ALTER TABLE ${stepsTable} ADD COLUMN auditee_comment TEXT DEFAULT '';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${stepsTable}' AND column_name = 'follow_up_detail') THEN
+        ALTER TABLE ${stepsTable} ADD COLUMN follow_up_detail TEXT DEFAULT '';
       END IF;
     END $$;
   `);
@@ -169,6 +179,14 @@ export async function POST(req, { params }) {
         ADD COLUMN IF NOT EXISTS reviewer_feedback TEXT DEFAULT '';
       `);
       await client.query(`
+        ALTER TABLE ${stepsTable}
+        ADD COLUMN IF NOT EXISTS auditee_comment TEXT DEFAULT '';
+      `);
+      await client.query(`
+        ALTER TABLE ${stepsTable}
+        ADD COLUMN IF NOT EXISTS follow_up_detail TEXT DEFAULT '';
+      `);
+      await client.query(`
         CREATE TABLE IF NOT EXISTS ${metaTable} (
           id SERIAL PRIMARY KEY,
           department_name VARCHAR(255),
@@ -215,7 +233,7 @@ export async function POST(req, { params }) {
         await client.query(`LOCK TABLE ${stepsTable} IN EXCLUSIVE MODE`);
         await client.query(`LOCK TABLE ${metaTable} IN EXCLUSIVE MODE`);
         const stepsRes = await client.query(
-          `SELECT no, sop_related, status, comment, reviewer_feedback, reviewer FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
+          `SELECT no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`
         );
         const rawSteps = stepsRes.rows || [];
         const seen = new Set();
@@ -272,12 +290,22 @@ export async function POST(req, { params }) {
         const params = [];
         let idx = 1;
         for (const s of steps) {
-          values.push(`($${idx},$${idx + 1},$${idx + 2},$${idx + 3},$${idx + 4},$${idx + 5},NOW(),$${idx + 6})`);
-          params.push(s.no ?? null, s.sop_related ?? "", s.status ?? "DRAFT", s.comment ?? "", s.reviewer_feedback ?? "", s.reviewer ?? "", reportMetaId);
-          idx += 7;
+          values.push(`($${idx},$${idx + 1},$${idx + 2},$${idx + 3},$${idx + 4},$${idx + 5},$${idx + 6},$${idx + 7},NOW(),$${idx + 8})`);
+          params.push(
+            s.no ?? null,
+            s.sop_related ?? "",
+            s.status ?? "DRAFT",
+            s.comment ?? "",
+            s.reviewer_feedback ?? "",
+            s.reviewer ?? "",
+            s.auditee_comment ?? "",
+            s.follow_up_detail ?? "",
+            reportMetaId,
+          );
+          idx += 9;
         }
         await client.query(
-          `INSERT INTO ${reportSteps} (no, sop_related, status, comment, reviewer_feedback, reviewer, published_at, report_meta_id) VALUES ${values.join(", ")}`,
+          `INSERT INTO ${reportSteps} (no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail, published_at, report_meta_id) VALUES ${values.join(", ")}`,
           params
         );
       }
@@ -292,6 +320,8 @@ export async function POST(req, { params }) {
       try {
         revalidatePath("/Page/sop-review/report");
         revalidatePath("/Page/sop-review");
+        revalidatePath("/Page/report");
+        revalidatePath("/Page/report/preview");
       } catch (e) {
         // ignore cache revalidation failures; publish is already committed
       }

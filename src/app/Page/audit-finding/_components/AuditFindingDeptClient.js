@@ -8,6 +8,34 @@ import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScr
 import { useToast } from "@/app/contexts/ToastContext";
 import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
 import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
+import { sortByRiskId } from "@/app/utils/sortByRiskId";
+
+const AUDIT_FINDING_TABLE_WIDTH = 2490;
+const AUDIT_FINDING_COL_GROUP = (
+  <colgroup>
+    <col style={{ width: 36 }} />
+    <col style={{ width: 80 }} />
+    <col style={{ width: 150 }} />
+    <col style={{ width: 180 }} />
+    <col style={{ width: 100 }} />
+    <col style={{ width: 90 }} />
+    <col style={{ width: 130 }} />
+    <col style={{ width: 180 }} />
+    <col style={{ width: 200 }} />
+    <col style={{ width: 130 }} />
+    <col style={{ width: 180 }} />
+    <col style={{ width: 120 }} />
+    <col style={{ width: 60 }} />
+    <col style={{ width: 80 }} />
+    <col style={{ width: 100 }} />
+    <col style={{ width: 130 }} />
+    <col style={{ width: 200 }} />
+    <col style={{ width: 200 }} />
+    <col style={{ width: 100 }} />
+    <col style={{ width: 120 }} />
+    <col style={{ width: 120 }} />
+  </colgroup>
+);
 
 /** Preparer Status / Final Status must be COMPLETE (or Complete) before publish — same as dropdown value COMPLETED. */
 function isAuditFindingHeaderStatusComplete(raw) {
@@ -16,8 +44,7 @@ function isAuditFindingHeaderStatusComplete(raw) {
 }
 
 function normalizeRows(rows) {
-  const list = Array.isArray(rows) ? rows : [];
-  return list.map((item, index) => ({
+  return sortByRiskId(Array.isArray(rows) ? rows : []).map((item, index) => ({
     no: index + 1,
     id: item.id,
     riskId: item.risk_id || "",
@@ -170,6 +197,10 @@ export default function AuditFindingDeptClient({
   const deferredTableData = useDeferredValue(tableData);
   const [findingMeta, setFindingMeta] = useState(initialMeta);
   const [isEditMode, setIsEditMode] = useState(false); // Global edit mode for all rows
+  const displayTableData = useMemo(() => {
+    if (isEditMode) return deferredTableData;
+    return sortByRiskId(deferredTableData).map((row, idx) => ({ ...row, no: idx + 1 }));
+  }, [deferredTableData, isEditMode]);
   const [isScheduleConfigured, setIsScheduleConfigured] = useState(false); // Schedule configuration status
   const [publishModalOpen, setPublishModalOpen] = useState(false);
 
@@ -817,6 +848,11 @@ export default function AuditFindingDeptClient({
   // Handle toggle edit mode
   const handleToggleEditMode = () => {
     if (isReviewer) return; // Reviewer cannot toggle edit mode
+    if (!isEditMode) {
+      const sorted = sortByRiskId(tableData).map((row, idx) => ({ ...row, no: idx + 1 }));
+      tableDataRef.current = sorted;
+      setTableData(sorted);
+    }
     setIsEditMode(!isEditMode);
   };
 
@@ -1396,41 +1432,43 @@ export default function AuditFindingDeptClient({
           </div>
         )}
 
-        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <StickyHorizontalScrollTable
-            tableClassName="w-full border-collapse text-xs min-w-[1600px]"
-            tableStyle={{ tableLayout: "fixed" }}
-            measureDeps={[deferredTableData.length, isEditMode, loading]}
+            className="min-h-0 flex-1"
+            colGroup={AUDIT_FINDING_COL_GROUP}
+            tableClassName="border-collapse text-xs"
+            tableStyle={{ tableLayout: "fixed", width: AUDIT_FINDING_TABLE_WIDTH, minWidth: AUDIT_FINDING_TABLE_WIDTH }}
+            measureDeps={[displayTableData.length, isEditMode, loading]}
             header={
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "40px" }}>NO</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "80px" }}>RISK ID</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "150px" }}>RISK DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "180px" }}>RISK DETAILS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "100px" }}>OWNER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "90px" }}>AP CODE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "130px" }}>SUBSTANTIVE TEST</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "180px" }}>OBJECTIVE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "200px" }}>PROCEDURES</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "130px" }}>METHOD</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "180px" }}>DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "120px" }}>APPLICATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "60px" }}>RISK</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "80px" }}>CHECK (Y/N)</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "100px" }}>PREPARER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "130px" }}>FINDING RESULT</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "200px" }}>FINDING DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "200px" }}>RECOMMENDATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "100px" }}>AUDITEE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "120px" }}>COMPLETION STATUS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "120px" }}>COMPLETION DATE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">NO</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK ID</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK DESCRIPTION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK DETAILS</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">OWNER</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AP CODE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">SUBSTANTIVE TEST</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">OBJECTIVE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PROCEDURES</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">METHOD</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">DESCRIPTION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">APPLICATION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">CHECK (Y/N)</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PREPARER</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING RESULT</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING DESCRIPTION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RECOMMENDATION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AUDITEE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">COMPLETION STATUS</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">COMPLETION DATE</th>
                 </tr>
               </thead>
             }
           >
             <tbody>
-                {deferredTableData.length === 0 ? (
+                {displayTableData.length === 0 ? (
                   <tr>
                     <td colSpan={21} className="p-8 text-center text-gray-500">
                       <div className="flex flex-col items-center justify-center">
@@ -1440,7 +1478,7 @@ export default function AuditFindingDeptClient({
                     </td>
                   </tr>
                 ) : (
-                  deferredTableData.map((row, index) => {
+                  displayTableData.map((row, index) => {
                     const isFromAuditProgram = !row.id && !isEditMode; // Data from audit-program doesn't have id, but can be edited if in edit mode
                     const isEditing = isEditMode; // All rows can be edited when edit mode is on
                     return (

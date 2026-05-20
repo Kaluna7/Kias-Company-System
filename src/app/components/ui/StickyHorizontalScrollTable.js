@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export default function StickyHorizontalScrollTable({
   header,
   children,
+  colGroup = null,
   tableClassName = "min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700",
   tableStyle,
   className = "",
@@ -104,6 +105,7 @@ export default function StickyHorizontalScrollTable({
           onScroll={() => syncHorizontalScroll("header")}
         >
           <table className={tableClassName} style={tableStyle}>
+            {colGroup}
             {header}
           </table>
         </div>
@@ -111,10 +113,11 @@ export default function StickyHorizontalScrollTable({
         <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <div
             ref={xScrollRef}
-            className="overflow-x-auto overflow-y-visible"
+            className="overflow-x-auto overflow-y-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             onScroll={() => syncHorizontalScroll("content")}
           >
             <table ref={tableRef} className={tableClassName} style={tableStyle}>
+              {colGroup}
               {children}
             </table>
           </div>
@@ -122,11 +125,11 @@ export default function StickyHorizontalScrollTable({
 
         <div
           ref={hBarRef}
-          className="shrink-0 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-gray-50"
+          className="sticky bottom-0 z-20 shrink-0 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-gray-50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
           onScroll={() => syncHorizontalScroll("bar")}
           aria-label="Scroll table horizontally"
         >
-          <div style={{ width: tableScrollWidth, height: 14 }} />
+          <div style={{ width: tableScrollWidth, height: 16 }} />
         </div>
       </div>
     </div>

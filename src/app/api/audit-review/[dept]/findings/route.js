@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import pkg from "pg";
+import { sortByRiskId } from "@/app/utils/sortByRiskId";
 
 const { Pool } = pkg;
 
@@ -86,11 +87,12 @@ export async function GET(req, { params }) {
         : await client.query(`SELECT * FROM ${tableName} ORDER BY id DESC LIMIT 1`);
 
       const row = result.rows?.[0] || null;
+      const rows = sortByRiskId(parseRows(row?.findings_json));
       return NextResponse.json(
         {
           success: true,
           data: row,
-          rows: parseRows(row?.findings_json),
+          rows,
         },
         { status: 200 },
       );
@@ -127,7 +129,7 @@ export async function POST(req, { params }) {
     const auditYear = Number.isFinite(Number(auditYearRaw))
       ? parseInt(String(auditYearRaw), 10)
       : new Date().getFullYear();
-    const findings = Array.isArray(body?.findings) ? body.findings : [];
+    const findings = sortByRiskId(Array.isArray(body?.findings) ? body.findings : []);
 
     const client = await pool.connect();
     try {

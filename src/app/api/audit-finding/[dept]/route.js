@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@/generated/prisma";
 import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
+import { compareCode } from "@/app/utils/compareCode";
+import { sortByRiskId } from "@/app/utils/sortByRiskId";
 
 const prisma = globalThis.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
@@ -194,21 +196,27 @@ async function loadFindingsFromTable(dept, options) {
   const columns = await getFindingTableColumns(dept);
   const selectSql = buildFindingSelectSql(columns);
 
-  const pagingParams = [...params];
-  const offsetIdx = pagingParams.push(options.skip ?? 0);
-  const limitIdx = pagingParams.push(options.take ?? 50);
-
-  const rows = await prisma.$queryRawUnsafe(
-    `SELECT ${selectSql} FROM "${tableName}" ${whereSql} ORDER BY id DESC OFFSET $${offsetIdx} LIMIT $${limitIdx}`,
-    ...pagingParams
-  );
-
-  const countRows = await prisma.$queryRawUnsafe(
-    `SELECT COUNT(*)::int AS total FROM "${tableName}" ${whereSql}`,
+  const allRows = await prisma.$queryRawUnsafe(
+    `SELECT ${selectSql} FROM "${tableName}" ${whereSql}`,
     ...params
   );
+  const sortedRows = sortByRiskId(allRows);
+  const skip = options.skip ?? 0;
+  const take = options.take ?? 50;
 
-  return { rows, total: countRows?.[0]?.total ?? 0, columns };
+  return {
+    rows: sortedRows.slice(skip, skip + take),
+    total: sortedRows.length,
+    columns,
+  };
+}
+
+function paginateSortedFindings(rows, skip, take) {
+  const sorted = sortByRiskId(rows);
+  return {
+    rows: sorted.slice(skip, skip + take),
+    total: sorted.length,
+  };
 }
 
 async function loadCompletedFindingKeysFromTable(dept, options = {}) {
@@ -403,15 +411,9 @@ export async function GET(req, { params }) {
     // Cukup pakai tabel audit_finding_* sebagai sumber data utama untuk report/review.
     if (includeCompleted || !apMapping) {
       const { rows: findings, total } = dbHasSnapshotFields
-        ? await Promise.all([
-            delegate.findMany({
-              where: whereFinding,
-              orderBy: { id: "desc" },
-              skip,
-              take: pageSize,
-            }),
-            delegate.count({ where: whereFinding }),
-          ]).then(([rows, count]) => ({ rows, total: count }))
+        ? await delegate
+            .findMany({ where: whereFinding })
+            .then((rows) => paginateSortedFindings(rows, skip, pageSize))
         : await loadFindingsFromTable(dept, {
             includeCompleted,
             from,
@@ -450,10 +452,9 @@ export async function GET(req, { params }) {
     const parentModel = getAuditProgramParent(dept);
     if (!apModel || !parentModel) {
       const { rows: findings, total } = usePrismaFindManyForFindings
-        ? await Promise.all([
-            delegate.findMany({ where: whereFinding, orderBy: { id: "desc" }, skip, take: pageSize }),
-            delegate.count({ where: whereFinding }),
-          ]).then(([rows, count]) => ({ rows, total: count }))
+        ? await delegate
+            .findMany({ where: whereFinding })
+            .then((rows) => paginateSortedFindings(rows, skip, pageSize))
         : await loadFindingsFromTable(dept, {
             includeCompleted,
             from,
@@ -547,9 +548,10 @@ export async function GET(req, { params }) {
         .filter(Boolean),
     );
 
-    const auditProgramData = parents.flatMap((p) =>
-      p.aps && p.aps.length > 0
-        ? p.aps
+    const auditProgramData = parents.flatMap((p) => {
+      const aps = [...(p.aps || [])].sort((a, b) => compareCode(a?.ap_code, b?.ap_code));
+      return aps.length > 0
+        ? aps
             .map((ap) => {
               const riskId = p.risk_id_no ?? String(p.risk_id) ?? "";
               const apCode = ap.ap_code ?? "";
@@ -634,11 +636,12 @@ export async function GET(req, { params }) {
               application: null,
               owners: p.owners ?? null,
             },
-          ]
-    );
+          ];
+    });
 
-    const total = auditProgramData.length;
-    const dataWithStatus = auditProgramData.slice(skip, skip + pageSize);
+    const sortedAuditProgramData = sortByRiskId(auditProgramData);
+    const total = sortedAuditProgramData.length;
+    const dataWithStatus = sortedAuditProgramData.slice(skip, skip + pageSize);
 
     return NextResponse.json({ data: dataWithStatus, meta: { total, page, pageSize } }, { status: 200 });
   } catch (err) {

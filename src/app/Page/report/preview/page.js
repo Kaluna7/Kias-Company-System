@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import { sortByRiskId } from "@/app/utils/sortByRiskId";
 
 const REPORT_DEPARTMENTS = [
   { key: "finance", label: "FINANCE", apiPath: "finance" },
@@ -1629,35 +1630,46 @@ function ReportPreviewPageContent() {
         const sections = [];
 
         for (const dept of REPORT_DEPARTMENTS) {
-          const params = new URLSearchParams();
-          // Gunakan shape yang sama dengan halaman SOP Review Report: all=1 & year
-          params.set("all", "1");
-          if (year) params.set("year", String(year));
-
-          // Load SOP Review published data (steps) dari report SOP (bukan draft)
+          // Load SOP Review published data (same source as SOP Review Report)
           let sopRows = [];
           try {
             const sopRes = await fetch(
-              `/api/SopReview/${dept.apiPath}/published?${params.toString()}`,
+              `/api/SopReview/${dept.apiPath}/published?all=1`,
             );
             if (sopRes.ok) {
               const sopJson = await sopRes.json().catch(() => ({}));
-              const publishes = Array.isArray(sopJson.publishes) ? sopJson.publishes : [];
+              let publishes = Array.isArray(sopJson.publishes) ? sopJson.publishes : [];
+
+              if (year && Number.isFinite(year)) {
+                const yearFiltered = publishes.filter((pub) => {
+                  const meta = pub.meta || {};
+                  const aps = meta.audit_fieldwork_start_date;
+                  const pubAt = meta.published_at;
+                  if (aps) {
+                    const d = new Date(aps);
+                    if (!Number.isNaN(d.getTime()) && d.getFullYear() === year) return true;
+                  }
+                  if (pubAt) {
+                    const d = new Date(pubAt);
+                    return !Number.isNaN(d.getTime()) && d.getFullYear() === year;
+                  }
+                  return false;
+                });
+                publishes = yearFiltered.length > 0 ? yearFiltered : publishes;
+              }
 
               publishes.forEach((pub) => {
                 (pub.rows || []).forEach((row, idx) => {
                   const sopRelated = (row.sop_related || "").toString().trim();
-                  const status = (row.status || "").toString().toUpperCase();
                   if (!sopRelated) return;
-                  if (status !== "APPROVED") return;
                   sopRows.push({
                     sourceIndex: sopRows.length,
                     no: row.no ?? idx + 1,
                     sopRelated,
-                    status,
+                    status: (row.status || "").toString().toUpperCase(),
                     reviewComment: (row.comment || "").toString(),
-                    auditeeComment: "",
-                    followUpDetail: "",
+                    auditeeComment: (row.auditee_comment || "").toString(),
+                    followUpDetail: (row.follow_up_detail || "").toString(),
                   });
                 });
               });
@@ -1670,8 +1682,8 @@ function ReportPreviewPageContent() {
                 sopRowsCount: sopRows.length,
               });
             }
-          } catch {
-            // ignore SOP errors for consolidated report
+          } catch (err) {
+            console.warn("[REPORT-PREVIEW] SOP load failed", dept.apiPath, err);
           }
 
           // Load Audit Review findings from the audit review module only.
@@ -1702,14 +1714,14 @@ function ReportPreviewPageContent() {
             };
 
             let rows = await loadAuditReviewRows(true);
-            if (rows.length === 0 && !year) {
+            if (rows.length === 0 && year) {
               rows = await loadAuditReviewRows(false);
             }
 
             if (rows.length > 0) {
-              auditRows = rows.map((r, idx) => ({
+              auditRows = sortByRiskId(rows).map((r, idx) => ({
                 sourceIndex: idx,
-                no: r.no ?? idx + 1,
+                no: idx + 1,
                 riskId: r.riskId ?? r.risk_id ?? "",
                 risk: r.risk ?? "",
                 riskDetails: r.riskDetails ?? r.risk_details ?? "",
@@ -1721,8 +1733,8 @@ function ReportPreviewPageContent() {
                 findingResult: r.findingResult ?? r.finding_result ?? "",
                 findingDescription: r.findingDescription ?? r.finding_description ?? "",
                 recommendation: r.recommendation ?? "",
-                auditeeComment: "",
-                followUpDetail: "",
+                auditeeComment: r.auditeeComment ?? r.auditee_comment ?? "",
+                followUpDetail: r.followUpDetail ?? r.follow_up_detail ?? "",
               }));
             }
 
@@ -1757,7 +1769,7 @@ function ReportPreviewPageContent() {
           }
 
           const isAuditReviewLocked = executiveSummary?.is_locked === true;
-          const visibleAuditRows = isAuditReviewLocked ? auditRows : [];
+          const visibleAuditRows = auditRows.length > 0 ? auditRows : [];
 
           if (sopRows.length > 0 || visibleAuditRows.length > 0) {
             const normalizedSopRows = sopRows.map((row, idx) => ({
@@ -3781,48 +3793,10 @@ function ReportPreviewPageContent() {
                             {row.reviewComment || (row.__continuedRow ? "" : "-")}
                           </td>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                            {row.__continuedRow ? null : (
-                              <textarea
-                                data-plain-autoresize
-                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                                rows={1}
-                                placeholder="Auditee comment"
-                                defaultValue={row.auditeeComment || ""}
-                                onInput={(e) => {
-                                  autoResizePlainTextarea(e.target);
-                                  enqueueRowFieldUpdate(
-                                    "sop",
-                                    page.dept.deptKey,
-                                    row.sourceIndex ?? rIdx,
-                                    "auditeeComment",
-                                    e.target.value,
-                                  );
-                                }}
-                                onBlur={flushPendingFieldUpdates}
-                              />
-                            )}
+                            {row.__continuedRow ? "" : (row.auditeeComment || "-")}
                           </td>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                            {row.__continuedRow ? null : (
-                              <textarea
-                                data-plain-autoresize
-                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                                rows={1}
-                                placeholder="Follow-up detail"
-                                defaultValue={row.followUpDetail || ""}
-                                onInput={(e) => {
-                                  autoResizePlainTextarea(e.target);
-                                  enqueueRowFieldUpdate(
-                                    "sop",
-                                    page.dept.deptKey,
-                                    row.sourceIndex ?? rIdx,
-                                    "followUpDetail",
-                                    e.target.value,
-                                  );
-                                }}
-                                onBlur={flushPendingFieldUpdates}
-                              />
-                            )}
+                            {row.__continuedRow ? "" : (row.followUpDetail || "-")}
                           </td>
                         </tr>
                       ))}
@@ -3932,48 +3906,10 @@ function ReportPreviewPageContent() {
                             {row.findingDescription || ""}
                           </td>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                            {row.__continuedRow ? null : (
-                              <textarea
-                                data-plain-autoresize
-                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                                rows={1}
-                                placeholder="Auditee comment"
-                                defaultValue={row.auditeeComment || ""}
-                                onInput={(e) => {
-                                  autoResizePlainTextarea(e.target);
-                                  enqueueRowFieldUpdate(
-                                    "audit",
-                                    page.dept.deptKey,
-                                    row.sourceIndex ?? aIdx,
-                                    "auditeeComment",
-                                    e.target.value,
-                                  );
-                                }}
-                                onBlur={flushPendingFieldUpdates}
-                              />
-                            )}
+                            {row.__continuedRow ? "" : (row.auditeeComment || "-")}
                           </td>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                            {row.__continuedRow ? null : (
-                              <textarea
-                                data-plain-autoresize
-                                className="w-full bg-transparent border-none rounded-none px-0 py-0 text-[9px] leading-snug resize-none overflow-hidden focus:outline-none"
-                                rows={1}
-                                placeholder="Follow-up detail"
-                                defaultValue={row.followUpDetail || ""}
-                                onInput={(e) => {
-                                  autoResizePlainTextarea(e.target);
-                                  enqueueRowFieldUpdate(
-                                    "audit",
-                                    page.dept.deptKey,
-                                    row.sourceIndex ?? aIdx,
-                                    "followUpDetail",
-                                    e.target.value,
-                                  );
-                                }}
-                                onBlur={flushPendingFieldUpdates}
-                              />
-                            )}
+                            {row.__continuedRow ? "" : (row.followUpDetail || "-")}
                           </td>
                         </tr>
                       ))}
