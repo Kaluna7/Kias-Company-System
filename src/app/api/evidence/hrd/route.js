@@ -1,4 +1,4 @@
-export const runtime = "nodejs";
+export { runtime, maxDuration } from "../_shared/routeConfig";
 
 import { makeEvidenceHandlers } from "../_shared/handlers";
 

@@ -1,37 +1,61 @@
 /**
- * POST evidence file with XMLHttpRequest upload progress.
+ * POST evidence file with XMLHttpRequest upload progress (no client timeout for large files).
  * @param {string} url
  * @param {FormData} formData
  * @param {(loaded: number, total: number) => void} [onProgress]
+ * @param {{ fileSize?: number }} [options]
  */
-export function uploadEvidenceWithProgress(url, formData, onProgress) {
+export function uploadEvidenceWithProgress(url, formData, onProgress, options = {}) {
+  const expectedSize = options.fileSize || 0;
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
+    xhr.timeout = 0;
+
     xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
+      if (!onProgress) return;
+      if (event.lengthComputable) {
         onProgress(event.loaded, event.total);
+      } else if (expectedSize > 0) {
+        onProgress(event.loaded, expectedSize);
+      } else {
+        onProgress(event.loaded, event.loaded || 1);
       }
     };
+
     xhr.onload = () => {
+      if (xhr.status === 0) {
+        reject(new Error("Koneksi terputus. Upload dibatalkan atau server tidak merespons."));
+        return;
+      }
+
       let result = {};
       try {
         result = xhr.responseText ? JSON.parse(xhr.responseText) : {};
       } catch {
-        reject(new Error("Invalid server response"));
+        reject(new Error("Respons server tidak valid."));
         return;
       }
+
       if (xhr.status >= 200 && xhr.status < 300) {
+        if (result.success === false) {
+          reject(new Error(result.error || "Upload gagal"));
+          return;
+        }
         resolve(result);
       } else {
-        reject(new Error(result.error || `Upload failed (${xhr.status})`));
+        reject(new Error(result.error || `Upload gagal (HTTP ${xhr.status})`));
       }
     };
-    xhr.onerror = () => reject(new Error("Network error during upload"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+
+    xhr.onerror = () => reject(new Error("Koneksi jaringan gagal saat upload."));
+    xhr.ontimeout = () => reject(new Error("Upload timeout — coba lagi atau periksa koneksi."));
+    xhr.onabort = () => reject(new Error("Upload dibatalkan."));
+
     xhr.send(formData);
   });
 }
 
-/** Bytes threshold: show full-screen progress overlay (large upload). */
-export const EVIDENCE_LARGE_UPLOAD_BYTES = 512 * 1024;
+/** Show full-screen progress overlay for any upload. */
+export const EVIDENCE_LARGE_UPLOAD_BYTES = 0;

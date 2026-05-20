@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { mkdir } from "fs/promises";
+import { saveUploadFile } from "@/app/lib/saveUploadFile";
 import { join } from "path";
 import { existsSync } from "fs";
 import prisma from "@/app/lib/prisma";
@@ -38,9 +39,7 @@ export async function POST(req) {
     const filePath = join(uploadsDir, fileName);
 
     // Convert file to buffer and save
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
+    await saveUploadFile(file, filePath);
 
     // Return file URL and name
     const fileUrl = `/uploads/evidence/${department.toLowerCase()}/${fileName}`;

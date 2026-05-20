@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir, unlink } from "fs/promises";
+import { mkdir, unlink } from "fs/promises";
+import { saveUploadFile } from "@/app/lib/saveUploadFile";
 import { join } from "path";
 import { existsSync } from "fs";
 import prisma from "@/app/lib/prisma";
@@ -147,9 +148,7 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const fileName = `${ap_code || "file"}_${timestamp}.${fileExtension}`;
       const filePath = join(uploadsDir, fileName);
 
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      await writeFile(filePath, buffer);
+      await saveUploadFile(file, filePath);
 
       const fileUrl = `/uploads/evidence/${department.toLowerCase()}/${fileName}`;
       const apIdNum = ap_id ? parseInt(ap_id) : null;

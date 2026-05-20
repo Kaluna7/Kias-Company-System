@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef, useCallback, useDeferredValue } f
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/app/components/ui/Pagination";
+import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
 import { useToast } from "@/app/contexts/ToastContext";
 import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
 import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
@@ -1074,7 +1075,7 @@ export default function AuditFindingDeptClient({
   }, []);
 
   return (
-    <main className="min-h-screen w-full bg-[#E6F0FA]">
+    <main className="flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-[#E6F0FA]">
       <div className="fixed z-40 top-3 left-4">
         <button
           onClick={handleBack}
@@ -1305,12 +1306,12 @@ export default function AuditFindingDeptClient({
 
       {/* Content */}
       <div
-        className={`px-3 sm:px-4 pb-4 flex flex-col h-full transition-all duration-500 ease-in-out ${
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
           isHeaderCollapsed ? "pt-16" : "pt-32"
         }`}
       >
         {/* Header above table (requested) */}
-        <div className="mb-4">
+        <div className="mb-4 shrink-0">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
             <div className="text-xs font-semibold text-slate-500 tracking-wide">{titleCode} AUDIT FINDING</div>
             <div className="text-lg font-bold text-slate-900">{departmentLabel}</div>
@@ -1319,7 +1320,7 @@ export default function AuditFindingDeptClient({
         </div>
 
         {/* Toolbar above table */}
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
           <div className="text-sm text-slate-600">
             Total: <span className="font-semibold text-slate-900">{tableData.length}</span>
           </div>
@@ -1382,7 +1383,7 @@ export default function AuditFindingDeptClient({
         </div>
 
         {canOpenPublishModal && !isMetaReadyForPublish && (
-          <div className="mb-3 text-xs text-amber-800 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
+          <div className="mb-3 shrink-0 text-xs text-amber-800 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
             To publish, set both <span className="font-semibold">Preparer Status</span> and{" "}
             <span className="font-semibold">Final Status</span> to <span className="font-semibold">Complete</span> in
             the header above (they save automatically). Admin and reviewer only.
@@ -1390,15 +1391,17 @@ export default function AuditFindingDeptClient({
         )}
 
         {error && (
-          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mb-3 shrink-0 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
             {error}
           </div>
         )}
 
-        {/* Table - responsive: horizontal scroll when narrow */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 mb-4">
-          <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 shadow-sm -mx-2 sm:mx-0">
-            <table className="w-full border-collapse text-xs min-w-[1600px]" style={{ tableLayout: "fixed" }}>
+        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <StickyHorizontalScrollTable
+            tableClassName="w-full border-collapse text-xs min-w-[1600px]"
+            tableStyle={{ tableLayout: "fixed" }}
+            measureDeps={[deferredTableData.length, isEditMode, loading]}
+            header={
               <thead>
                 <tr className="bg-gray-100">
                   <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "40px" }}>NO</th>
@@ -1424,7 +1427,9 @@ export default function AuditFindingDeptClient({
                   <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top" style={{ width: "120px" }}>COMPLETION DATE</th>
                 </tr>
               </thead>
-              <tbody>
+            }
+          >
+            <tbody>
                 {deferredTableData.length === 0 ? (
                   <tr>
                     <td colSpan={21} className="p-8 text-center text-gray-500">
@@ -1594,10 +1599,14 @@ export default function AuditFindingDeptClient({
                     );
                   })
                 )}
-              </tbody>
-            </table>
-          </div>
-          <Pagination meta={findingMeta} onPageChange={(p) => fetchData(p)} loading={loading} />
+            </tbody>
+          </StickyHorizontalScrollTable>
+          <Pagination
+            className="shrink-0 border-t border-gray-200 bg-white px-2 py-2"
+            meta={findingMeta}
+            onPageChange={(p) => fetchData(p)}
+            loading={loading}
+          />
         </div>
       </div>
 

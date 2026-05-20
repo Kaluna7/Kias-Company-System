@@ -5,10 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
-import {
-  uploadEvidenceWithProgress,
-  EVIDENCE_LARGE_UPLOAD_BYTES,
-} from "./uploadEvidenceWithProgress";
+import { uploadEvidenceWithProgress } from "./uploadEvidenceWithProgress";
 
 const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
 
@@ -222,18 +219,16 @@ export default function EvidenceDeptPage({
       setError("");
 
       const totalBytes = filesToUpload.reduce((sum, f) => sum + (f.size || 0), 0);
-      const useProgressOverlay =
-        totalBytes >= EVIDENCE_LARGE_UPLOAD_BYTES ||
-        filesToUpload.some((f) => (f.size || 0) >= EVIDENCE_LARGE_UPLOAD_BYTES);
 
-      if (useProgressOverlay) {
-        setUploadOverlay({
-          progress: 0,
-          currentFile: filesToUpload[0]?.name || "",
-          totalFiles: filesToUpload.length,
-          completedFiles: 0,
-        });
-      }
+      const overlayBase = {
+        phase: "uploading",
+        progress: 0,
+        currentFile: filesToUpload[0]?.name || "",
+        totalFiles: filesToUpload.length,
+        completedFiles: 0,
+        errorMessage: "",
+      };
+      setUploadOverlay(overlayBase);
 
       if (skippedUnsupported > 0) {
         setError(`${skippedUnsupported} file(s) skipped (unsupported type).`);
@@ -245,15 +240,29 @@ export default function EvidenceDeptPage({
       }
 
       let updatedAttachments = Array.isArray(row.attachments) ? [...row.attachments] : [];
-      let hadFailure = false;
       let bytesCompleted = 0;
       const uploadUrl = `/api/evidence/${evidenceApiSlug}`;
+      let lastFailedFile = "";
+
+      const patchOverlay = (patch) => {
+        setUploadOverlay((prev) => ({
+          phase: "uploading",
+          progress: 0,
+          currentFile: "",
+          totalFiles: filesToUpload.length,
+          completedFiles: 0,
+          errorMessage: "",
+          ...prev,
+          ...patch,
+        }));
+      };
 
       try {
         for (let fileIndex = 0; fileIndex < filesToUpload.length; fileIndex++) {
           const file = filesToUpload[fileIndex];
           const formData = new FormData();
           const safeName = file.name || "upload.dat";
+          lastFailedFile = safeName;
           formData.append("file", file, safeName);
           formData.append("original_name", safeName);
           formData.append("ap_id", row.ap_id);
@@ -261,51 +270,45 @@ export default function EvidenceDeptPage({
           formData.append("department", departmentLabel);
           formData.append("year", String(effectiveYear));
 
-          if (useProgressOverlay) {
-            setUploadOverlay((prev) => ({
-              ...prev,
-              currentFile: safeName,
-              completedFiles: fileIndex,
-              progress:
-                totalBytes > 0
-                  ? Math.round((bytesCompleted / totalBytes) * 100)
-                  : Math.round((fileIndex / filesToUpload.length) * 100),
-            }));
-          }
-
-          const result = await uploadEvidenceWithProgress(uploadUrl, formData, (loaded, total) => {
-            if (!useProgressOverlay) return;
-            const fileTotal = total > 0 ? total : file.size || 1;
-            const overallLoaded = bytesCompleted + loaded;
-            const overallTotal = totalBytes > 0 ? totalBytes : fileTotal * filesToUpload.length;
-            const pct =
-              overallTotal > 0
-                ? Math.round((overallLoaded / overallTotal) * 100)
-                : Math.round(((fileIndex + loaded / fileTotal) / filesToUpload.length) * 100);
-            setUploadOverlay((prev) => ({
-              ...prev,
-              progress: Math.min(99, pct),
-              currentFile: safeName,
-              completedFiles: fileIndex,
-            }));
+          patchOverlay({
+            currentFile: safeName,
+            completedFiles: fileIndex,
+            progress:
+              totalBytes > 0
+                ? Math.round((bytesCompleted / totalBytes) * 100)
+                : Math.round((fileIndex / filesToUpload.length) * 100),
           });
+
+          const result = await uploadEvidenceWithProgress(
+            uploadUrl,
+            formData,
+            (loaded, total) => {
+              const fileTotal = total > 0 ? total : file.size || 1;
+              const overallLoaded = bytesCompleted + loaded;
+              const overallTotal = totalBytes > 0 ? totalBytes : fileTotal * filesToUpload.length;
+              const pct =
+                overallTotal > 0
+                  ? Math.round((overallLoaded / overallTotal) * 100)
+                  : Math.round(((fileIndex + loaded / fileTotal) / filesToUpload.length) * 100);
+              patchOverlay({
+                progress: Math.min(99, pct),
+                currentFile: safeName,
+                completedFiles: fileIndex,
+              });
+            },
+            { fileSize: file.size || 0 },
+          );
 
           bytesCompleted += file.size || 0;
 
-          if (result.success) {
-            updatedAttachments = [
-              ...updatedAttachments,
-              {
-                url: result.fileUrl,
-                name: result.fileName || file.name,
-                uploaded_at: new Date().toISOString(),
-              },
-            ].slice(0, 5);
-          } else {
-            hadFailure = true;
-            setError(result.error || `Upload failed for ${safeName}`);
-            break;
-          }
+          updatedAttachments = [
+            ...updatedAttachments,
+            {
+              url: result.fileUrl,
+              name: result.fileName || file.name,
+              uploaded_at: new Date().toISOString(),
+            },
+          ].slice(0, 5);
         }
 
         if (updatedAttachments.length > existingCount) {
@@ -321,19 +324,27 @@ export default function EvidenceDeptPage({
             `${updatedAttachments.length - existingCount} file(s) uploaded successfully.`,
           );
           setTimeout(() => setSuccessMessage(""), 4000);
-        } else if (!hadFailure) {
-          setError("Upload failed");
         }
+
+        patchOverlay({ phase: "success", progress: 100, completedFiles: filesToUpload.length });
+        await new Promise((r) => setTimeout(r, 1800));
+        setUploadOverlay(null);
       } catch (error) {
         console.error("Error uploading file:", error);
-        setError(error.message || "Upload failed");
+        const msg = error?.message || "Upload gagal";
+        setError(msg);
+        setUploadOverlay({
+          phase: "error",
+          progress: Math.min(
+            99,
+            totalBytes > 0 ? Math.round((bytesCompleted / totalBytes) * 100) : 0,
+          ),
+          currentFile: lastFailedFile || filesToUpload[0]?.name || "",
+          totalFiles: filesToUpload.length,
+          completedFiles: 0,
+          errorMessage: msg,
+        });
       } finally {
-        if (useProgressOverlay) {
-          setUploadOverlay((prev) => (prev ? { ...prev, progress: 100 } : null));
-          setTimeout(() => setUploadOverlay(null), 400);
-        } else {
-          setUploadOverlay(null);
-        }
         setUploadingIndex(null);
       }
     },
@@ -673,10 +684,13 @@ export default function EvidenceDeptPage({
       </div>
       <EvidenceUploadProgressOverlay
         open={Boolean(uploadOverlay)}
+        phase={uploadOverlay?.phase ?? "uploading"}
         progress={uploadOverlay?.progress ?? 0}
         currentFile={uploadOverlay?.currentFile ?? ""}
         totalFiles={uploadOverlay?.totalFiles ?? 0}
         completedFiles={uploadOverlay?.completedFiles ?? 0}
+        errorMessage={uploadOverlay?.errorMessage ?? ""}
+        onClose={() => setUploadOverlay(null)}
       />
     </main>
   );
