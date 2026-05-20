@@ -27,7 +27,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     .trim()
     .toLowerCase();
   const isAdminB = role === "adminb" || userIdentity === "adminb" || userIdentity.startsWith("adminb@");
-  const canEditPublished = role === "reviewer" || role === "admin" || isAdminB;
+  const canEditPublished = role === "reviewer" || role === "admin" || role === "user" || isAdminB;
   const canEditReportDates = canEditPublished;
 
   const [rows, setRows] = useState(initialRows);

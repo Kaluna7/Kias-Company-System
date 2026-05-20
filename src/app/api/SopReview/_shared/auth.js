@@ -127,7 +127,7 @@ export async function requireSopEditor() {
 }
 
 /**
- * Editing published report data: reviewer or admin only.
+ * Editing published report data: SOP editor roles allowed.
  */
 export async function requireSopReportPublishedEditor() {
   try {
@@ -138,9 +138,9 @@ export async function requireSopReportPublishedEditor() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    if (role !== "reviewer" && !isAdminLike(session)) {
+    if (role !== "reviewer" && role !== "user" && !isAdminLike(session)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: only reviewer or admin can edit published report data" },
+        { success: false, error: "Forbidden: SOP editor only" },
         { status: 403 },
       );
     }
