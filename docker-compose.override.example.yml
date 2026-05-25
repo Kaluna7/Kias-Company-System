@@ -1,0 +1,7 @@
+# Salin ke server (Jenkins workspace), jangan commit ke Git:
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+# Lalu sesuaikan path .env Anda di server.
+services:
+  app:
+    env_file:
+      - /var/www/kias.env

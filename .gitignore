@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Server-only compose override (loads your .env path)
+docker-compose.override.yml
+
 # vercel
 .vercel
 
