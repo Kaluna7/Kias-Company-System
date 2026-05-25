@@ -9,6 +9,8 @@ services:
     restart: always
     ports:
       - "3001:3000"
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://postgres:12345@postgres_db:5432/kias
       NEXTAUTH_SECRET: supersecret_kias_2026
