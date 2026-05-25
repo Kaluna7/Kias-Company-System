@@ -9,6 +9,7 @@ services:
       DATABASE_URL: postgresql://postgres:12345@postgres_db:5432/kias
       NEXTAUTH_SECRET: supersecret_kias_2026
       NEXTAUTH_URL: http://76.13.20.134
+      INTERNAL_APP_URL: http://127.0.0.1:3000
     volumes:
       - /var/www/kias-uploads:/app/public/uploads
 

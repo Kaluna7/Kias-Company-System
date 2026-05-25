@@ -3,7 +3,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
+import { getAuditFindingMetaRecord } from "@/lib/auditFinding/getMetaRecord";
+import { getUserAllowedDepartments } from "@/lib/schedule/getUserAllowedDepartments";
+import { loadModuleScheduleRows } from "@/lib/schedule/loadModuleScheduleRows";
 import {
   buildScheduleWindowsByDeptKey,
   formatScheduleRange,
@@ -48,19 +50,11 @@ export default async function B2AuditFinding({ searchParams }) {
   let allowedDepartments = [];
   if (!isAdmin && !isReviewer && userName) {
     try {
-      const baseUrl = getInternalFetchBaseUrl();
-      const res = await fetch(
-        `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=audit-finding&year=${encodeURIComponent(String(auditYear))}`,
-        {
-        cache: "no-store",
-        }
+      allowedDepartments = await getUserAllowedDepartments(
+        userName,
+        "audit-finding",
+        auditYear,
       );
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.success) {
-          allowedDepartments = data.allowedDepartments || [];
-        }
-      }
     } catch (err) {
       console.warn("Failed to load user assignments:", err.message);
     }
@@ -90,46 +84,35 @@ export default async function B2AuditFinding({ searchParams }) {
     { id: 'B2.11', department: 'WAREHOUSE', apiPath: 'whs' },
   ];
 
-  const internalBase = getInternalFetchBaseUrl();
-
   const [metaResults, scheduleByDeptKey] = await Promise.all([
     Promise.all(
       baseFindings.map(async (base) => {
         try {
-          const url = new URL(`${internalBase}/api/audit-finding/${encodeURIComponent(base.apiPath)}/meta`);
-          url.searchParams.set("year", String(auditYear));
-          const res = await fetch(url.toString(), { cache: 'no-store' });
-          if (!res.ok) return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
-          const json = await res.json().catch(() => null);
-          const meta = json?.success ? json.data : null;
-          const preparerStatus = (meta?.preparer_status || '').toUpperCase().trim();
-          const finalStatus = (meta?.final_status || '').toUpperCase().trim();
-          // Process: from preparer_status or final_status; show nothing (-) when neither is set
-          const process = preparerStatus || finalStatus || '';
-          // statusWP (Not Checked / Checked): from page meta — Checked when COMPLETED/APPROVED, else Not Checked
-          const statusWP = (preparerStatus === 'COMPLETED' || preparerStatus === 'APPROVED' || finalStatus === 'COMPLETED' || finalStatus === 'APPROVED')
-            ? 'Checked'
-            : 'Not Checked';
+          const meta = await getAuditFindingMetaRecord(base.apiPath, auditYear);
+          const preparerStatus = (meta?.preparer_status || "").toUpperCase().trim();
+          const finalStatus = (meta?.final_status || "").toUpperCase().trim();
+          const process = preparerStatus || finalStatus || "";
+          const statusWP =
+            preparerStatus === "COMPLETED" ||
+            preparerStatus === "APPROVED" ||
+            finalStatus === "COMPLETED" ||
+            finalStatus === "APPROVED"
+              ? "Checked"
+              : "Not Checked";
           return { ...base, statusWP, process, finalStatus };
         } catch (_) {
-          return { ...base, statusWP: 'Not Checked', process: '', finalStatus: '' };
+          return { ...base, statusWP: "Not Checked", process: "", finalStatus: "" };
         }
-      })
+      }),
     ),
     (async () => {
       try {
-        const sr = await fetch(
-          `${internalBase}/api/schedule/module?module=audit-finding&year=${encodeURIComponent(String(auditYear))}`,
-          { cache: "no-store" }
-        );
-        const sj = await sr.json().catch(() => null);
-        if (sr.ok && sj?.success && Array.isArray(sj.rows)) {
-          return buildScheduleWindowsByDeptKey(sj.rows);
-        }
+        const rows = await loadModuleScheduleRows("audit-finding", auditYear);
+        return buildScheduleWindowsByDeptKey(rows);
       } catch (e) {
         console.warn("Failed to load audit-finding schedule dates:", e?.message);
+        return {};
       }
-      return {};
     })(),
   ]);
 
