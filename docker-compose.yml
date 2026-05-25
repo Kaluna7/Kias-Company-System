@@ -1,6 +1,10 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        SOP_EXTRACT_MODE: vision
+        NEXT_PUBLIC_SOP_EXTRACT_MODE: vision
     container_name: kias-app
     restart: always
     ports:
@@ -12,6 +16,8 @@ services:
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
       INTERNAL_APP_URL: http://127.0.0.1:3000
+      SOP_EXTRACT_MODE: vision
+      NEXT_PUBLIC_SOP_EXTRACT_MODE: vision
     volumes:
       - /var/www/kias-uploads:/app/public/uploads
 

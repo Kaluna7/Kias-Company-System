@@ -1,6 +1,12 @@
 # Salin ke server (Jenkins workspace), jangan commit ke Git:
 #   cp docker-compose.override.example.yml docker-compose.override.yml
-# Lalu sesuaikan path .env Anda di server.
+#
+# Buat /var/www/kias.env (minimal untuk GPT Vision SOP):
+#   SOP_EXTRACT_MODE=vision
+#   NEXT_PUBLIC_SOP_EXTRACT_MODE=vision
+#   OPENAI_API_KEY=sk-...
+#   OPENAI_EXTRACT_STEPS_MODEL=gpt-4o
+#   OPENAI_API_MODE=responses
 services:
   app:
     env_file:
