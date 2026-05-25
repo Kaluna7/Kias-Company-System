@@ -538,9 +538,19 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   };
 
   const handleGenerateCommentsForTable = async () => {
-    const rows = sopData.filter((r) => normalizeSopDescriptionKey(r.sop_related));
+    const rows = sopData.filter(
+      (r) =>
+        normalizeSopDescriptionKey(r.sop_related) &&
+        !(r.comment || "").trim(),
+    );
     if (rows.length === 0) {
-      setSaveMessage({ type: "error", text: "Isi SOP Description dulu sebelum generate komentar." });
+      const hasAny = sopData.some((r) => normalizeSopDescriptionKey(r.sop_related));
+      setSaveMessage({
+        type: "error",
+        text: hasAny
+          ? "Semua baris sudah punya Review Comment."
+          : "Upload PDF → Append ke tabel dulu, lalu klik Generate Comment.",
+      });
       return;
     }
     setIsGeneratingRowComments(true);
@@ -922,8 +932,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           <LoadingProgressOverlay
             open={isGeneratingRowComments}
             progress={isGeneratingRowComments ? 45 : 0}
-            title="Generate Review Comment"
-            statusLabel="OpenAI — satu komentar per SOP Description..."
+            title="Generate Comment"
+            statusLabel="OpenAI mengisi Review Comment per SOP Description..."
             subtitle=""
           />
           {!isLoading && loadError ? (
@@ -971,11 +981,11 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                           ? "bg-slate-200 text-slate-500 cursor-not-allowed"
                           : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm hover:shadow-md"
                       }`}
-                      title="Generate satu komentar OpenAI per baris SOP Description"
+                      title="Setelah Append dari PDF: generate Review Comment (OpenAI) per SOP Description"
                     >
                       <span>💬</span>
                       <span className="hidden sm:inline">
-                        {isGeneratingRowComments ? "Generating..." : "Comment per SOP"}
+                        {isGeneratingRowComments ? "Generating..." : "Generate Comment"}
                       </span>
                     </button>
                     <button

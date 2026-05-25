@@ -69,7 +69,6 @@ export default function SOPHeader({
   const [fullTextPreview, setFullTextPreview] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [aiInProgress, setAiInProgress] = useState(false);
-  const [appendInProgress, setAppendInProgress] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadStatusLabel, setLoadStatusLabel] = useState("");
   const [modalLoadProgress, setModalLoadProgress] = useState(0);
@@ -106,71 +105,28 @@ export default function SOPHeader({
     return fetchSopReviewCommentsPreview(apiPath, items);
   }
 
-  /** Upload → Append: generate komentar OpenAI otomatis → langsung ke tabel (tanpa klik Generate Comment). */
-  const appendParsedWithComments = async () => {
+  /** Upload → Append: langkah ke tabel dulu (komentar kosong). AI hanya lewat Generate Comment di tabel. */
+  const appendParsedToTable = () => {
     if (!parsedPreview?.length) {
       toast.show("No parsed results to append.", "error");
       return;
     }
 
-    setAppendInProgress(true);
-    setLoadProgress(5);
-    setLoadStatusLabel("OpenAI membuat komentar per SOP Description...");
-
-    let items = parsedPreview.map((p, idx) => ({
+    const prepared = parsedPreview.map((p, idx) => ({
       no: idx + 1,
-      sop_related: p.sop_related,
-      comment: (p.comment || "").toString().trim(),
+      sop_related: (p.sop_related || "").toString().trim(),
+      status: "IN REVIEW",
+      comment: "",
+      reviewer: "",
     }));
 
-    try {
-      setLoadProgress(25);
-      const res = await fetchSopReviewCommentsPreview(
-        apiPath,
-        items.map((it) => ({ id: null, sop_related: it.sop_related })),
-      );
-      setLoadProgress(75);
-
-      if (res?.success && Array.isArray(res.comments)) {
-        items = mergeCommentsIntoItems(items, res.comments);
-      } else if (res?.error) {
-        toast.show(res.error, "error");
-      }
-
-      const prepared = items.map((it, idx) => ({
-        no: idx + 1,
-        sop_related: (it.sop_related || "").toString().trim(),
-        status: "IN REVIEW",
-        comment: (it.comment || "").toString().trim(),
-        reviewer: "",
-      }));
-
-      onSopParsed?.(prepared);
-      setParsedPreview([]);
-      setParseError("");
-
-      const filled = prepared.filter((it) => it.comment).length;
-      if (filled > 0) {
-        toast.show(
-          `${filled} baris masuk ke tabel dengan Review Comment (OpenAI).`,
-          "success",
-        );
-      } else {
-        toast.show(
-          "Langkah masuk ke tabel; komentar kosong — cek OPENAI_API_KEY atau coba Pratinjau.",
-          "error",
-        );
-      }
-    } catch (err) {
-      toast.show("Gagal append: " + (err?.message || String(err)), "error");
-    } finally {
-      setAppendInProgress(false);
-      setLoadProgress(100);
-      setTimeout(() => {
-        setLoadProgress(0);
-        setLoadStatusLabel("");
-      }, 400);
-    }
+    onSopParsed?.(prepared);
+    setParsedPreview([]);
+    setParseError("");
+    toast.show(
+      `${prepared.length} langkah masuk ke tabel. Klik Generate Comment untuk isi Review Comment (AI).`,
+      "success",
+    );
   };
 
   /* ---------- File change handler ---------- */
@@ -286,42 +242,21 @@ export default function SOPHeader({
   };
 
   /* ---------- Modal + Append flow ---------- */
-  const openAppendModal = async () => {
+  const openAppendModal = () => {
     if (!parsedPreview || parsedPreview.length === 0) {
       toast.show("No parsed results to append.", "error");
       return;
     }
 
     setModalError("");
-    setModalOpen(true);
-    setModalLoading(true);
-    setModalLoadProgress(0);
-
-    let items = parsedPreview.map((p, idx) => ({
-      no: idx + 1,
-      sop_related: p.sop_related,
-      comment: (p.comment || "").toString().trim(),
-    }));
-
-    setLoadStatusLabel("OpenAI membuat komentar...");
-    const res = await callGenerateCommentsPreview(
-      items.map((it) => ({ id: null, sop_related: it.sop_related })),
+    setModalItems(
+      parsedPreview.map((p, idx) => ({
+        no: idx + 1,
+        sop_related: p.sop_related,
+        comment: (p.comment || "").toString().trim(),
+      })),
     );
-    if (res?.success && Array.isArray(res.comments)) {
-      items = mergeCommentsIntoItems(items, res.comments);
-      setParsedPreview((prev) =>
-        prev.map((p, idx) => ({
-          ...p,
-          comment: items[idx]?.comment ?? p.comment ?? "",
-        })),
-      );
-    } else if (res?.error) {
-      setModalError(res.error);
-    }
-
-    setModalItems(items);
-    setModalLoadProgress(100);
-    setModalLoading(false);
+    setModalOpen(true);
   };
 
   // Generate comments for all items in modal
@@ -433,32 +368,13 @@ export default function SOPHeader({
     });
   };
 
-  const saveAndAppendFromModal = async () => {
+  const saveAndAppendFromModal = () => {
     if (!modalItems || modalItems.length === 0) {
       setModalOpen(false);
       return;
     }
 
-    let items = modalItems;
-    const missingComments = items.filter((it) => !(it.comment || "").trim());
-    if (missingComments.length > 0) {
-      setModalLoading(true);
-      setModalLoadProgress(10);
-      const res = await callGenerateCommentsPreview(
-        items.map((it) => ({ id: null, sop_related: it.sop_related })),
-      );
-      if (res?.success && Array.isArray(res.comments)) {
-        items = mergeCommentsIntoItems(items, res.comments);
-        setModalItems(items);
-      } else if (res?.error) {
-        setModalError(res.error);
-        setModalLoading(false);
-        return;
-      }
-      setModalLoading(false);
-    }
-
-    const prepared = items.map((it, idx) => ({
+    const prepared = modalItems.map((it, idx) => ({
       no: idx + 1,
       sop_related: (it.sop_related || "").toString().trim(),
       status: "IN REVIEW",
@@ -469,11 +385,11 @@ export default function SOPHeader({
     onSopParsed?.(prepared);
     setModalOpen(false);
     setModalItems([]);
-
-    const filled = prepared.filter((it) => it.comment).length;
-    if (filled > 0) {
-      toast.show(`${filled} baris ditambahkan ke tabel (💬 Review Comment).`, "success");
-    }
+    setParsedPreview([]);
+    toast.show(
+      `${prepared.length} baris masuk ke tabel. Klik Generate Comment untuk isi Review Comment (AI).`,
+      "success",
+    );
   };
 
   /* ---------- UI ---------- */
@@ -493,14 +409,14 @@ export default function SOPHeader({
     }
   };
 
-  const showPdfOverlay = parsing || aiInProgress || appendInProgress;
+  const showPdfOverlay = parsing || aiInProgress;
 
   return (
     <>
       <LoadingProgressOverlay
         open={showPdfOverlay}
         progress={loadProgress}
-        title={appendInProgress ? "Menambahkan ke tabel SOP" : "Memproses dokumen SOP"}
+        title="Memproses dokumen SOP"
         statusLabel={loadStatusLabel}
         fileName={selectedFile?.name || ""}
       />
@@ -666,10 +582,10 @@ export default function SOPHeader({
                     {parsedPreview.length > 0 && (
                       <button
                         type="button"
-                        onClick={appendParsedWithComments}
-                        disabled={aiInProgress || appendInProgress}
+                        onClick={appendParsedToTable}
+                        disabled={aiInProgress}
                         className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-md ${
-                          aiInProgress || appendInProgress
+                          aiInProgress
                             ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                             : "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white"
                         }`}
@@ -677,18 +593,16 @@ export default function SOPHeader({
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                         </svg>
-                        {appendInProgress
-                          ? "Membuat komentar & append..."
-                          : aiInProgress
-                            ? "AI Processing..."
-                            : `Append ${parsedPreview.length} Item(s) + Comment`}
+                        {aiInProgress
+                          ? "AI Processing..."
+                          : `Append ${parsedPreview.length} Item(s) ke Tabel`}
                       </button>
                     )}
                     {parsedPreview.length > 0 && (
                       <button
                         type="button"
                         onClick={openAppendModal}
-                        disabled={aiInProgress || appendInProgress}
+                        disabled={aiInProgress}
                         className="w-full text-xs text-blue-700 hover:text-blue-900 underline disabled:opacity-50"
                       >
                         Pratinjau & edit sebelum append
@@ -700,7 +614,7 @@ export default function SOPHeader({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                         </svg>
                         <span>
-                          {parsedPreview.length} langkah siap. Append otomatis generate komentar OpenAI ke tabel.
+                          {parsedPreview.length} langkah siap. Append dulu, lalu klik Generate Comment di tabel untuk AI.
                         </span>
                       </div>
                     )}
@@ -788,7 +702,7 @@ export default function SOPHeader({
                 <div className="min-w-0">
                   <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Review Comments Preview</h3>
                   <p className="text-xs text-slate-600 hidden sm:block">
-                    Komentar dibuat otomatis; edit jika perlu lalu Save & Append
+                    Edit langkah jika perlu, lalu Save & Append. Generate Comment di tabel setelah append.
                   </p>
                 </div>
               </div>
@@ -817,7 +731,7 @@ export default function SOPHeader({
                         Generating...
                       </span>
                     ) : (
-                      "🔄 Generate ulang"
+                      "🔄 Generate Comment (pratinjau)"
                     )}
                   </button>
                 )}
