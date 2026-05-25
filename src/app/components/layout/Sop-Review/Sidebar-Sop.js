@@ -16,6 +16,7 @@ import {
   sanitizeStepText,
 } from "@/app/utils/sopProcedureText";
 import { mergeCommentsIntoItems } from "@/app/utils/mergeSopReviewComments";
+import { fetchSopReviewCommentsPreview } from "@/app/utils/generateSopReviewComments";
 
 const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
 /** UI preview only — AI always receives the full extracted text */
@@ -61,6 +62,7 @@ export default function SOPSidebar({
   const [fullTextPreview, setFullTextPreview] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [aiInProgress, setAiInProgress] = useState(false);
+  const [appendInProgress, setAppendInProgress] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadStatusLabel, setLoadStatusLabel] = useState("");
   const [modalLoadProgress, setModalLoadProgress] = useState(0);
@@ -82,21 +84,62 @@ export default function SOPSidebar({
     return runSimulatedProgress(setModalLoadProgress, true, { start: 12, max: 88 });
   }, [modalLoading]);
 
-  /* ---------- Call comment preview endpoint (batch) ---------- */
   async function callGenerateCommentsPreview(items) {
-    try {
-      const res = await fetch(`/api/SopReview/${apiPath}/generate-comments-preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      const json = await res.json().catch(() => ({}));
-      return json;
-    } catch (err) {
-      console.error("generate-comments-preview error:", err);
-      return { success: false, error: String(err) };
-    }
+    return fetchSopReviewCommentsPreview(apiPath, items);
   }
+
+  const appendParsedWithComments = async () => {
+    if (!parsedPreview?.length) {
+      toast.show("No parsed results to append.", "error");
+      return;
+    }
+
+    setAppendInProgress(true);
+    setLoadProgress(5);
+    setLoadStatusLabel("OpenAI membuat komentar...");
+
+    let items = parsedPreview.map((p, idx) => ({
+      no: idx + 1,
+      sop_related: p.sop_related,
+      comment: (p.comment || "").toString().trim(),
+    }));
+
+    try {
+      const res = await fetchSopReviewCommentsPreview(
+        apiPath,
+        items.map((it) => ({ id: null, sop_related: it.sop_related })),
+      );
+      if (res?.success && Array.isArray(res.comments)) {
+        items = mergeCommentsIntoItems(items, res.comments);
+      } else if (res?.error) {
+        toast.show(res.error, "error");
+      }
+
+      const prepared = items.map((it, idx) => ({
+        no: idx + 1,
+        sop_related: (it.sop_related || "").toString().trim(),
+        status: "IN REVIEW",
+        comment: (it.comment || "").toString().trim(),
+        reviewer: "",
+      }));
+      onSopParsed?.(prepared);
+      setParsedPreview([]);
+      setParseError("");
+      const filled = prepared.filter((it) => it.comment).length;
+      if (filled > 0) {
+        toast.show(`${filled} baris masuk ke tabel dengan Review Comment.`, "success");
+      }
+    } catch (err) {
+      toast.show("Gagal append: " + (err?.message || String(err)), "error");
+    } finally {
+      setAppendInProgress(false);
+      setLoadProgress(100);
+      setTimeout(() => {
+        setLoadProgress(0);
+        setLoadStatusLabel("");
+      }, 400);
+    }
+  };
 
   /* ---------- File change handler ---------- */
   const handleFileChange = async (e) => {
@@ -229,16 +272,13 @@ export default function SOPSidebar({
       comment: (p.comment || "").toString().trim(),
     }));
 
-    const needsComments = items.some((it) => !(it.comment || "").trim());
-    if (needsComments) {
-      const res = await callGenerateCommentsPreview(
-        items.map((it) => ({ id: null, sop_related: it.sop_related })),
-      );
-      if (res && res.success && Array.isArray(res.comments)) {
-        items = mergeCommentsIntoItems(items, res.comments);
-      } else if (res?.error) {
-        setModalError(res.error);
-      }
+    const res = await callGenerateCommentsPreview(
+      items.map((it) => ({ id: null, sop_related: it.sop_related })),
+    );
+    if (res?.success && Array.isArray(res.comments)) {
+      items = mergeCommentsIntoItems(items, res.comments);
+    } else if (res?.error) {
+      setModalError(res.error);
     }
 
     setModalItems(items);
@@ -314,14 +354,14 @@ export default function SOPSidebar({
     }
   };
 
-  const showPdfOverlay = parsing || aiInProgress;
+  const showPdfOverlay = parsing || aiInProgress || appendInProgress;
 
   return (
     <aside className="bg-gradient-to-br from-white via-slate-50 to-blue-50 w-96 p-6 rounded-2xl shadow-2xl border border-slate-200/50 backdrop-blur-sm space-y-6 text-sm">
       <LoadingProgressOverlay
         open={showPdfOverlay}
         progress={loadProgress}
-        title="Memproses dokumen SOP"
+        title={appendInProgress ? "Menambahkan ke tabel SOP" : "Memproses dokumen SOP"}
         statusLabel={loadStatusLabel}
         fileName={selectedFile?.name || ""}
       />
@@ -419,15 +459,28 @@ export default function SOPSidebar({
               {showRaw ? 'Hide' : 'Show'} Raw Text
             </button>
             <button
-              onClick={openAppendModal}
-              disabled={parsing || aiInProgress}
+              type="button"
+              onClick={appendParsedWithComments}
+              disabled={parsing || aiInProgress || appendInProgress}
               className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                parsing || aiInProgress
+                parsing || aiInProgress || appendInProgress
                   ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                   : "bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-sm"
               }`}
             >
-              {aiInProgress ? "AI Processing..." : "📝 Append Parsed"}
+              {appendInProgress
+                ? "Komentar + append..."
+                : aiInProgress
+                  ? "AI Processing..."
+                  : "📝 Append + Comment"}
+            </button>
+            <button
+              type="button"
+              onClick={openAppendModal}
+              disabled={parsing || aiInProgress || appendInProgress}
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700"
+            >
+              Pratinjau
             </button>
           </div>
 

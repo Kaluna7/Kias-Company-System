@@ -14,6 +14,7 @@ import {
   sanitizeStepText,
 } from "@/app/utils/sopProcedureText";
 import { mergeCommentsIntoItems } from "@/app/utils/mergeSopReviewComments";
+import { fetchSopReviewCommentsPreview } from "@/app/utils/generateSopReviewComments";
 
 const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
 const RAW_PREVIEW_DISPLAY_MAX = 500000;
@@ -68,6 +69,7 @@ export default function SOPHeader({
   const [fullTextPreview, setFullTextPreview] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [aiInProgress, setAiInProgress] = useState(false);
+  const [appendInProgress, setAppendInProgress] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadStatusLabel, setLoadStatusLabel] = useState("");
   const [modalLoadProgress, setModalLoadProgress] = useState(0);
@@ -100,29 +102,76 @@ export default function SOPHeader({
     return runSimulatedProgress(setModalLoadProgress, true, { start: 12, max: 88 });
   }, [modalLoading]);
 
-  /* ---------- Call comment preview endpoint (OpenAI) ---------- */
   async function callGenerateCommentsPreview(items) {
-    try {
-      console.log(`Calling generate-comments-preview API for ${items.length} items`);
-      const res = await fetch(`/api/SopReview/${apiPath}/generate-comments-preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      
-      if (!res.ok) {
-        console.error("API response not OK:", res.status, res.statusText);
-        return { success: false, error: `API error: ${res.status} ${res.statusText}` };
-      }
-      
-      const json = await res.json().catch(() => ({}));
-      console.log("API response received:", json);
-      return json;
-    } catch (err) {
-      console.error("generate-comments-preview error:", err);
-      return { success: false, error: String(err) };
-    }
+    return fetchSopReviewCommentsPreview(apiPath, items);
   }
+
+  /** Upload → Append: generate komentar OpenAI otomatis → langsung ke tabel (tanpa klik Generate Comment). */
+  const appendParsedWithComments = async () => {
+    if (!parsedPreview?.length) {
+      toast.show("No parsed results to append.", "error");
+      return;
+    }
+
+    setAppendInProgress(true);
+    setLoadProgress(5);
+    setLoadStatusLabel("OpenAI membuat komentar per SOP Description...");
+
+    let items = parsedPreview.map((p, idx) => ({
+      no: idx + 1,
+      sop_related: p.sop_related,
+      comment: (p.comment || "").toString().trim(),
+    }));
+
+    try {
+      setLoadProgress(25);
+      const res = await fetchSopReviewCommentsPreview(
+        apiPath,
+        items.map((it) => ({ id: null, sop_related: it.sop_related })),
+      );
+      setLoadProgress(75);
+
+      if (res?.success && Array.isArray(res.comments)) {
+        items = mergeCommentsIntoItems(items, res.comments);
+      } else if (res?.error) {
+        toast.show(res.error, "error");
+      }
+
+      const prepared = items.map((it, idx) => ({
+        no: idx + 1,
+        sop_related: (it.sop_related || "").toString().trim(),
+        status: "IN REVIEW",
+        comment: (it.comment || "").toString().trim(),
+        reviewer: "",
+      }));
+
+      onSopParsed?.(prepared);
+      setParsedPreview([]);
+      setParseError("");
+
+      const filled = prepared.filter((it) => it.comment).length;
+      if (filled > 0) {
+        toast.show(
+          `${filled} baris masuk ke tabel dengan Review Comment (OpenAI).`,
+          "success",
+        );
+      } else {
+        toast.show(
+          "Langkah masuk ke tabel; komentar kosong — cek OPENAI_API_KEY atau coba Pratinjau.",
+          "error",
+        );
+      }
+    } catch (err) {
+      toast.show("Gagal append: " + (err?.message || String(err)), "error");
+    } finally {
+      setAppendInProgress(false);
+      setLoadProgress(100);
+      setTimeout(() => {
+        setLoadProgress(0);
+        setLoadStatusLabel("");
+      }, 400);
+    }
+  };
 
   /* ---------- File change handler ---------- */
   const handleFileChange = async (e) => {
@@ -254,21 +303,20 @@ export default function SOPHeader({
       comment: (p.comment || "").toString().trim(),
     }));
 
-    const needsComments = items.some((it) => !(it.comment || "").trim());
-    if (needsComments) {
-      const apiItems = items.map((it) => ({ id: null, sop_related: it.sop_related }));
-      const res = await callGenerateCommentsPreview(apiItems);
-      if (res?.success && Array.isArray(res.comments)) {
-        items = mergeCommentsIntoItems(items, res.comments);
-        setParsedPreview((prev) =>
-          prev.map((p, idx) => ({
-            ...p,
-            comment: items[idx]?.comment ?? p.comment ?? "",
-          })),
-        );
-      } else if (res?.error) {
-        setModalError(res.error);
-      }
+    setLoadStatusLabel("OpenAI membuat komentar...");
+    const res = await callGenerateCommentsPreview(
+      items.map((it) => ({ id: null, sop_related: it.sop_related })),
+    );
+    if (res?.success && Array.isArray(res.comments)) {
+      items = mergeCommentsIntoItems(items, res.comments);
+      setParsedPreview((prev) =>
+        prev.map((p, idx) => ({
+          ...p,
+          comment: items[idx]?.comment ?? p.comment ?? "",
+        })),
+      );
+    } else if (res?.error) {
+      setModalError(res.error);
     }
 
     setModalItems(items);
@@ -445,14 +493,14 @@ export default function SOPHeader({
     }
   };
 
-  const showPdfOverlay = parsing || aiInProgress;
+  const showPdfOverlay = parsing || aiInProgress || appendInProgress;
 
   return (
     <>
       <LoadingProgressOverlay
         open={showPdfOverlay}
         progress={loadProgress}
-        title="Memproses dokumen SOP"
+        title={appendInProgress ? "Menambahkan ke tabel SOP" : "Memproses dokumen SOP"}
         statusLabel={loadStatusLabel}
         fileName={selectedFile?.name || ""}
       />
@@ -617,10 +665,11 @@ export default function SOPHeader({
                     </label>
                     {parsedPreview.length > 0 && (
                       <button
-                        onClick={openAppendModal}
-                        disabled={aiInProgress}
+                        type="button"
+                        onClick={appendParsedWithComments}
+                        disabled={aiInProgress || appendInProgress}
                         className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-md ${
-                          aiInProgress
+                          aiInProgress || appendInProgress
                             ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                             : "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white"
                         }`}
@@ -628,7 +677,21 @@ export default function SOPHeader({
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                         </svg>
-                        {aiInProgress ? "AI Processing..." : `Append ${parsedPreview.length} Item(s)`}
+                        {appendInProgress
+                          ? "Membuat komentar & append..."
+                          : aiInProgress
+                            ? "AI Processing..."
+                            : `Append ${parsedPreview.length} Item(s) + Comment`}
+                      </button>
+                    )}
+                    {parsedPreview.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={openAppendModal}
+                        disabled={aiInProgress || appendInProgress}
+                        className="w-full text-xs text-blue-700 hover:text-blue-900 underline disabled:opacity-50"
+                      >
+                        Pratinjau & edit sebelum append
                       </button>
                     )}
                     {parsedPreview.length > 0 && (
@@ -636,7 +699,9 @@ export default function SOPHeader({
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>{parsedPreview.length} item(s) ready. Click “Append” to open the preview.</span>
+                        <span>
+                          {parsedPreview.length} langkah siap. Append otomatis generate komentar OpenAI ke tabel.
+                        </span>
                       </div>
                     )}
                     {parseError && (
@@ -722,7 +787,9 @@ export default function SOPHeader({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Review Comments Preview</h3>
-                  <p className="text-xs text-slate-600 hidden sm:block">Review and edit generated comments before appending</p>
+                  <p className="text-xs text-slate-600 hidden sm:block">
+                    Komentar dibuat otomatis; edit jika perlu lalu Save & Append
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -750,7 +817,7 @@ export default function SOPHeader({
                         Generating...
                       </span>
                     ) : (
-                      "✨ Generate Comment"
+                      "🔄 Generate ulang"
                     )}
                   </button>
                 )}
@@ -766,8 +833,9 @@ export default function SOPHeader({
 
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 max-h-[calc(82vh-160px)] sm:max-h-[calc(90vh-140px)] overscroll-contain">
               {modalLoading ? (
-                <div className="flex items-center justify-center py-16 text-sm text-slate-500">
-                  Memproses di latar belakang…
+                <div className="flex flex-col items-center justify-center py-16 text-sm text-slate-500 gap-2">
+                  <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+                  OpenAI membuat komentar per SOP Description…
                 </div>
               ) : (
                 <>
