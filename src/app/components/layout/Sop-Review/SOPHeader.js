@@ -1,95 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+import React, { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { useToast } from "@/app/contexts/ToastContext";
-
-/* ========== Helpers ========== */
-
-async function ensureWorkerAvailable() {
-  // Use worker that matches the installed pdfjs-dist version (5.4.530)
-  // The actual installed version is 5.4.530, not 5.4.394 from package.json
-  // We need to use worker version 5.4.530 to match the library
-  
-  // Priority 1: Use unpkg CDN with exact version 5.4.530
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://unpkg.com/pdfjs-dist@5.4.530/build/pdf.worker.min.mjs";
-    pdfjsLib.GlobalWorkerOptions.disableWorker = false;
-    // Verify worker is accessible
-    const test = await fetch(pdfjsLib.GlobalWorkerOptions.workerSrc, { method: "HEAD" }).catch(() => null);
-    if (test && test.ok) {
-      return true;
-    }
-  } catch (e) {
-    console.warn("Failed to load worker from unpkg:", e);
-  }
-  
-  // Priority 2: Try jsdelivr CDN with version 5.4.530
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.530/build/pdf.worker.min.mjs";
-    pdfjsLib.GlobalWorkerOptions.disableWorker = false;
-    return true;
-  } catch (e) {
-    console.warn("Failed to load worker from jsdelivr:", e);
-  }
-  
-  // Priority 3: Try local worker file (may be outdated, but worth trying)
-  try {
-    const local = "/pdf.worker.min.js";
-    const r = await fetch(local, { method: "HEAD" }).catch(() => null);
-    if (r && r.ok) {
-      // Only use local if CDN fails, as it may be outdated
-      pdfjsLib.GlobalWorkerOptions.workerSrc = local;
-      pdfjsLib.GlobalWorkerOptions.disableWorker = false;
-      console.warn("Using local worker file - ensure it matches version 5.4.530");
-      return true;
-    }
-  } catch (e) {
-    console.warn("Failed to load local worker:", e);
-  }
-  
-  // Last resort: disable worker (may cause performance issues)
-  console.error("All worker sources failed, disabling worker. PDF parsing may be slower.");
-  pdfjsLib.GlobalWorkerOptions.disableWorker = true;
-  return false;
-}
-
-// Convert ArrayBuffer -> base64 using Blob + FileReader (safe)
-function arrayBufferToBase64UsingFileReader(arrayBuffer) {
-  return new Promise((resolve, reject) => {
-    try {
-      const blob = new Blob([arrayBuffer], { type: "application/pdf" });
-      const reader = new FileReader();
-      reader.onerror = () => {
-        reader.abort();
-        reject(new Error("Failed to read blob as data URL."));
-      };
-      reader.onload = () => {
-        try {
-          const dataUrl = reader.result || "";
-          const comma = dataUrl.indexOf(",");
-          const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-          resolve(base64);
-        } catch (e) {
-          reject(e);
-        }
-      };
-      reader.readAsDataURL(blob);
-    } catch (err) {
-      reject(err);
-    }
-  });
-}
-
-function sanitizeStepText(s) {
-  if (!s || typeof s !== "string") return "";
-  const withoutComment = s.split(/Comment\s*:/i)[0];
-  return withoutComment.replace(/[\{\}]/g, " ").replace(/\s+/g, " ").trim();
-}
+import LoadingProgressOverlay, {
+  preloadLoadingAnimation,
+} from "@/app/components/shared/LoadingProgressOverlay";
+import { isVisionOnlyExtractMode } from "@/app/lib/sopExtractMode";
+import { processSopPdfWithProgress } from "@/app/utils/processSopPdfWithProgress";
+import { runSimulatedProgress } from "@/app/utils/simulatedLoadingProgress";
+import {
+  localParseProcedureSteps,
+  sanitizeStepText,
+} from "@/app/utils/sopProcedureText";
 
 const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
+const RAW_PREVIEW_DISPLAY_MAX = 500000;
 
 function isMobileDevice() {
   if (typeof window === "undefined") return false;
@@ -141,6 +67,9 @@ export default function SOPHeader({
   const [fullTextPreview, setFullTextPreview] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [aiInProgress, setAiInProgress] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [loadStatusLabel, setLoadStatusLabel] = useState("");
+  const [modalLoadProgress, setModalLoadProgress] = useState(0);
 
   // Modal state for preview comments
   const [modalOpen, setModalOpen] = useState(false);
@@ -161,139 +90,14 @@ export default function SOPHeader({
   const statusOptions = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED"];
   const canEditReviewer = isAdmin || isReviewer;
 
-  /* ---------- PDF extraction preview (client-side) ---------- */
-  async function extractFullTextFromPdfArrayBuffer(arrayBuffer) {
-    await ensureWorkerAvailable();
-    const data = new Uint8Array(arrayBuffer);
-    const loadingTask = pdfjsLib.getDocument({ data });
-    const pdf = await loadingTask.promise;
-    const pageTexts = [];
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      const items = content.items || [];
-      const posItems = items.map((it) => {
-        const tr = it.transform || it.transformMatrix || [];
-        const x = tr[4] ?? 0;
-        const y = tr[5] ?? 0;
-        return { str: it.str || "", x, y };
-      });
-      const linesMap = new Map();
-      for (const it of posItems) {
-        const key = Math.round((it.y ?? 0) * 10) / 10;
-        if (!linesMap.has(key)) linesMap.set(key, []);
-        linesMap.get(key).push(it);
-      }
-      const sortedYs = Array.from(linesMap.keys()).sort((a, b) => b - a);
-      const lines = sortedYs
-        .map((yKey) => {
-          const row = linesMap.get(yKey) || [];
-          row.sort((a, b) => (a.x || 0) - (b.x || 0));
-          return row.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
-        })
-        .filter(Boolean);
-      // merge heuristics
-      const merged = [];
-      for (let i = 0; i < lines.length; i++) {
-        let cur = lines[i];
-        if (!cur) continue;
-        if (/[-–—]$/.test(cur) && i + 1 < lines.length) {
-          lines[i + 1] = (cur.replace(/[-–—]$/, "") + lines[i + 1]).replace(/\s+/g, " ").trim();
-        } else if (
-          i + 1 < lines.length &&
-          /^[a-z0-9]/i.test(lines[i + 1]) &&
-          /[a-z0-9]$/i.test(cur) &&
-          !/[.!?]$/.test(cur)
-        ) {
-          lines[i + 1] = (cur + " " + lines[i + 1]).replace(/\s+/g, " ").trim();
-        } else {
-          merged.push(cur);
-        }
-      }
-      pageTexts.push(merged.join("\n"));
-      if (page && typeof page.cleanup === "function") page.cleanup();
-    }
-    try {
-      if (typeof pdf.destroy === "function") pdf.destroy();
-      if (typeof loadingTask.destroy === "function") loadingTask.destroy();
-    } catch (err) {}
-    return pageTexts.join("\n\n---PAGE---\n\n");
-  }
+  useEffect(() => {
+    preloadLoadingAnimation();
+  }, []);
 
-  /* ---------- Local parser fallback ---------- */
-  function localParseProcedureSteps(fullText) {
-    if (!fullText || typeof fullText !== "string") return [];
-    let text = fullText.replace(/\u00A0/g, " ").replace(/\t/g, " ").replace(/\u200b/g, "").replace(/\r/g, "\n");
-    text = text.split("\n").map((l) => l.replace(/\s+/g, " ").trim()).join("\n");
-    let start = -1;
-    const m5 = text.match(/\b5\s*\.\s*Prosedur\b/i);
-    if (m5) start = text.indexOf(m5[0]) + m5[0].length;
-    else {
-      const m = text.match(/\bProsedur\b/i);
-      if (m) start = text.indexOf(m[0]) + m[0].length;
-    }
-    if (start < 0) {
-      const m1 = text.search(/\n?\s*\b1\s*[\.\)\-:]\s*/);
-      start = m1 >= 0 ? m1 : 0;
-    }
-    let procText = text.slice(start).replace(/^[\s\:\-–—\.]+/, "").trim();
-    const endKeywords = ["Catatan", "Dokumen Pendukung", "Dokumen", "Revisi", "Persetujuan", "Lampiran", "Penutup", "Tanda Tangan", "Daftar", "Referensi", "Preparer", "Reviewer"];
-    const endRegex = new RegExp("(" + endKeywords.join("|") + ")", "i");
-    const endIdx = procText.search(endRegex);
-    if (endIdx >= 0) procText = procText.slice(0, endIdx);
-    const stepRegex = /(?:^|\b)(\d{1,3}(?:\.\d+)*)\s*[\.\)\-:]\s*([\s\S]*?)(?=(?:\b\d{1,3}(?:\.\d+)*\s*[\.\)\-:])|$)/g;
-    const steps = [];
-    for (const m of procText.matchAll(stepRegex)) {
-      let content = (m[2] || "").replace(/\s+/g, " ").trim();
-      if (content) steps.push(sanitizeStepText(content));
-    }
-    if (steps.length === 0) {
-      const lines = procText.split("\n").map((l) => l.trim()).filter(Boolean);
-      let current = null;
-      for (const ln of lines) {
-        const mnum = ln.match(/^\d{1,3}\s*[\.\)\-:]\s*(.*)/);
-        if (mnum) {
-          if (current) steps.push(sanitizeStepText(current.trim()));
-          current = mnum[1] || "";
-        } else {
-          if (current) current += " " + ln;
-          else if (ln.length > 40) steps.push(sanitizeStepText(ln));
-        }
-      }
-      if (current) steps.push(sanitizeStepText(current.trim()));
-    }
-    const out = [];
-    const seen = new Set();
-    for (const s of steps) {
-      const t = s.replace(/\s+/g, " ").trim();
-      if (!t) continue;
-      if (t.split(/\s+/).length < 3) continue;
-      const key = t.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(t);
-    }
-    return out.map((textVal, idx) => ({ no: idx + 1, sop_related: textVal, status: "", comment: "", reviewer: "" }));
-  }
-
-  /* ---------- Call server AI extractor ---------- */
-  async function callAiExtract(bodyObj) {
-    setAiInProgress(true);
-    try {
-      const res = await fetch("/api/Ai/extract-steps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyObj),
-      });
-      const json = await res.json().catch(() => ({}));
-      setAiInProgress(false);
-      return json;
-    } catch (err) {
-      setAiInProgress(false);
-      console.error("AI call error:", err);
-      return { success: false, error: String(err) };
-    }
-  }
+  useEffect(() => {
+    if (!modalLoading) return;
+    return runSimulatedProgress(setModalLoadProgress, true, { start: 12, max: 88 });
+  }, [modalLoading]);
 
   /* ---------- Call comment preview endpoint (batch) ---------- */
   // This calls the API endpoint that uses Gemini AI to generate review comments
@@ -343,50 +147,81 @@ export default function SOPHeader({
       return;
     }
 
-    setSelectedFile(file);
-    setParsing(true);
+    flushSync(() => {
+      setSelectedFile(file);
+      setParsing(true);
+      setAiInProgress(true);
+      setLoadProgress(2);
+      setLoadStatusLabel("Memproses dokumen...");
+      setParseError("");
+    });
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
+      const { mapAiStepsToPreview, formatAiExtractDebug } = await import(
+        "@/app/utils/sopExtractStepsClient"
+      );
+      const aiRes = await processSopPdfWithProgress(file, {
+        onProgress: ({ progress, statusLabel }) => {
+          setLoadProgress(progress);
+          setLoadStatusLabel(statusLabel);
+        },
+      });
+      const visionMode =
+        aiRes?.extractMode === "vision" || isVisionOnlyExtractMode();
+      console.info("[SOP PDF] mode:", visionMode ? "vision_only" : "pipeline", aiRes);
 
-      const fullText = await extractFullTextFromPdfArrayBuffer(arrayBuffer);
-      const previewText = fullText || "";
-      setFullTextPreview(mobile && previewText.length > 30000 ? previewText.slice(0, 30000) + "\n\n[... truncated for mobile ...]" : previewText);
+      const merged = aiRes?.mergedText || "";
+      setFullTextPreview(
+        merged ||
+          (visionMode
+            ? `[Mode GPT Vision] ${aiRes?.visionPageCount ?? "?"} halaman.`
+            : "")
+      );
 
-      await new Promise((r) => setTimeout(r, 0));
+      if (!visionMode && (!merged || merged.trim().length < 30)) {
+        setParseError(
+          "Teks PDF kosong setelah parser + OCR. Pastikan PDF valid atau coba ulang."
+        );
+        return;
+      }
 
-      const base64 = await arrayBufferToBase64UsingFileReader(arrayBuffer);
+      const normalized =
+        aiRes?.success && Array.isArray(aiRes.steps)
+          ? mapAiStepsToPreview(aiRes.steps, sanitizeStepText)
+          : [];
 
-      const aiRes = await callAiExtract({ data: base64, text: fullText });
-
-      if (aiRes && aiRes.success && Array.isArray(aiRes.steps) && aiRes.steps.length > 0) {
-        const normalized = aiRes.steps.map((s, idx) => {
-          const raw = (s.text || s.instruction || (typeof s === "string" ? s : "") || "").toString();
-          const clean = sanitizeStepText(raw);
-          const aiComment = (s.comment || s.reviewer_comment || "").toString().trim();
-          return {
-            no: (typeof s.step === "number" ? s.step : idx + 1),
-            sop_related: clean,
-            // Default status for freshly parsed items: IN REVIEW
-            status: "IN REVIEW",
-            comment: aiComment,
-            reviewer: "",
-          };
-        }).filter(it => it.sop_related && it.sop_related.length > 3);
-
+      if (normalized.length > 0) {
         setParsedPreview(normalized);
         setParseError("");
+        if (visionMode) {
+          toast.show(
+            `GPT Vision: ${normalized.length} langkah (uji, tanpa parser lokal).`,
+            "success"
+          );
+        }
       } else {
-        // fallback: try server diagnostic raw or local parse
-        console.warn("AI did not return structured steps:", aiRes);
-        const serverRaw = aiRes?.diagnostic?.rawTextPreview || aiRes?.diagnostic?.generatedPreview || aiRes?.diagnostic?.generated;
-        const sourceText = serverRaw && serverRaw.length > 50 ? serverRaw : fullText;
-        const local = localParseProcedureSteps(sourceText);
+        console.warn("AI extract-steps failed or empty:", aiRes);
+        const apiErr = formatAiExtractDebug(aiRes);
+        if (visionMode) {
+          setParseError(
+            apiErr ||
+              "GPT Vision tidak mengembalikan langkah. Cek log [KIAS AI][sop-vision] di server."
+          );
+          return;
+        }
+        const local = localParseProcedureSteps(merged);
         if (local && local.length > 0) {
           setParsedPreview(local);
-          setParseError("AI did not return structured steps — using the local parser as a fallback. Please review the results before saving.");
+          setParseError(
+            apiErr
+              ? `${apiErr} — parser lokal dipakai sebagai cadangan. Periksa hasil sebelum menyimpan.`
+              : "AI tidak mengembalikan langkah — parser lokal dipakai. Periksa hasil sebelum menyimpan."
+          );
         } else {
-          setParseError("AI did not return steps and the local parser failed. Toggle raw text preview to tune the prompt.");
+          setParseError(
+            apiErr ||
+              "AI dan parser lokal gagal. Buka pratinjau teks mentah. Cek /api/Ai/health di server."
+          );
         }
       }
     } catch (err) {
@@ -395,6 +230,11 @@ export default function SOPHeader({
     } finally {
       setParsing(false);
       setAiInProgress(false);
+      setLoadProgress(100);
+      setTimeout(() => {
+        setLoadProgress(0);
+        setLoadStatusLabel("");
+      }, 400);
     }
   };
 
@@ -431,6 +271,7 @@ export default function SOPHeader({
 
     setModalError("");
     setModalLoading(true);
+    setModalLoadProgress(0);
 
     // build items for API (id null since not in DB yet)
     const items = modalItems.map(it => ({ id: null, sop_related: it.sop_related }));
@@ -449,16 +290,19 @@ export default function SOPHeader({
           return { ...it, comment: comment || "" };
         });
         setModalItems(merged);
+        setModalLoadProgress(100);
         setModalLoading(false);
         console.log("Comments generated successfully:", merged.length);
       } else {
         console.warn("Preview endpoint failed or returned nothing:", res);
         setModalError("Failed to generate comments automatically — you can type comments manually before saving.");
+        setModalLoadProgress(100);
         setModalLoading(false);
       }
     } catch (err) {
       console.error("Error in handleGenerateComments:", err);
       setModalError("An error occurred while generating comments: " + (err?.message || String(err)));
+      setModalLoadProgress(100);
       setModalLoading(false);
     }
   };
@@ -562,8 +406,24 @@ export default function SOPHeader({
     }
   };
 
+  const showPdfOverlay = parsing || aiInProgress;
+
   return (
     <>
+      <LoadingProgressOverlay
+        open={showPdfOverlay}
+        progress={loadProgress}
+        title="Memproses dokumen SOP"
+        statusLabel={loadStatusLabel}
+        fileName={selectedFile?.name || ""}
+      />
+      <LoadingProgressOverlay
+        open={modalLoading}
+        progress={modalLoadProgress}
+        title="Menghasilkan komentar review"
+        statusLabel="AI sedang menganalisis langkah SOP..."
+        subtitle=""
+      />
       {/* Single toggle button fixed at top-right corner of header */}
       <div className="fixed z-40 top-3 right-4">
         <button
@@ -689,7 +549,12 @@ export default function SOPHeader({
 
                   {/* PDF Upload - Enhanced */}
                   <div className="space-y-2">
-                    <label className={`relative block ${isReviewer ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                    <label
+                      className={`relative block ${isReviewer ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                      onClick={() => {
+                        if (!isReviewer) preloadLoadingAnimation();
+                      }}
+                    >
                       <input
                         type="file"
                         accept="application/pdf"
@@ -862,14 +727,8 @@ export default function SOPHeader({
 
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 max-h-[calc(82vh-160px)] sm:max-h-[calc(90vh-140px)] overscroll-contain">
               {modalLoading ? (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                    <div className="animate-spin w-8 h-8 border-3 border-white border-t-transparent rounded-full"></div>
-                  </div>
-                  <div className="flex flex-col items-center gap-2 text-slate-700">
-                    <span className="text-base font-semibold">Generating AI Comments...</span>
-                    <span className="text-sm text-slate-500">Please wait while Gemini AI generates review comments for all items</span>
-                  </div>
+                <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+                  Memproses di latar belakang…
                 </div>
               ) : (
                 <>

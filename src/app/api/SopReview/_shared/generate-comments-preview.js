@@ -1,32 +1,5 @@
 import { NextResponse } from "next/server";
-
-const API_KEY = process.env.GOOGLE_API_KEY;
-const MODEL = process.env.GOOGLE_AI_MODEL;
-const BASE_URL = process.env.GOOGLE_AI_BASEURL;
-const GEN_PATH = process.env.GOOGLE_AI_GENPATH;
-const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:${GEN_PATH}`;
-
-async function callGemini(prompt) {
-  const body = { contents: [{ parts: [{ text: prompt }] }], temperature: 0.2 };
-  try {
-    const res = await fetch(GOOGLE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-goog-api-key": API_KEY },
-      body: JSON.stringify(body),
-    });
-    const raw = await res.text().catch(() => "");
-    let data = null;
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      data = null;
-    }
-    const candidate = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.candidates?.[0]?.text || raw || "";
-    return { ok: res.ok, status: res.status, rawResponse: raw, generated: candidate, data };
-  } catch (err) {
-    return { ok: false, status: 500, error: String(err) };
-  }
-}
+import { callOpenAI, hasOpenAIKey } from "@/app/lib/openaiChat";
 
 function normalizeGeneratedText(s) {
   if (!s || typeof s !== "string") return "";
@@ -115,7 +88,9 @@ function buildSinglePromptStrict(item) {
 
 export async function POST(req) {
   try {
-    if (!API_KEY) return NextResponse.json({ success: false, error: "Server missing GOOGLE_API_KEY" }, { status: 500 });
+    if (!hasOpenAIKey()) {
+      return NextResponse.json({ success: false, error: "Server missing OPENAI_API_KEY" }, { status: 500 });
+    }
     const body = await req.json().catch(() => ({}));
     const items = Array.isArray(body?.items) ? body.items : null;
     if (!items || items.length === 0) return NextResponse.json({ success: false, error: "Provide items: [{id, sop_related}]" }, { status: 400 });
@@ -124,7 +99,10 @@ export async function POST(req) {
     for (const it of items) {
       const step = it.sop_related || "";
       let comment = "";
-      const r = await callGemini(buildSinglePromptStrict(it));
+      const r = await callOpenAI(buildSinglePromptStrict(it), {
+        temperature: 0.2,
+        system: "You write SOP review comments. Output only the comment text, no JSON or labels.",
+      });
       comment = normalizeGeneratedText(r.generated || r.rawResponse || "");
       if (isEchoOfStep(comment, step, 0.35)) comment = "";
       if (comment.length > 400) comment = comment.slice(0, 400).trim();

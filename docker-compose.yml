@@ -6,11 +6,15 @@ services:
     container_name: kias-app
     restart: always
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
+    env_file:
+      - .env
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://postgres:12345@postgres_db:5432/kias
       NEXTAUTH_SECRET: supersecret_kias_2026
-      NEXTAUTH_URL: http://76.13.20.134:3001
+      NEXTAUTH_URL: http://76.13.20.134
     volumes:
       - /var/www/kias-uploads:/app/public/uploads
 

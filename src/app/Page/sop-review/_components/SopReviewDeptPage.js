@@ -4,6 +4,8 @@ import { useEffect, useState, useRef, useCallback, useMemo, memo, useDeferredVal
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import SOPHeader from "@/app/components/layout/Sop-Review/SOPHeader";
+import LoadingProgressOverlay from "@/app/components/shared/LoadingProgressOverlay";
+import { runSimulatedProgress } from "@/app/utils/simulatedLoadingProgress";
 
 
 // Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
@@ -139,6 +141,40 @@ const API_PATH_TO_SCHEDULE_ID = {
   whs: "A1.11",
 };
 
+function parseScheduleStartDateYmd(scheduleRow) {
+  const dateValue = scheduleRow?.start_date;
+  if (!dateValue) return "";
+  if (typeof dateValue === "string") {
+    const dateStr = String(dateValue).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    if (dateStr.includes("T")) return dateStr.split("T")[0];
+    return "";
+  }
+  if (dateValue instanceof Date) {
+    const y = dateValue.getFullYear();
+    const m = String(dateValue.getMonth() + 1).padStart(2, "0");
+    const d = String(dateValue.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof dateValue === "number") {
+    const dateObj = new Date(dateValue);
+    if (Number.isNaN(dateObj.getTime())) return "";
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return "";
+}
+
+async function fetchSopReviewScheduleRows(auditYear) {
+  const url = `/api/schedule/module?module=sop-review&year=${encodeURIComponent(String(auditYear))}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!data?.success || !Array.isArray(data.rows)) return [];
+  return data.rows;
+}
+
 export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const { data: session } = useSession();
   const role = (session?.user?.role || "").toLowerCase();
@@ -162,6 +198,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [schedulePreparerDate, setSchedulePreparerDate] = useState(""); // From schedule
 
   const [isLoading, setIsLoading] = useState(true);
+  const [pageLoadProgress, setPageLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState(null);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
@@ -184,6 +221,15 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setPageLoadProgress(100);
+      return;
+    }
+    setPageLoadProgress(8);
+    return runSimulatedProgress(setPageLoadProgress, true, { start: 8, max: 92 });
+  }, [isLoading]);
 
   // Auto-save draft refs (must be defined before useEffects)
   const saveDraftTimeoutRef = useRef(null);
@@ -221,92 +267,55 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
           return;
         }
 
-        const res = await fetch(
-          `/api/schedule/module?module=sop-review&year=${encodeURIComponent(String(auditYear))}`,
-          { cache: "no-store" }
+        const rowsForYear = await fetchSopReviewScheduleRows(auditYear);
+        let scheduleRow = rowsForYear.find(
+          (row) => row.department_id === scheduleDeptId && row.is_configured
         );
-        const data = await res.json();
-        
-        if (data.success && Array.isArray(data.rows)) {
-          const scheduleRow = data.rows.find(
-            (row) => row.department_id === scheduleDeptId && row.is_configured
-          );
-          
-          if (scheduleRow && mounted) {
-            const userName = scheduleRow.user_name || "";
-            // IMPORTANT: start_date from API is already in YYYY-MM-DD format (from PostgreSQL TO_CHAR)
-            // Use it directly without any parsing or timezone conversion
-            let startDate = "";
-            if (scheduleRow.start_date) {
-              const dateValue = scheduleRow.start_date;
-              console.log(`[SOP Review] Schedule start_date for ${apiPath}:`, dateValue, "Type:", typeof dateValue);
-              
-              // API returns date as string in YYYY-MM-DD format (from TO_CHAR)
-              if (typeof dateValue === 'string') {
-                const dateStr = String(dateValue).trim();
-                // Use directly if it's already in YYYY-MM-DD format
-                if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  startDate = dateStr;
-                  console.log(`[SOP Review] Using schedule start_date as-is (YYYY-MM-DD): ${startDate}`);
-                } else {
-                  // If it's ISO string with time, extract just the date part
-                  if (dateStr.includes('T')) {
-                    startDate = dateStr.split('T')[0];
-                    console.log(`[SOP Review] Extracted date from ISO string: ${startDate}`);
-                  } else {
-                    console.warn(`[SOP Review] Unexpected date format: ${dateStr}`);
-                    startDate = "";
-                  }
-                }
-              }
-              // If it's somehow a Date object (shouldn't happen with TO_CHAR, but handle it)
-              else if (dateValue instanceof Date) {
-                // Use local date components (not UTC) to preserve the date as stored
-                const year = dateValue.getFullYear();
-                const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-                const day = String(dateValue.getDate()).padStart(2, '0');
-                startDate = `${year}-${month}-${day}`;
-                console.log(`[SOP Review] Formatted schedule start_date using local date: ${startDate}`);
-              }
-              // If it's a number (timestamp) - shouldn't happen, but handle it
-              else if (typeof dateValue === 'number') {
-                const dateObj = new Date(dateValue);
-                // Use local date components to preserve the date
-                const year = dateObj.getFullYear();
-                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-                const day = String(dateObj.getDate()).padStart(2, '0');
-                startDate = `${year}-${month}-${day}`;
-                console.log(`[SOP Review] Formatted schedule start_date from timestamp using local date: ${startDate}`);
-              } else {
-                console.warn(`[SOP Review] Unexpected date value type: ${typeof dateValue}`);
-                startDate = "";
-              }
-              
-              // Final validation
-              if (startDate && !startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                console.warn(`[SOP Review] Invalid date format after processing: ${startDate}`);
-                startDate = "";
-              }
-            } else {
-              console.warn(`[SOP Review] No start_date found in schedule for ${apiPath}`);
-            }
-            
-            setSchedulePreparerName(userName);
-            setSchedulePreparerDate(startDate);
-            
-            // Schedule lock applies to preparer (user) only — admin may override
-            if (isUser) {
-              if (userName) {
-                setPreparerName(userName);
-              }
-              if (startDate) {
-                setPreparerDate(startDate);
-                console.log(`[SOP Review] Set preparerDate to: ${startDate} from schedule per module`);
-              }
-            }
-          } else {
-            console.warn(`[SOP Review] No schedule row found for ${apiPath} (deptId: ${API_PATH_TO_SCHEDULE_ID[apiPath]}) or not configured`);
+
+        let usedFallbackYear = false;
+        if (!scheduleRow) {
+          const resAll = await fetch("/api/schedule/module?module=sop-review", {
+            cache: "no-store",
+          });
+          const dataAll = await resAll.json().catch(() => ({}));
+          const rowsAll =
+            dataAll?.success && Array.isArray(dataAll.rows) ? dataAll.rows : [];
+          const deptRows = rowsAll.filter((row) => row.department_id === scheduleDeptId);
+
+          scheduleRow = deptRows.find((row) => row.is_configured) || null;
+          if (scheduleRow) {
+            usedFallbackYear = true;
+          } else if (deptRows.length > 0 && process.env.NODE_ENV === "development") {
+            console.info(
+              `[SOP Review] Jadwal ${apiPath} (${scheduleDeptId}) ada di database tetapi tidak aktif untuk tahun audit ${auditYear}. Atur di halaman Schedule.`
+            );
+          } else if (process.env.NODE_ENV === "development") {
+            console.info(
+              `[SOP Review] Belum ada jadwal SOP Review untuk ${apiPath} (${scheduleDeptId}). Atur di halaman Schedule.`
+            );
           }
+        }
+
+        if (scheduleRow && mounted) {
+          const userName = scheduleRow.user_name || "";
+          const startDate = parseScheduleStartDateYmd(scheduleRow);
+
+          setSchedulePreparerName(userName);
+          setSchedulePreparerDate(startDate);
+
+          if (isUser) {
+            if (userName) setPreparerName(userName);
+            if (startDate) setPreparerDate(startDate);
+          }
+
+          if (usedFallbackYear && process.env.NODE_ENV === "development") {
+            console.info(
+              `[SOP Review] Menggunakan jadwal ${apiPath} di luar tahun audit ${auditYear} (tanggal: ${startDate || "—"}).`
+            );
+          }
+        } else if (mounted) {
+          setSchedulePreparerName("");
+          setSchedulePreparerDate("");
         }
       } catch (err) {
         console.error("Error fetching schedule data:", err);
@@ -838,15 +847,18 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       }`}>
         {/* SOP table */}
         <div className="flex-1 min-w-0 w-full h-full flex flex-col">
-          {isLoading ? (
-            <div className="p-4 text-center text-sm text-gray-600 bg-white rounded-lg border border-gray-200">
-              Loading SOPs from server...
-            </div>
-          ) : loadError ? (
+          <LoadingProgressOverlay
+            open={isLoading}
+            progress={pageLoadProgress}
+            title="Memuat data SOP"
+            statusLabel="Mengambil data dari server..."
+            subtitle="Mohon tunggu sebentar."
+          />
+          {!isLoading && loadError ? (
             <div className="p-4 text-center text-sm text-red-600 bg-white rounded-lg border border-gray-200">
               Failed to load data: {loadError}
             </div>
-          ) : (
+          ) : !isLoading ? (
             <div className="bg-white rounded-2xl border border-slate-200/60 shadow-lg overflow-hidden flex-1 flex flex-col min-h-0">
               {/* Table Header with SOP title moved here */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-blue-50/30">
@@ -1012,7 +1024,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 </table>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
       </div>

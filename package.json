@@ -8,6 +8,8 @@
     "build": "next build --turbopack",
     "postinstall": "",
     "start": "next start",
+    "start:fresh": "pnpm build && pnpm start",
+    "restart:fresh": "powershell -ExecutionPolicy Bypass -File scripts/restart-fresh.ps1",
     "lint": "eslint",
     "ngrok": "npx ngrok http 3000"
   },

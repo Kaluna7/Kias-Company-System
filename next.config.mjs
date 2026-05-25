@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /** pdfjs-serverless is pre-bundled for Node; avoid worker resolution in .next chunks */
+  serverExternalPackages: ["pdfjs-serverless"],
   experimental: {
     /**
      * Prevent large multipart uploads (evidence ZIP/PDF/DOCX) from being cut by

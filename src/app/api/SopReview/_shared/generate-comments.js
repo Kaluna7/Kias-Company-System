@@ -1,38 +1,12 @@
 import { NextResponse } from "next/server";
 import { pool } from "./pool";
 import { requireReviewer } from "./auth";
-
-const API_KEY = process.env.GOOGLE_API_KEY;
-const MODEL = process.env.GOOGLE_AI_MODEL;
-const BASE_URL = process.env.GOOGLE_AI_BASEURL;
-const GEN_PATH = process.env.GOOGLE_AI_GENPATH;
-const GOOGLE_URL = `${BASE_URL}/models/${MODEL}:${GEN_PATH}`;
+import { callOpenAI, hasOpenAIKey } from "@/app/lib/openaiChat";
 
 const MAX_BATCH_ITEMS = 40;
 const MAX_SINGLE_TEXT_CHARS = 1500;
-
-async function callGemini(prompt) {
-  try {
-    const body = { contents: [{ parts: [{ text: prompt }] }], temperature: 0.2 };
-    const res = await fetch(GOOGLE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-goog-api-key": API_KEY },
-      body: JSON.stringify(body),
-    });
-    const raw = await res.text().catch(() => "");
-    let data = null;
-    try { data = raw ? JSON.parse(raw) : {}; } catch (e) { data = null; }
-    let candidate =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      data?.candidates?.[0]?.content ||
-      data?.candidates?.[0]?.text ||
-      "";
-    candidate = (candidate && candidate.toString()) || raw || "";
-    return { ok: res.ok, status: res.status, generated: candidate, rawResponse: raw, data };
-  } catch (err) {
-    return { ok: false, status: 500, error: String(err) };
-  }
-}
+const AI_SYSTEM =
+  "You are an SOP reviewer. Follow output format instructions exactly. For batch tasks return only a valid JSON array.";
 
 function tryParseJsonArray(s) {
   if (!s || typeof s !== "string") return null;
@@ -96,7 +70,9 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
       const authError = await requireReviewer();
       if (authError) return authError;
 
-      if (!API_KEY) return NextResponse.json({ success: false, error: "Server missing GOOGLE_API_KEY" }, { status: 500 });
+      if (!hasOpenAIKey()) {
+        return NextResponse.json({ success: false, error: "Server missing OPENAI_API_KEY" }, { status: 500 });
+      }
 
       const body = await req.json().catch(() => ({}));
       const items = Array.isArray(body?.items) ? body.items : null;
@@ -108,7 +84,7 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
       let updates = [];
 
       try {
-        const batchRes = await callGemini(buildBatchPrompt(items));
+        const batchRes = await callOpenAI(buildBatchPrompt(items), { temperature: 0.2, system: AI_SYSTEM });
         diagnostic.batch = { ok: batchRes.ok, status: batchRes.status };
         const parsed = tryParseJsonArray(batchRes.generated || batchRes.rawResponse || "");
         if (parsed && parsed.length > 0) {
@@ -124,7 +100,7 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
 
       if (updates.length === 0) {
         for (const it of items) {
-          const singleRes = await callGemini(buildSinglePrompt(it));
+          const singleRes = await callOpenAI(buildSinglePrompt(it), { temperature: 0.2, system: AI_SYSTEM });
           const gen = (singleRes.generated || singleRes.rawResponse || "").trim();
           diagnostic.perItem.push({ id: it.id ?? null, ok: singleRes.ok, status: singleRes.status });
           if (!gen) continue;

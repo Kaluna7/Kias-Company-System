@@ -1,202 +1,256 @@
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
+import { hasOpenAIKey, GPT54_MODEL } from "@/app/lib/openaiChat";
+import { aiDebugError, aiDebugLog, aiLogAlways, isAiDebugEnabled } from "@/app/lib/aiDebugLog";
+import { isVisionOnlyExtractMode } from "@/app/lib/sopExtractMode";
+import { runSopPdfPipeline } from "@/app/lib/sopPdfPipeline/runPipeline";
+import { runSopVisionOnlyPipeline } from "@/app/lib/sopPdfPipeline/visionOnlyPipeline";
+import { toPdfUint8Array } from "@/app/lib/sopPdfPipeline/pdfBytes";
+import { detectSopStructureWithGpt } from "@/app/lib/sopExtractStructure";
+import { extractProcedureSection } from "@/app/utils/sopProcedureText";
 
-const API_KEY = process.env.OPENAI_API_KEY;
-/** Fixed model for extract-steps only. */
-const MODEL = process.env.OPENAI_EXTRACT_STEPS_MODEL || "gpt-5.4";
-const BASE_URL = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
-const OPENAI_URL = `${BASE_URL}/chat/completions`;
+async function handlePdfUpload(req, reqId) {
+  const form = await req.formData();
+  const file = form.get("pdf");
+  const pipelineMode = String(form.get("pipeline") || "").toLowerCase();
+  const visionOnly = pipelineMode === "vision" || isVisionOnlyExtractMode();
+  const visionPagesRaw = form.get("visionPages");
+  const ocrPagesRaw = form.get("ocrPages");
+  const wantDebug = form.get("debug") === "true";
 
-async function callOpenAI(prompt) {
-  try {
-    const body = {
-      model: MODEL,
-      messages: [
+  if (!file || typeof file === "string") {
+    return NextResponse.json(
+      { success: false, error: "Field 'pdf' (file) wajib di FormData.", debug: { step: "missing_pdf", reqId } },
+      { status: 400 }
+    );
+  }
+
+  let ocrPages = [];
+  if (ocrPagesRaw && typeof ocrPagesRaw === "string") {
+    try {
+      const parsed = JSON.parse(ocrPagesRaw);
+      if (Array.isArray(parsed)) ocrPages = parsed;
+    } catch {
+      aiDebugError("extract-steps", `[${reqId}] invalid ocrPages JSON`);
+    }
+  }
+
+  if (visionOnly) {
+    let visionPages = [];
+    if (visionPagesRaw && typeof visionPagesRaw === "string") {
+      try {
+        const parsed = JSON.parse(visionPagesRaw);
+        if (Array.isArray(parsed)) visionPages = parsed;
+      } catch {
+        aiDebugError("extract-steps", `[${reqId}] invalid visionPages JSON`);
+      }
+    }
+
+    aiLogAlways("extract-steps", `[${reqId}] VISION-ONLY upload`, {
+      fileName: file.name,
+      visionPageImages: visionPages.length,
+    });
+
+    let result;
+    try {
+      result = await runSopVisionOnlyPipeline({ pageImages: visionPages, reqId });
+    } catch (pipeErr) {
+      aiDebugError("extract-steps", `[${reqId}] vision exception`, { error: String(pipeErr) });
+      return NextResponse.json(
         {
-          role: "system",
-          content: "You extract SOP procedure steps and must output only JSON array.",
+          success: false,
+          error: `GPT Vision error: ${pipeErr?.message || pipeErr}`,
+          debug: { step: "vision_exception", reqId, mode: "vision_only" },
         },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0,
+        { status: 500 }
+      );
+    }
+
+    const debug = {
+      ...(result.debug || {}),
+      reqId,
+      wantDebug,
+      mode: "vision_only",
+      pipeline: result.pipeline,
+      architecture: result.debug?.architecture,
     };
 
-    const res = await fetch(OPENAI_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify(body),
-    });
-    const raw = await res.text().catch(() => "");
-    let data = null;
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      data = null;
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        steps: result.steps,
+        model: result.model || GPT54_MODEL,
+        mergedText: result.mergedText || "",
+        debug,
+        pipeline: result.pipeline,
+        extractMode: "vision",
+      });
     }
-    const candidate = data?.choices?.[0]?.message?.content || raw || "";
-    return { ok: res.ok, status: res.status, rawResponse: raw, generated: candidate, data };
-  } catch (err) {
-    return { ok: false, status: 500, error: String(err) };
-  }
-}
 
-function tryParseJsonArray(s) {
-  if (!s || typeof s !== "string") return null;
-  // Try to find JSON array in the response
-  const fenced = s.match(/```json\s*([\s\S]*?)```/i);
-  if (fenced && fenced[1]) {
-    try {
-      const p = JSON.parse(fenced[1]);
-      if (Array.isArray(p)) return p;
-    } catch (e) {}
+    return NextResponse.json(
+      {
+        success: false,
+        error: result.error || "GPT Vision gagal mengekstrak langkah.",
+        steps: [],
+        mergedText: "",
+        debug,
+        pipeline: result.pipeline,
+        extractMode: "vision",
+      },
+      { status: 200 }
+    );
   }
-  const first = s.indexOf("[");
-  const last = s.lastIndexOf("]");
-  if (first >= 0 && last > first) {
-    const candidate = s.slice(first, last + 1);
-    try {
-      const p = JSON.parse(candidate);
-      if (Array.isArray(p)) return p;
-    } catch (e) {}
-  }
+
+  const pdfBytes = toPdfUint8Array(await file.arrayBuffer());
+  aiLogAlways("extract-steps", `[${reqId}] PDF pipeline upload`, {
+    fileName: file.name,
+    bytes: pdfBytes.length,
+    ocrPageImages: ocrPages.length,
+  });
+
+  let result;
   try {
-    const p = JSON.parse(s);
-    if (Array.isArray(p)) return p;
-  } catch (e) {}
-  return null;
+    result = await runSopPdfPipeline(pdfBytes, { ocrPages, reqId });
+  } catch (pipeErr) {
+    aiDebugError("extract-steps", `[${reqId}] pipeline exception`, { error: String(pipeErr) });
+    return NextResponse.json(
+      {
+        success: false,
+        error: `PDF pipeline error: ${pipeErr?.message || pipeErr}`,
+        debug: { step: "pipeline_exception", reqId },
+      },
+      { status: 500 }
+    );
+  }
+
+  const debug = {
+    ...(result.debug || {}),
+    reqId,
+    wantDebug,
+    pipeline: result.pipeline,
+    mergedChars: result.mergedText?.length ?? 0,
+    architecture: result.debug?.architecture,
+  };
+
+  if (result.success) {
+    return NextResponse.json({
+      success: true,
+      steps: result.steps,
+      model: result.model || GPT54_MODEL,
+      mergedText: result.mergedText,
+      debug,
+      pipeline: result.pipeline,
+    });
+  }
+
+  return NextResponse.json(
+    {
+      success: false,
+      error: result.error || "Pipeline gagal",
+      steps: [],
+      mergedText: result.mergedText,
+      debug,
+      pipeline: result.pipeline,
+    },
+    { status: 200 }
+  );
 }
 
-/**
- * PROMPT GEMINI UNTUK EXTRACT STEPS DARI PDF TEXT
- * 
- * Prompt ini akan dieksekusi setelah PDF reader membaca semua isi PDF.
- * Gemini akan mengambil hanya data SOP (langkah-langkah prosedur) dan mengurutkannya.
- * 
- * NOTE: JANGAN UBAH PROMPT INI - User sudah mengkonfirmasi prompt ini sudah benar.
- * Jika perlu mengubah prompt, tanyakan dulu ke user.
- */
-function buildExtractStepsPrompt(fullText) {
-  /**
-   * Target: extract steps TANPA mengubah isi.
-   * - Jangan ringkas / paraphrase / translate
-   * - Jangan hilangkan detail (angka, nama, dokumen, kode form, threshold, tanggal, istilah)
-   * - Output wajib JSON array saja
-   */
-  const textPreview = (fullText || "").slice(0, 120000); // enlarge context to reduce truncated procedure section
+async function handleTextOnly(body, reqId, wantDebug) {
+  const { text: fullText } = body;
 
-  return [
-    "Anda adalah extractor SOP. Fokus Anda adalah mengambil langkah-langkah PROSEDUR dari teks dokumen.",
-    "",
-    "ATURAN PALING PENTING (WAJIB):",
-    "1) JANGAN mengubah kata, jangan parafrase, jangan menerjemahkan, jangan memperpendek, jangan merangkum.",
-    "2) Untuk setiap langkah prosedur, Anda harus menyalin isinya secara verbatim dari dokumen (copy persis).",
-    "3) Jangan menghapus detail kecil: angka/nominal, nama departemen, jabatan, sistem, kode dokumen/form, kondisi/threshold, catatan di dalam langkah, tanda kurung, dan istilah khusus.",
-    "4) Jangan menggabungkan dua langkah menjadi satu. Jika ada sub-langkah/bullet di dalam satu langkah, tetap masukkan sebagai bagian dari text langkah tersebut (boleh gunakan '\\n' untuk pemisah), tetapi jangan pindah ke langkah lain.",
-    "",
-    "CARA MENENTUKAN BAGIAN PROSEDUR:",
-    "- Ambil langkah-langkah yang berada pada bagian 'Prosedur' / 'Procedure' / penomoran langkah kerja.",
-    "- Abaikan bagian non-prosedur: tujuan, ruang lingkup, definisi, referensi, lampiran, daftar dokumen, revisi, tanda tangan (kecuali jika itu memang langkah prosedur).",
-    "",
-    "FORMAT OUTPUT (WAJIB):",
-    "- Kembalikan HANYA JSON array. Tidak boleh ada teks tambahan, tidak boleh markdown/fence.",
-    "- Setiap item: {\"step\": <angka berurutan mulai 1>, \"text\": \"<ISI LANGKAH VERBATIM>\"}",
-    "- 'text' boleh multi-kalimat; jangan ringkas. Jika ada line break di dokumen, boleh dipertahankan sebagai \\n.",
-    "- Jika tidak ada langkah prosedur ditemukan, kembalikan [].",
-    "",
-    "Teks dokumen:",
-    textPreview,
-    "",
-    "Sekali lagi: keluarkan HANYA JSON array."
-  ].join("\n");
+  if (!fullText || typeof fullText !== "string") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Field 'text' wajib, atau upload PDF via multipart field 'pdf'.",
+        debug: { step: "missing_input", reqId },
+      },
+      { status: 400 }
+    );
+  }
+
+  const trimmed = fullText.trim();
+  if (trimmed.length < 30) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Teks terlalu sedikit.",
+        debug: { step: "text_too_short", reqId, fullTextChars: trimmed.length },
+      },
+      { status: 400 }
+    );
+  }
+
+  const gptResult = await detectSopStructureWithGpt(trimmed);
+  const procedureText = extractProcedureSection(trimmed);
+
+  const debug = {
+    reqId,
+    mode: "text_only",
+    fullTextChars: trimmed.length,
+    procedureChars: procedureText.length,
+    pipeline: [
+      { step: "client_text", status: "done" },
+      { step: "gpt_structure", status: gptResult.success ? "done" : "failed" },
+    ],
+  };
+
+  if (gptResult.success) {
+    return NextResponse.json({
+      success: true,
+      steps: gptResult.steps,
+      model: gptResult.model,
+      mergedText: trimmed,
+      debug,
+    });
+  }
+
+  return NextResponse.json({
+    success: false,
+    error: gptResult.error,
+    steps: [],
+    mergedText: trimmed,
+    debug,
+  });
 }
 
 export async function POST(req) {
+  const reqId = `ext-${Date.now().toString(36)}`;
+  const contentType = req.headers.get("content-type") || "";
+
+  aiLogAlways("extract-steps", `[${reqId}] POST`, {
+    hasKey: hasOpenAIKey(),
+    contentType: contentType.slice(0, 40),
+    debugVerbose: isAiDebugEnabled(),
+  });
+
   try {
-    if (!API_KEY) {
-      return NextResponse.json({ success: false, error: "Server missing OPENAI_API_KEY" }, { status: 500 });
+    if (!hasOpenAIKey()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "OPENAI_API_KEY belum diset di server.",
+          debug: { step: "missing_api_key", reqId },
+        },
+        { status: 500 }
+      );
+    }
+
+    if (contentType.includes("multipart/form-data")) {
+      return handlePdfUpload(req, reqId);
     }
 
     const body = await req.json().catch(() => ({}));
-    const { data: base64Data, text: fullText } = body;
-
-    if (!fullText || typeof fullText !== "string") {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Missing or invalid 'text' field. PDF text extraction must be done first." 
-      }, { status: 400 });
-    }
-
-    console.log("Extracting SOP steps from PDF text, length:", fullText.length);
-
-    // Build prompt untuk extract steps
-    const prompt = buildExtractStepsPrompt(fullText);
-    
-    // Call OpenAI
-    const aiRes = await callOpenAI(prompt);
-    
-    if (!aiRes.ok) {
-      console.error("OpenAI API error:", aiRes.status, aiRes.error);
-      return NextResponse.json({ 
-        success: false, 
-        error: `AI API error: ${aiRes.status}`,
-        diagnostic: { rawResponse: aiRes.rawResponse?.slice(0, 1000) }
-      }, { status: 500 });
-    }
-
-    // Try to parse JSON array from response
-    const parsed = tryParseJsonArray(aiRes.generated || aiRes.rawResponse || "");
-    
-    if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-      // Normalize steps
-      const steps = parsed.map((item, idx) => {
-        const stepNum = typeof item.step === "number" ? item.step : (idx + 1);
-        const stepText = item.text || item.instruction || item.content || (typeof item === "string" ? item : "") || "";
-        return {
-          step: stepNum,
-          text: stepText.toString().trim(),
-          instruction: stepText.toString().trim()
-        };
-      }).filter(s => s.text && s.text.length > 3);
-
-      console.log(`Successfully extracted ${steps.length} steps from PDF`);
-      
-      return NextResponse.json({ 
-        success: true, 
-        steps,
-        diagnostic: {
-          rawTextPreview: fullText.slice(0, 500),
-          generatedPreview: aiRes.generated?.slice(0, 1000),
-          rawResponse: aiRes.rawResponse?.slice(0, 1000)
-        }
-      }, { status: 200 });
-    } else {
-      // Fallback: return empty steps with diagnostic info
-      console.warn("Failed to parse steps from AI response, returning empty array");
-      return NextResponse.json({ 
-        success: false, 
-        error: "AI tidak mengembalikan format yang valid",
-        steps: [],
-        diagnostic: {
-          rawTextPreview: fullText.slice(0, 500),
-          generated: aiRes.generated?.slice(0, 2000),
-          rawResponse: aiRes.rawResponse?.slice(0, 2000)
-        }
-      }, { status: 200 });
-    }
+    const wantDebugJson = Boolean(body.debug);
+    return handleTextOnly(body, reqId, wantDebugJson);
   } catch (err) {
-    console.error("Error in extract-steps:", err);
-    return NextResponse.json({ 
-      success: false, 
-      error: "Server error", 
-      details: String(err) 
-    }, { status: 500 });
+    aiDebugError("extract-steps", "exception", { reqId, error: String(err), stack: err?.stack?.slice(0, 500) });
+    return NextResponse.json(
+      { success: false, error: "Server error", details: String(err), debug: { step: "exception", reqId } },
+      { status: 500 }
+    );
   }
 }
-
