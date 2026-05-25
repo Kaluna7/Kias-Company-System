@@ -51,7 +51,7 @@ export async function fillReviewCommentsForItems(apiPath, items) {
 
   const res = await fetchSopReviewCommentsPreview(
     apiPath,
-    base.map((it) => ({ id: null, sop_related: it.sop_related })),
+    base.map((it) => ({ id: it.id ?? null, sop_related: it.sop_related })),
   );
 
   if (!res?.success || !Array.isArray(res.comments)) {

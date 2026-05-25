@@ -549,7 +549,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         type: "error",
         text: hasAny
           ? "Semua baris sudah punya Review Comment."
-          : "Upload PDF → Append ke tabel dulu, lalu klik Generate Comment.",
+          : "Tambah baris manual dulu, lalu klik Generate Comment.",
       });
       return;
     }
@@ -981,7 +981,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                           ? "bg-slate-200 text-slate-500 cursor-not-allowed"
                           : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm hover:shadow-md"
                       }`}
-                      title="Setelah Append dari PDF: generate Review Comment (OpenAI) per SOP Description"
+                      title="Input manual: generate Review Comment hanya untuk baris yang belum punya komentar"
                     >
                       <span>💬</span>
                       <span className="hidden sm:inline">

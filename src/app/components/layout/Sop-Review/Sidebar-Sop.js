@@ -15,6 +15,7 @@ import {
   localParseProcedureSteps,
   sanitizeStepText,
 } from "@/app/utils/sopProcedureText";
+import { fillReviewCommentsForItems } from "@/app/utils/generateSopReviewComments";
 
 const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
 /** UI preview only — AI always receives the full extracted text */
@@ -60,6 +61,7 @@ export default function SOPSidebar({
   const [fullTextPreview, setFullTextPreview] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [aiInProgress, setAiInProgress] = useState(false);
+  const [appendInProgress, setAppendInProgress] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadStatusLabel, setLoadStatusLabel] = useState("");
   const [modalLoadProgress, setModalLoadProgress] = useState(0);
@@ -81,26 +83,59 @@ export default function SOPSidebar({
     return runSimulatedProgress(setModalLoadProgress, true, { start: 12, max: 88 });
   }, [modalLoading]);
 
-  const appendParsedToTable = () => {
+  const appendParsedToTable = async () => {
     if (!parsedPreview?.length) {
       toast.show("No parsed results to append.", "error");
       return;
     }
 
-    const prepared = parsedPreview.map((p, idx) => ({
+    setAppendInProgress(true);
+    setLoadProgress(8);
+    setLoadStatusLabel("OpenAI membuat komentar (batch)...");
+
+    let items = parsedPreview.map((p, idx) => ({
       no: idx + 1,
       sop_related: (p.sop_related || "").toString().trim(),
-      status: "IN REVIEW",
       comment: "",
-      reviewer: "",
     }));
-    onSopParsed?.(prepared);
-    setParsedPreview([]);
-    setParseError("");
-    toast.show(
-      `${prepared.length} langkah masuk ke tabel. Klik Generate Comment untuk isi Review Comment (AI).`,
-      "success",
-    );
+
+    try {
+      const { success, items: filled, error } = await fillReviewCommentsForItems(
+        apiPath,
+        items,
+      );
+      if (!success && error) toast.show(error, "error");
+      if (success && filled) items = filled;
+
+      const prepared = items.map((it, idx) => ({
+        no: idx + 1,
+        sop_related: (it.sop_related || "").toString().trim(),
+        status: "IN REVIEW",
+        comment: (it.comment || "").toString().trim(),
+        reviewer: "",
+      }));
+
+      onSopParsed?.(prepared);
+      setParsedPreview([]);
+      setParseError("");
+
+      const filledCount = prepared.filter((it) => it.comment).length;
+      toast.show(
+        filledCount > 0
+          ? `${filledCount} baris masuk ke tabel dengan Review Comment.`
+          : `${prepared.length} baris masuk; komentar kosong.`,
+        filledCount > 0 ? "success" : "error",
+      );
+    } catch (err) {
+      toast.show("Gagal append: " + (err?.message || String(err)), "error");
+    } finally {
+      setAppendInProgress(false);
+      setLoadProgress(100);
+      setTimeout(() => {
+        setLoadProgress(0);
+        setLoadStatusLabel("");
+      }, 400);
+    }
   };
 
   /* ---------- File change handler ---------- */
@@ -243,13 +278,35 @@ export default function SOPSidebar({
   };
 
   // Save & Append: close modal and call onSopParsed with items containing comment
-  const saveAndAppendFromModal = () => {
+  const saveAndAppendFromModal = async () => {
     if (!modalItems || modalItems.length === 0) {
       setModalOpen(false);
       return;
     }
 
-    const prepared = modalItems.map((it, idx) => ({
+    let items = modalItems.map((it, idx) => ({
+      no: idx + 1,
+      sop_related: (it.sop_related || "").toString().trim(),
+      comment: (it.comment || "").toString().trim(),
+    }));
+
+    const needsGen = items.some((it) => it.sop_related && !(it.comment || "").trim());
+    if (needsGen) {
+      setModalLoading(true);
+      const { success, items: filled, error } = await fillReviewCommentsForItems(
+        apiPath,
+        items,
+      );
+      if (!success && error) {
+        setModalError(error);
+        setModalLoading(false);
+        return;
+      }
+      if (filled) items = filled;
+      setModalLoading(false);
+    }
+
+    const prepared = items.map((it, idx) => ({
       no: idx + 1,
       sop_related: (it.sop_related || "").toString().trim(),
       status: "IN REVIEW",
@@ -260,9 +317,13 @@ export default function SOPSidebar({
     setModalOpen(false);
     setModalItems([]);
     setParsedPreview([]);
+
+    const filledCount = prepared.filter((it) => it.comment).length;
     toast.show(
-      `${prepared.length} baris masuk ke tabel. Klik Generate Comment untuk isi Review Comment (AI).`,
-      "success",
+      filledCount > 0
+        ? `${filledCount} baris ditambahkan dengan Review Comment.`
+        : `${prepared.length} baris ditambahkan; komentar kosong.`,
+      filledCount > 0 ? "success" : "error",
     );
   };
 
@@ -283,14 +344,14 @@ export default function SOPSidebar({
     }
   };
 
-  const showPdfOverlay = parsing || aiInProgress;
+  const showPdfOverlay = parsing || aiInProgress || appendInProgress;
 
   return (
     <aside className="bg-gradient-to-br from-white via-slate-50 to-blue-50 w-96 p-6 rounded-2xl shadow-2xl border border-slate-200/50 backdrop-blur-sm space-y-6 text-sm">
       <LoadingProgressOverlay
         open={showPdfOverlay}
         progress={loadProgress}
-        title="Memproses dokumen SOP"
+        title={appendInProgress ? "Append + Generate Comment" : "Memproses dokumen SOP"}
         statusLabel={loadStatusLabel}
         fileName={selectedFile?.name || ""}
       />
@@ -390,21 +451,23 @@ export default function SOPSidebar({
             <button
               type="button"
               onClick={appendParsedToTable}
-              disabled={parsing || aiInProgress}
+              disabled={parsing || aiInProgress || appendInProgress}
               className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                parsing || aiInProgress
+                parsing || aiInProgress || appendInProgress
                   ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                   : "bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-sm"
               }`}
             >
-              {aiInProgress
-                ? "AI Processing..."
-                : "📝 Append ke Tabel"}
+              {appendInProgress
+                ? "Komentar + append..."
+                : aiInProgress
+                  ? "AI Processing..."
+                  : "📝 Append + Comment"}
             </button>
             <button
               type="button"
               onClick={openAppendModal}
-              disabled={parsing || aiInProgress}
+              disabled={parsing || aiInProgress || appendInProgress}
               className="px-3 py-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700"
             >
               Pratinjau
@@ -625,7 +688,7 @@ export default function SOPSidebar({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Review Comments Preview</h3>
-                  <p className="text-xs text-slate-600 hidden sm:block">Edit langkah, Save & Append, lalu Generate Comment di tabel</p>
+                  <p className="text-xs text-slate-600 hidden sm:block">Edit langkah, Save & Append generate komentar (batch)</p>
                 </div>
               </div>
               <button
