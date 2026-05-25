@@ -13,6 +13,7 @@ import {
   localParseProcedureSteps,
   sanitizeStepText,
 } from "@/app/utils/sopProcedureText";
+import { mergeCommentsIntoItems } from "@/app/utils/mergeSopReviewComments";
 
 const MAX_PDF_SIZE_MOBILE_BYTES = 4 * 1024 * 1024;
 const RAW_PREVIEW_DISPLAY_MAX = 500000;
@@ -236,27 +237,43 @@ export default function SOPHeader({
   };
 
   /* ---------- Modal + Append flow ---------- */
-  // Open modal WITHOUT generating comments - user will click "Generate Comment" button
-  const openAppendModal = () => {
+  const openAppendModal = async () => {
     if (!parsedPreview || parsedPreview.length === 0) {
       toast.show("No parsed results to append.", "error");
       return;
     }
-    
-    console.log("Opening append modal with", parsedPreview.length, "items");
-    setModalError("");
-    setModalLoading(false);
-    setModalOpen(true);
 
-    // Keep parsed comments if AI extractor already returned them.
-    // User can still regenerate/overwrite via "Generate Comment".
-    const items = parsedPreview.map((p, idx) => ({ 
-      no: idx + 1, 
-      sop_related: p.sop_related, 
+    setModalError("");
+    setModalOpen(true);
+    setModalLoading(true);
+    setModalLoadProgress(0);
+
+    let items = parsedPreview.map((p, idx) => ({
+      no: idx + 1,
+      sop_related: p.sop_related,
       comment: (p.comment || "").toString().trim(),
     }));
+
+    const needsComments = items.some((it) => !(it.comment || "").trim());
+    if (needsComments) {
+      const apiItems = items.map((it) => ({ id: null, sop_related: it.sop_related }));
+      const res = await callGenerateCommentsPreview(apiItems);
+      if (res?.success && Array.isArray(res.comments)) {
+        items = mergeCommentsIntoItems(items, res.comments);
+        setParsedPreview((prev) =>
+          prev.map((p, idx) => ({
+            ...p,
+            comment: items[idx]?.comment ?? p.comment ?? "",
+          })),
+        );
+      } else if (res?.error) {
+        setModalError(res.error);
+      }
+    }
+
     setModalItems(items);
-    console.log("Modal opened with items (no comments yet):", items.length);
+    setModalLoadProgress(100);
+    setModalLoading(false);
   };
 
   // Generate comments for all items in modal
@@ -279,14 +296,14 @@ export default function SOPHeader({
       console.log("Generate comments preview response:", res);
       
       if (res && res.success && Array.isArray(res.comments)) {
-        // merge comments into modal items (keep original order)
-        const byText = new Map(res.comments.map(c => [ (c.sop_related||"").trim().toLowerCase(), c.comment || "" ]));
-        const merged = modalItems.map((it, idx) => {
-          const key = (it.sop_related || "").trim().toLowerCase();
-          const comment = byText.has(key) ? byText.get(key) : (res.comments[idx]?.comment || "");
-          return { ...it, comment: comment || "" };
-        });
+        const merged = mergeCommentsIntoItems(modalItems, res.comments);
         setModalItems(merged);
+        setParsedPreview((prev) =>
+          prev.map((p, idx) => ({
+            ...p,
+            comment: merged[idx]?.comment ?? p.comment ?? "",
+          })),
+        );
         setModalLoadProgress(100);
         setModalLoading(false);
         console.log("Comments generated successfully:", merged.length);
@@ -368,25 +385,47 @@ export default function SOPHeader({
     });
   };
 
-  // Save & Append: close modal and call onSopParsed with items containing comment
-  const saveAndAppendFromModal = () => {
+  const saveAndAppendFromModal = async () => {
     if (!modalItems || modalItems.length === 0) {
       setModalOpen(false);
       return;
     }
-    // map to parent shape expected: no, sop_related, status, comment, reviewer
-    const prepared = modalItems.map((it, idx) => ({
+
+    let items = modalItems;
+    const missingComments = items.filter((it) => !(it.comment || "").trim());
+    if (missingComments.length > 0) {
+      setModalLoading(true);
+      setModalLoadProgress(10);
+      const res = await callGenerateCommentsPreview(
+        items.map((it) => ({ id: null, sop_related: it.sop_related })),
+      );
+      if (res?.success && Array.isArray(res.comments)) {
+        items = mergeCommentsIntoItems(items, res.comments);
+        setModalItems(items);
+      } else if (res?.error) {
+        setModalError(res.error);
+        setModalLoading(false);
+        return;
+      }
+      setModalLoading(false);
+    }
+
+    const prepared = items.map((it, idx) => ({
       no: idx + 1,
       sop_related: (it.sop_related || "").toString().trim(),
-      // Default status for appended items from header modal: IN REVIEW
       status: "IN REVIEW",
       comment: (it.comment || "").toString().trim(),
-      reviewer: ""
+      reviewer: "",
     }));
+
     onSopParsed?.(prepared);
     setModalOpen(false);
     setModalItems([]);
-    // No alerts — keep UX quiet and consistent
+
+    const filled = prepared.filter((it) => it.comment).length;
+    if (filled > 0) {
+      toast.show(`${filled} baris ditambahkan ke tabel (💬 Review Comment).`, "success");
+    }
   };
 
   /* ---------- UI ---------- */

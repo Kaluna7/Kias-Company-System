@@ -11,32 +11,10 @@ function normalizeGeneratedText(s) {
     .replace(/[\{\}]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const firstLine = t.split(/\r?\n/)[0].trim();
-  const m = firstLine.match(/^(.+?[.!?])(\s|$)/);
-  return m && m[1] ? m[1].trim() : firstLine;
-}
-
-function wordOverlapFraction(step, comment) {
-  if (!step || !comment) return 0;
-  const s = step
-    .toLowerCase()
-    .replace(/[^\p{L}\d\s]/gu, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-  const c = comment
-    .toLowerCase()
-    .replace(/[^\p{L}\d\s]/gu, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-  if (s.length === 0 || c.length === 0) return 0;
-  const setC = new Set(c);
-  let common = 0;
-  for (const w of s) if (setC.has(w)) common++;
-  return common / Math.max(1, s.length);
-}
-
-function isEchoOfStep(comment, step, threshold = 0.35) {
-  return wordOverlapFraction(step, comment) > threshold;
+  const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const joined = lines.slice(0, 2).join(" ");
+  if (joined.length <= 400) return joined;
+  return joined.slice(0, 400).trim();
 }
 
 /**
@@ -114,7 +92,6 @@ export async function POST(req) {
       }
       modelUsed = r.model || modelUsed;
       let comment = normalizeGeneratedText(r.generated || r.rawResponse || "");
-      if (isEchoOfStep(comment, step, 0.35)) comment = "";
       if (comment.length > 400) comment = comment.slice(0, 400).trim();
       comments.push({ id: it.id ?? null, sop_related: step, comment });
     }
