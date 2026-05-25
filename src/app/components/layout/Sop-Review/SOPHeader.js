@@ -99,10 +99,7 @@ export default function SOPHeader({
     return runSimulatedProgress(setModalLoadProgress, true, { start: 12, max: 88 });
   }, [modalLoading]);
 
-  /* ---------- Call comment preview endpoint (batch) ---------- */
-  // This calls the API endpoint that uses Gemini AI to generate review comments
-  // The prompt for Gemini is located in: src/app/api/SopReview/_shared/generate-comments-preview.js
-  // Function: buildSinglePromptStrict() - lines 60-74
+  /* ---------- Call comment preview endpoint (OpenAI) ---------- */
   async function callGenerateCommentsPreview(items) {
     try {
       console.log(`Calling generate-comments-preview API for ${items.length} items`);
@@ -295,7 +292,10 @@ export default function SOPHeader({
         console.log("Comments generated successfully:", merged.length);
       } else {
         console.warn("Preview endpoint failed or returned nothing:", res);
-        setModalError("Failed to generate comments automatically — you can type comments manually before saving.");
+        setModalError(
+          res?.error ||
+            "OpenAI gagal membuat komentar — Anda bisa mengetik komentar manual sebelum menyimpan.",
+        );
         setModalLoadProgress(100);
         setModalLoading(false);
       }
@@ -420,8 +420,8 @@ export default function SOPHeader({
       <LoadingProgressOverlay
         open={modalLoading}
         progress={modalLoadProgress}
-        title="Menghasilkan komentar review"
-        statusLabel="AI sedang menganalisis langkah SOP..."
+        title="Menghasilkan komentar review (OpenAI)"
+        statusLabel="OpenAI sedang menganalisis langkah SOP..."
         subtitle=""
       />
       {/* Single toggle button fixed at top-right corner of header */}

@@ -5,7 +5,8 @@
 #   SOP_EXTRACT_MODE=vision
 #   NEXT_PUBLIC_SOP_EXTRACT_MODE=vision
 #   OPENAI_API_KEY=sk-...
-#   OPENAI_EXTRACT_STEPS_MODEL=gpt-4o
+#   OPENAI_EXTRACT_STEPS_MODEL=gpt-5.4
+#   OPENAI_COMMENTS_MODEL=gpt-5.4
 #   OPENAI_API_MODE=responses
 services:
   app:

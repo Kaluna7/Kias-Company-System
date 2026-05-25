@@ -242,7 +242,10 @@ export default function SOPSidebar({
       // create modal items with empty comments
       const fallback = items.map((it, idx) => ({ no: idx + 1, sop_related: it.sop_related, comment: "" }));
       setModalItems(fallback);
-      setModalError("Failed to generate comments automatically — you can type comments manually before saving.");
+      setModalError(
+        res?.error ||
+          "OpenAI gagal membuat komentar — Anda bisa mengetik komentar manual sebelum menyimpan.",
+      );
       setModalLoadProgress(100);
       setModalLoading(false);
     }
@@ -309,8 +312,8 @@ export default function SOPSidebar({
       <LoadingProgressOverlay
         open={modalLoading}
         progress={modalLoadProgress}
-        title="Menghasilkan komentar review"
-        statusLabel="AI sedang menganalisis langkah SOP..."
+        title="Menghasilkan komentar review (OpenAI)"
+        statusLabel="OpenAI sedang menganalisis langkah SOP..."
         subtitle=""
       />
       {/* Header Section */}

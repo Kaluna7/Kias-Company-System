@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { pool } from "./pool";
 import { requireReviewer } from "./auth";
-import { callOpenAI, hasOpenAIKey } from "@/app/lib/openaiChat";
+import { callOpenAIForComments, hasOpenAIKey } from "@/app/lib/openaiChat";
 
 const MAX_BATCH_ITEMS = 40;
 const MAX_SINGLE_TEXT_CHARS = 1500;
@@ -84,8 +84,19 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
       let updates = [];
 
       try {
-        const batchRes = await callOpenAI(buildBatchPrompt(items), { temperature: 0.2, system: AI_SYSTEM });
-        diagnostic.batch = { ok: batchRes.ok, status: batchRes.status };
+        const batchRes = await callOpenAIForComments(buildBatchPrompt(items), {
+          temperature: 0.2,
+          system: AI_SYSTEM,
+        });
+        diagnostic.batch = {
+          ok: batchRes.ok,
+          status: batchRes.status,
+          model: batchRes.model,
+          provider: batchRes.provider,
+        };
+        if (!batchRes.ok) {
+          diagnostic.batchError = batchRes.error || "OpenAI batch failed";
+        }
         const parsed = tryParseJsonArray(batchRes.generated || batchRes.rawResponse || "");
         if (parsed && parsed.length > 0) {
           for (const p of parsed) {
@@ -100,9 +111,17 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
 
       if (updates.length === 0) {
         for (const it of items) {
-          const singleRes = await callOpenAI(buildSinglePrompt(it), { temperature: 0.2, system: AI_SYSTEM });
+          const singleRes = await callOpenAIForComments(buildSinglePrompt(it), {
+            temperature: 0.2,
+            system: AI_SYSTEM,
+          });
           const gen = (singleRes.generated || singleRes.rawResponse || "").trim();
-          diagnostic.perItem.push({ id: it.id ?? null, ok: singleRes.ok, status: singleRes.status });
+          diagnostic.perItem.push({
+            id: it.id ?? null,
+            ok: singleRes.ok,
+            status: singleRes.status,
+            error: singleRes.ok ? undefined : singleRes.error,
+          });
           if (!gen) continue;
           let comment = gen.replace(/^[\"\s]+|[\"\s]+$/g, "").split(/\r?\n/)[0].trim();
           if (comment.length > 500) comment = comment.slice(0, 500);
@@ -111,7 +130,14 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
       }
 
       if (updates.length === 0) {
-        return NextResponse.json({ success: false, error: "AI tidak menghasilkan komentar valid.", diagnostic }, { status: 200 });
+        const apiErr =
+          diagnostic.batchError ||
+          diagnostic.perItem.find((p) => p.error)?.error ||
+          "OpenAI tidak menghasilkan komentar valid.";
+        return NextResponse.json(
+          { success: false, error: apiErr, provider: "openai", diagnostic },
+          { status: 502 },
+        );
       }
 
       const client = await pool.connect();
@@ -148,7 +174,10 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
           }
         }
         await client.query("COMMIT");
-        return NextResponse.json({ success: true, updated: applied, diagnostic }, { status: 200 });
+        return NextResponse.json(
+          { success: true, updated: applied, provider: "openai", diagnostic },
+          { status: 200 },
+        );
       } catch (dbErr) {
         await client.query("ROLLBACK");
         console.error("DB update error:", dbErr);

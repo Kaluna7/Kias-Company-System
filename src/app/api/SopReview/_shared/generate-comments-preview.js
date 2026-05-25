@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { callOpenAI, hasOpenAIKey } from "@/app/lib/openaiChat";
+import { callOpenAIForComments, hasOpenAIKey } from "@/app/lib/openaiChat";
 
 function normalizeGeneratedText(s) {
   if (!s || typeof s !== "string") return "";
@@ -13,13 +13,21 @@ function normalizeGeneratedText(s) {
     .trim();
   const firstLine = t.split(/\r?\n/)[0].trim();
   const m = firstLine.match(/^(.+?[.!?])(\s|$)/);
-  return (m && m[1]) ? m[1].trim() : firstLine;
+  return m && m[1] ? m[1].trim() : firstLine;
 }
 
 function wordOverlapFraction(step, comment) {
   if (!step || !comment) return 0;
-  const s = step.toLowerCase().replace(/[^\p{L}\d\s]/gu, " ").split(/\s+/).filter(Boolean);
-  const c = comment.toLowerCase().replace(/[^\p{L}\d\s]/gu, " ").split(/\s+/).filter(Boolean);
+  const s = step
+    .toLowerCase()
+    .replace(/[^\p{L}\d\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const c = comment
+    .toLowerCase()
+    .replace(/[^\p{L}\d\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
   if (s.length === 0 || c.length === 0) return 0;
   const setC = new Set(c);
   let common = 0;
@@ -32,24 +40,8 @@ function isEchoOfStep(comment, step, threshold = 0.35) {
 }
 
 /**
- * PROMPT GEMINI UNTUK GENERATE REVIEW COMMENTS
- * 
- * Fungsi ini membuat prompt yang dikirim ke Gemini AI untuk generate komentar reviewer
- * untuk setiap langkah SOP. Prompt ini memastikan output adalah 1 kalimat profesional
- * yang actionable untuk reviewer.
- * 
- * Lokasi file: src/app/api/SopReview/_shared/generate-comments-preview.js
- * Dipanggil dari: SOPHeader.js -> openAppendModal() -> callGenerateCommentsPreview()
- * 
- * Flow:
- * 1. User upload PDF -> parsing selesai -> tombol "Append" muncul
- * 2. User klik "Append" -> openAppendModal() dipanggil
- * 3. Modal terbuka dengan loading state
- * 4. callGenerateCommentsPreview() mengirim request ke API endpoint
- * 5. API endpoint memanggil fungsi ini untuk setiap item SOP
- * 6. Gemini generate komentar untuk setiap item
- * 7. Modal menampilkan hasil dengan komentar yang bisa di-edit
- * 8. User bisa edit komentar sebelum klik "Save & Append"
+ * Prompt untuk OpenAI — generate komentar reviewer per langkah SOP.
+ * Dipanggil dari SOPHeader / Sidebar-Sop → generate-comments-preview API.
  */
 function buildSinglePromptStrict(item) {
   const step = (item.sop_related || "").replace(/\n+/g, " ").trim().slice(0, 1400);
@@ -73,47 +65,69 @@ function buildSinglePromptStrict(item) {
     "Contoh gaya yang diinginkan:",
     'Langkah: "MIS Department will check the stock or repair the device."',
     'Komentar yang baik: "This step should explain that stock availability is checked only when replacement is required, while repair is carried out when the device can still be fixed."',
-    'Komentar yang juga baik: "It would be clearer if this step first stated that the device must be assessed, then stock is checked when replacement is needed; otherwise, the device should be repaired."',
-    'Komentar yang buruk: "Specify the conditions dictating either inventory assessment or equipment servicing."',
-    "",
-    'Langkah: "If goods are damaged due to user negligence with an asset age requirement of less than 5 years, the user must pay 50% of the total repair costs."',
-    'Komentar yang baik: "This step should explain that user negligence includes misuse, improper handling, or failure to follow procedures, and that asset age is calculated from the purchase date. The 50% repair cost should apply only when both conditions are met."',
-    'Komentar yang buruk: "Define criteria for user negligence, asset age calculation, and the resulting payment structure."',
     "",
     `Langkah: ${step}`,
     "",
-    "KELUARKAN HANYA komentar sesuai aturan."
+    "KELUARKAN HANYA komentar sesuai aturan.",
   ].join("\n");
 }
+
+const COMMENTS_SYSTEM =
+  "You write SOP review comments using OpenAI. Output only the comment text, no JSON or labels.";
 
 export async function POST(req) {
   try {
     if (!hasOpenAIKey()) {
-      return NextResponse.json({ success: false, error: "Server missing OPENAI_API_KEY" }, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: "Server missing OPENAI_API_KEY", provider: "openai" },
+        { status: 500 },
+      );
     }
     const body = await req.json().catch(() => ({}));
     const items = Array.isArray(body?.items) ? body.items : null;
-    if (!items || items.length === 0) return NextResponse.json({ success: false, error: "Provide items: [{id, sop_related}]" }, { status: 400 });
+    if (!items || items.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Provide items: [{id, sop_related}]" },
+        { status: 400 },
+      );
+    }
 
     const comments = [];
+    let modelUsed = null;
     for (const it of items) {
       const step = it.sop_related || "";
-      let comment = "";
-      const r = await callOpenAI(buildSinglePromptStrict(it), {
+      const r = await callOpenAIForComments(buildSinglePromptStrict(it), {
         temperature: 0.2,
-        system: "You write SOP review comments. Output only the comment text, no JSON or labels.",
+        system: COMMENTS_SYSTEM,
       });
-      comment = normalizeGeneratedText(r.generated || r.rawResponse || "");
+      if (!r.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: r.error || "OpenAI gagal membuat komentar",
+            provider: "openai",
+            model: r.model,
+            failedStep: step.slice(0, 120),
+          },
+          { status: r.status && r.status >= 400 ? r.status : 502 },
+        );
+      }
+      modelUsed = r.model || modelUsed;
+      let comment = normalizeGeneratedText(r.generated || r.rawResponse || "");
       if (isEchoOfStep(comment, step, 0.35)) comment = "";
       if (comment.length > 400) comment = comment.slice(0, 400).trim();
       comments.push({ id: it.id ?? null, sop_related: step, comment });
     }
 
-    return NextResponse.json({ success: true, comments }, { status: 200 });
+    return NextResponse.json(
+      { success: true, comments, provider: "openai", model: modelUsed },
+      { status: 200 },
+    );
   } catch (err) {
     console.error("Preview error:", err);
-    return NextResponse.json({ success: false, error: "Server error", details: String(err) }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Server error", details: String(err), provider: "openai" },
+      { status: 500 },
+    );
   }
 }
-
-

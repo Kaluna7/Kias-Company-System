@@ -49,6 +49,14 @@ export function resolveOpenAIModel(name) {
   return MODEL_ALIASES[raw] || GPT54_MODEL;
 }
 
+/** Model khusus generate komentar reviewer SOP (OPENAI_COMMENTS_MODEL). */
+export function resolveOpenAICommentsModel() {
+  const raw = String(process.env.OPENAI_COMMENTS_MODEL || GPT54_MODEL)
+    .trim()
+    .toLowerCase();
+  return MODEL_ALIASES[raw] || GPT54_MODEL;
+}
+
 function getApiKey() {
   return process.env.OPENAI_API_KEY?.trim() || "";
 }
@@ -384,6 +392,20 @@ export async function callOpenAIForExtractSteps(prompt, instructions) {
   }
 
   return callOpenAIChat(prompt, { model, system: instructions, jsonObject: true });
+}
+
+/**
+ * Generate komentar reviewer SOP via OpenAI (bukan Gemini).
+ */
+export async function callOpenAIForComments(prompt, opts = {}) {
+  const model = resolveOpenAICommentsModel();
+  aiDebugLog("openai-comments", "request start", {
+    model,
+    promptChars: prompt?.length ?? 0,
+    hasKey: hasOpenAIKey(),
+  });
+  const res = await callOpenAI(prompt, { ...opts, model });
+  return { ...res, model, provider: "openai", purpose: "sop-comments" };
 }
 
 /**
