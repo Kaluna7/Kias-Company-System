@@ -689,7 +689,7 @@ export default function SOPSidebar({
                           rows={3}
                           value={it.comment || ""}
                           onChange={(e) => setModalItemComment(idx, e.target.value)}
-                          placeholder="Enter or edit the review comment..."
+                          placeholder="Komentar untuk SOP Description di atas..."
                         />
                       </div>
                     ))}

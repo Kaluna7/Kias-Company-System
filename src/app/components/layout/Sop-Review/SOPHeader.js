@@ -816,7 +816,7 @@ export default function SOPHeader({
                             rows={3}
                             value={it.comment || ""}
                             onChange={(e) => setModalItemComment(idx, e.target.value)}
-                            placeholder={it.comment ? "Edit comment..." : "Generate or type comment..."}
+                            placeholder="Komentar untuk SOP Description di atas..."
                           />
                         </div>
                       ))}

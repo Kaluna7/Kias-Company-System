@@ -6,6 +6,10 @@ import { useSearchParams } from "next/navigation";
 import SOPHeader from "@/app/components/layout/Sop-Review/SOPHeader";
 import LoadingProgressOverlay from "@/app/components/shared/LoadingProgressOverlay";
 import { runSimulatedProgress } from "@/app/utils/simulatedLoadingProgress";
+import {
+  applyCommentsToSopRows,
+  normalizeSopDescriptionKey,
+} from "@/app/utils/mergeSopReviewComments";
 
 
 // Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
@@ -203,6 +207,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState(null);
+  const [isGeneratingRowComments, setIsGeneratingRowComments] = useState(false);
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
@@ -489,30 +494,90 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const handleSopParsed = (parsedSops) => {
     if (!Array.isArray(parsedSops) || parsedSops.length === 0) return;
     setSopData((prev) => {
-      // Keep append behavior additive across uploads.
-      // Only de-duplicate items inside the current parsed batch.
-      const batchTitles = new Set();
-      const newItems = parsedSops
-        .map((it) => ({
-          id: it.id ?? null,
-          sop_related: (it.sop_related || it.name || "").trim(),
-          // Default status after append: IN REVIEW
+      const next = prev.map((row) => ({ ...row }));
+      const keyToIndex = new Map();
+      next.forEach((row, i) => {
+        const k = normalizeSopDescriptionKey(row.sop_related);
+        if (k && !keyToIndex.has(k)) keyToIndex.set(k, i);
+      });
+
+      for (const it of parsedSops) {
+        const sop_related = (it.sop_related || it.name || "").trim();
+        const key = normalizeSopDescriptionKey(sop_related);
+        if (!key) continue;
+
+        const incomingComment = (it.comment || it.reviewer_comment || "").trim();
+        const payload = {
+          sop_related,
           status: it.status || "IN REVIEW",
-          comment: it.comment || it.reviewer_comment || "",
           reviewer_feedback: it.reviewer_feedback || "",
           reviewer: it.reviewer || "",
           auditee_comment: it.auditee_comment || "",
           follow_up_detail: it.follow_up_detail || "",
-        }))
-        .filter((it) => {
-          const key = (it.sop_related || "").toLowerCase();
-          if (!key) return false;
-          if (batchTitles.has(key)) return false;
-          batchTitles.add(key);
-          return true;
-        });
-      return reindex([...prev, ...newItems]);
+        };
+
+        if (keyToIndex.has(key)) {
+          const idx = keyToIndex.get(key);
+          const existing = next[idx];
+          next[idx] = {
+            ...existing,
+            ...payload,
+            comment: incomingComment || existing.comment || "",
+          };
+        } else {
+          next.push({
+            id: it.id ?? null,
+            ...payload,
+            comment: incomingComment,
+          });
+          keyToIndex.set(key, next.length - 1);
+        }
+      }
+      return reindex(next);
     });
+  };
+
+  const handleGenerateCommentsForTable = async () => {
+    const rows = sopData.filter((r) => normalizeSopDescriptionKey(r.sop_related));
+    if (rows.length === 0) {
+      setSaveMessage({ type: "error", text: "Isi SOP Description dulu sebelum generate komentar." });
+      return;
+    }
+    setIsGeneratingRowComments(true);
+    setSaveMessage(null);
+    try {
+      const res = await fetch(`/api/SopReview/${apiPath}/generate-comments-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: rows.map((r) => ({
+            id: r.id ?? null,
+            sop_related: r.sop_related,
+          })),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success || !Array.isArray(json.comments)) {
+        setSaveMessage({
+          type: "error",
+          text: json?.error || "OpenAI gagal membuat komentar per SOP Description.",
+        });
+        return;
+      }
+      setSopData((prev) => applyCommentsToSopRows(prev, json.comments));
+      const filled = json.comments.filter((c) => (c.comment || "").trim()).length;
+      setSaveMessage({
+        type: "success",
+        text: `Review Comment diisi untuk ${filled} baris SOP Description.`,
+      });
+    } catch (err) {
+      setSaveMessage({
+        type: "error",
+        text: err?.message || "Gagal menghubungi API komentar.",
+      });
+    } finally {
+      setIsGeneratingRowComments(false);
+    }
   };
 
   const updateRow = useCallback((index, changes) => {
@@ -854,6 +919,13 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             statusLabel="Mengambil data dari server..."
             subtitle="Mohon tunggu sebentar."
           />
+          <LoadingProgressOverlay
+            open={isGeneratingRowComments}
+            progress={isGeneratingRowComments ? 45 : 0}
+            title="Generate Review Comment"
+            statusLabel="OpenAI — satu komentar per SOP Description..."
+            subtitle=""
+          />
           {!isLoading && loadError ? (
             <div className="p-4 text-center text-sm text-red-600 bg-white rounded-lg border border-gray-200">
               Failed to load data: {loadError}
@@ -889,7 +961,23 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     <span className="text-[11px]">Total SOP:</span>
                     <span className="text-[11px] font-semibold text-blue-700">{sopData.length}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <button
+                      type="button"
+                      onClick={handleGenerateCommentsForTable}
+                      disabled={sopData.length === 0 || isGeneratingRowComments || isSaving}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 ${
+                        sopData.length === 0 || isGeneratingRowComments || isSaving
+                          ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                          : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm hover:shadow-md"
+                      }`}
+                      title="Generate satu komentar OpenAI per baris SOP Description"
+                    >
+                      <span>💬</span>
+                      <span className="hidden sm:inline">
+                        {isGeneratingRowComments ? "Generating..." : "Comment per SOP"}
+                      </span>
+                    </button>
                     <button
                       onClick={addRow}
                       className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md flex items-center gap-1"
