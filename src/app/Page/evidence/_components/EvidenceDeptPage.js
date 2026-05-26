@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
-import { getEvidenceApiUrl, uploadEvidenceWithProgress } from "./uploadEvidenceWithProgress";
+import { getEvidenceApiUrl, uploadEvidenceFile } from "./uploadEvidenceWithProgress";
 
 const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
 const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
@@ -252,7 +252,6 @@ export default function EvidenceDeptPage({
 
       let updatedAttachments = Array.isArray(row.attachments) ? [...row.attachments] : [];
       let bytesCompleted = 0;
-      const uploadUrl = getEvidenceApiUrl(evidenceApiSlug);
       let lastFailedFile = "";
 
       const patchOverlay = (patch) => {
@@ -273,17 +272,8 @@ export default function EvidenceDeptPage({
         uploadAbortRef.current = abortController;
         for (let fileIndex = 0; fileIndex < filesToUpload.length; fileIndex++) {
           const file = filesToUpload[fileIndex];
-          const formData = new FormData();
           const safeName = file.name || "upload.dat";
           lastFailedFile = safeName;
-          formData.append("file", file, safeName);
-          formData.append("original_name", safeName);
-          if (row.ap_id != null && row.ap_id !== "" && !Number.isNaN(Number(row.ap_id))) {
-            formData.append("ap_id", String(row.ap_id));
-          }
-          formData.append("ap_code", row.ap_code ?? "");
-          formData.append("department", departmentLabel);
-          formData.append("year", String(effectiveYear));
 
           patchOverlay({
             currentFile: safeName,
@@ -294,9 +284,14 @@ export default function EvidenceDeptPage({
                 : Math.round((fileIndex / filesToUpload.length) * 100),
           });
 
-          const result = await uploadEvidenceWithProgress(
-            uploadUrl,
-            formData,
+          const result = await uploadEvidenceFile(
+            {
+              evidenceApiSlug,
+              departmentLabel,
+              effectiveYear,
+              row,
+              file,
+            },
             (loaded, total) => {
               const fileTotal = total > 0 ? total : file.size || 1;
               const overallLoaded = bytesCompleted + loaded;
@@ -311,7 +306,7 @@ export default function EvidenceDeptPage({
                 completedFiles: fileIndex,
               });
             },
-            { fileSize: file.size || 0, signal: abortController.signal },
+            { signal: abortController.signal },
           );
 
           bytesCompleted += file.size || 0;

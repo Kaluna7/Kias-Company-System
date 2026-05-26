@@ -5,6 +5,7 @@ import { join } from "path";
 import { existsSync } from "fs";
 import prisma from "@/app/lib/prisma";
 import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
+import { isMinioEnabled, deleteMinioObject, objectKeyFromFileUrl } from "@/app/lib/minio";
 
 const deptToApDelegate = {
   FINANCE: "financeAp",
@@ -137,6 +138,17 @@ function sanitizeUploadBaseName(apCode) {
 export function makeEvidenceHandlers(defaultDepartment) {
   const POST = async (req) => {
     try {
+      if (isMinioEnabled()) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Direct upload is disabled when MinIO is enabled. The app uploads via pre-signed URL automatically.",
+          },
+          { status: 400 },
+        );
+      }
+
       const formData = await req.formData();
       const file = formData.get("file");
       const ap_id = formData.get("ap_id") || formData.get("risk_id"); // legacy compatibility
@@ -650,17 +662,22 @@ export function makeEvidenceHandlers(defaultDepartment) {
         );
       }
 
-      // Try to remove physical file as best-effort (ignore errors)
+      // Try to remove physical / MinIO file as best-effort (ignore errors)
       try {
-        const publicPathPrefix = "/uploads/";
-        if (fileUrl.startsWith(publicPathPrefix)) {
-          const filePath = join(process.cwd(), "public", fileUrl.replace(publicPathPrefix, ""));
-          if (existsSync(filePath)) {
-            await unlink(filePath).catch(() => {});
+        const minioKey = objectKeyFromFileUrl(fileUrl);
+        if (minioKey) {
+          await deleteMinioObject(minioKey).catch(() => {});
+        } else {
+          const publicPathPrefix = "/uploads/";
+          if (fileUrl.startsWith(publicPathPrefix)) {
+            const filePath = join(process.cwd(), "public", fileUrl.replace(publicPathPrefix, ""));
+            if (existsSync(filePath)) {
+              await unlink(filePath).catch(() => {});
+            }
           }
         }
       } catch (e) {
-        console.warn("Failed to delete evidence file from disk:", e);
+        console.warn("Failed to delete evidence file:", e);
       }
 
       await prisma.evidence.update({
