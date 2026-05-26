@@ -28,11 +28,17 @@ services:
       SOP_EXTRACT_MODE: vision
       NEXT_PUBLIC_SOP_EXTRACT_MODE: vision
 
-      # ✅ MINIO CONFIG
+      # MinIO — app talks to minio:9000; browser uses MINIO_PUBLIC_URL (must match UFW :9000)
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://76.13.20.134:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: evidence
+      MINIO_REGION: us-east-1
+
+    volumes:
+      # Legacy local evidence/worksheet files (before MinIO); keep until all files migrated
+      - /var/www/kias-uploads:/app/public/uploads
 
     ulimits:
       nofile:
@@ -40,7 +46,8 @@ services:
         hard: 65535
 
     depends_on:
-      - minio
+      minio:
+        condition: service_started
 
   minio:
     image: minio/minio:latest
@@ -49,11 +56,12 @@ services:
 
     ports:
       - "9000:9000"
-      - "9001:9001"
+      # Console: do not expose publicly; use SSH tunnel: ssh -L 9001:localhost:9001 root@VPS
+      - "127.0.0.1:9001:9001"
 
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
 
     command: server /data --console-address ":9001"
 
