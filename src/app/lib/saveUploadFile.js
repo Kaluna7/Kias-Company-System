@@ -8,10 +8,14 @@ import { Readable } from "stream";
  */
 export async function saveUploadFile(file, filePath) {
   if (file && typeof file.stream === "function") {
-    const webStream = file.stream();
-    const nodeStream = Readable.fromWeb(webStream);
-    await pipeline(nodeStream, createWriteStream(filePath));
-    return;
+    try {
+      const webStream = file.stream();
+      const nodeStream = Readable.fromWeb(webStream);
+      await pipeline(nodeStream, createWriteStream(filePath));
+      return;
+    } catch (streamErr) {
+      console.warn("saveUploadFile: stream write failed, falling back to buffer:", streamErr?.message);
+    }
   }
 
   const bytes = await file.arrayBuffer();

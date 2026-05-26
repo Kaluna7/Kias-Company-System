@@ -1,3 +1,19 @@
+/** Build evidence API URL; slug is a raw path segment (e.g. "g&a", not percent-encoded). */
+export function getEvidenceApiUrl(slug, searchParams) {
+  const path = `/api/evidence/${slug}`;
+  if (typeof window !== "undefined") {
+    const url = new URL(path, window.location.origin);
+    if (searchParams) {
+      for (const [key, value] of searchParams.entries()) {
+        url.searchParams.set(key, value);
+      }
+    }
+    return url.pathname + url.search;
+  }
+  const qs = searchParams?.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
 /**
  * POST evidence file with XMLHttpRequest upload progress (no client timeout for large files).
  * @param {string} url
@@ -46,7 +62,17 @@ export function uploadEvidenceWithProgress(url, formData, onProgress, options = 
         }
         resolve(result);
       } else {
-        reject(new Error(result.error || `Upload gagal (HTTP ${xhr.status})`));
+        const fallback =
+          xhr.responseText && xhr.responseText.length < 200 && !xhr.responseText.includes("<")
+            ? xhr.responseText.trim()
+            : "";
+        reject(
+          new Error(
+            result.error ||
+              fallback ||
+              `Upload gagal (HTTP ${xhr.status}). Periksa ukuran file (maks. 8 GB) dan restart server setelah deploy.`,
+          ),
+        );
       }
     };
 

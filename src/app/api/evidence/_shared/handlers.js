@@ -91,13 +91,47 @@ function alignDateToSelectedYear(dateValue, selectedYear) {
 
 function applyCreatedAtYearScope(where, selectedYear) {
   if (!selectedYear) return where;
+  const from = new Date(selectedYear, 0, 1);
+  const to = new Date(selectedYear + 1, 0, 1);
   return {
     ...where,
-    created_at: {
-      gte: new Date(selectedYear, 0, 1),
-      lt: new Date(selectedYear + 1, 0, 1),
-    },
+    created_at: { gte: from, lt: to },
   };
+}
+
+/** Match evidence list filter (updated_at in audit year). */
+function applyEvidenceYearScope(where, selectedYear) {
+  if (!selectedYear) return where;
+  const from = new Date(selectedYear, 0, 1);
+  const to = new Date(selectedYear + 1, 0, 1);
+  return {
+    ...where,
+    updated_at: { gte: from, lt: to },
+  };
+}
+
+/** Finding rows active in a year (created or updated in that year). */
+function applyFindingYearScope(where, selectedYear) {
+  if (!selectedYear) return where;
+  const from = new Date(selectedYear, 0, 1);
+  const to = new Date(selectedYear + 1, 0, 1);
+  return {
+    ...where,
+    OR: [{ created_at: { gte: from, lt: to } }, { updated_at: { gte: from, lt: to } }],
+  };
+}
+
+function parseApIdFromForm(value) {
+  if (value == null || value === "") return null;
+  const raw = String(value).trim();
+  if (!raw || raw === "null" || raw === "undefined") return null;
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+function sanitizeUploadBaseName(apCode) {
+  const base = String(apCode || "file").trim() || "file";
+  return base.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 120);
 }
 
 export function makeEvidenceHandlers(defaultDepartment) {
@@ -120,7 +154,7 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const apCodeTrimPost = ap_code != null ? String(ap_code).trim() : "";
       if (findingDelegatePost && selectedYear && apCodeTrimPost) {
         const checkRows = await findingDelegatePost.findMany({
-          where: applyCreatedAtYearScope({ ap_code: apCodeTrimPost }, selectedYear),
+          where: applyFindingYearScope({ ap_code: apCodeTrimPost }, selectedYear),
           select: { check_yn: true },
         });
         if (!checkRows.some((r) => isAuditFindingCheckYes(r.check_yn))) {
@@ -145,19 +179,23 @@ export function makeEvidenceHandlers(defaultDepartment) {
           : String(formData.get("original_name") || "upload.dat");
       const extMatch = originalName.match(/\.([^.]+)$/);
       const fileExtension = extMatch ? extMatch[1] : "dat";
-      const fileName = `${ap_code || "file"}_${timestamp}.${fileExtension}`;
+      const fileName = `${sanitizeUploadBaseName(ap_code)}_${timestamp}.${fileExtension}`;
       const filePath = join(uploadsDir, fileName);
 
       await saveUploadFile(file, filePath);
 
       const fileUrl = `/uploads/evidence/${department.toLowerCase()}/${fileName}`;
-      const apIdNum = ap_id ? parseInt(ap_id) : null;
+      const apIdNum = parseApIdFromForm(ap_id);
 
       const existingEvidence = await prisma.evidence.findFirst({
-        where: applyCreatedAtYearScope({
-          department: department.toUpperCase(),
-          ...(apIdNum ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
-        }, selectedYear),
+        where: applyEvidenceYearScope(
+          {
+            department: department.toUpperCase(),
+            ...(apIdNum != null ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
+          },
+          selectedYear,
+        ),
+        orderBy: { updated_at: "desc" },
       });
 
       if (existingEvidence) {
@@ -232,16 +270,14 @@ export function makeEvidenceHandlers(defaultDepartment) {
       const findingDelegate = getFindingDelegate(upperDept);
 
       for (const evidence of evidenceData) {
-        const apIdNum = evidence.ap_id
-          ? parseInt(evidence.ap_id)
-          : evidence.risk_id
-            ? parseInt(evidence.risk_id)
-            : null;
+        const apIdNum =
+          parseApIdFromForm(evidence.ap_id) ??
+          parseApIdFromForm(evidence.risk_id);
         const apCode = evidence.ap_code || null;
         const apCodeTrimPut = apCode != null ? String(apCode).trim() : "";
         if (findingDelegate && selectedYear && apCodeTrimPut) {
           const ynRows = await findingDelegate.findMany({
-            where: applyCreatedAtYearScope({ ap_code: apCodeTrimPut }, selectedYear),
+            where: applyFindingYearScope({ ap_code: apCodeTrimPut }, selectedYear),
             select: { check_yn: true },
           });
           if (!ynRows.some((r) => isAuditFindingCheckYes(r.check_yn))) {
@@ -257,11 +293,14 @@ export function makeEvidenceHandlers(defaultDepartment) {
         const overallUpper = String(overallStatus || "").toUpperCase().trim();
 
         const existingEvidence = await prisma.evidence.findFirst({
-          where: applyCreatedAtYearScope({
-            department: department.toUpperCase(),
-            ...(apIdNum ? { ap_id: apIdNum } : { ap_code: apCode || undefined }),
-          }, selectedYear),
-          orderBy: { created_at: "desc" },
+          where: applyEvidenceYearScope(
+            {
+              department: department.toUpperCase(),
+              ...(apIdNum != null ? { ap_id: apIdNum } : { ap_code: apCode || undefined }),
+            },
+            selectedYear,
+          ),
+          orderBy: { updated_at: "desc" },
         });
 
         if (existingEvidence) {
@@ -492,7 +531,10 @@ export function makeEvidenceHandlers(defaultDepartment) {
         const toF = new Date(year + 1, 0, 1);
         const findingRows = await findingDelegateForList.findMany({
           where: {
-            created_at: { gte: fromF, lt: toF },
+            OR: [
+              { created_at: { gte: fromF, lt: toF } },
+              { updated_at: { gte: fromF, lt: toF } },
+            ],
           },
           select: { ap_code: true, check_yn: true },
         });
@@ -549,14 +591,15 @@ export function makeEvidenceHandlers(defaultDepartment) {
         return NextResponse.json({ success: false, error: "fileUrl is required" }, { status: 400 });
       }
 
-      const apIdNum = ap_id ? parseInt(ap_id, 10) : null;
+      const apIdNum = parseApIdFromForm(ap_id);
       const where = {
         department: dept,
-        ...(apIdNum ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
+        ...(apIdNum != null ? { ap_id: apIdNum } : { ap_code: ap_code || undefined }),
       };
 
       const existingEvidence = await prisma.evidence.findFirst({
-        where: applyCreatedAtYearScope(where, selectedYear),
+        where: applyEvidenceYearScope(where, selectedYear),
+        orderBy: { updated_at: "desc" },
       });
       if (!existingEvidence) {
         return NextResponse.json(
@@ -574,7 +617,7 @@ export function makeEvidenceHandlers(defaultDepartment) {
             : "";
       if (findingDelegateDel && selectedYear && codeForYn) {
         const ynDel = await findingDelegateDel.findMany({
-          where: applyCreatedAtYearScope({ ap_code: codeForYn }, selectedYear),
+          where: applyFindingYearScope({ ap_code: codeForYn }, selectedYear),
           select: { check_yn: true },
         });
         if (!ynDel.some((r) => isAuditFindingCheckYes(r.check_yn))) {

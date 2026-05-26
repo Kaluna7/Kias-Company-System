@@ -1,13 +1,15 @@
 /** @type {import('next').NextConfig} */
+const EVIDENCE_MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
+
 const nextConfig = {
   /** pdfjs-serverless is pre-bundled for Node; avoid worker resolution in .next chunks */
   serverExternalPackages: ["pdfjs-serverless"],
+  /**
+   * Prevent large multipart uploads (evidence ZIP/PDF/DOCX) from being cut by
+   * the Next.js proxy — otherwise uploads fail with "No file" / network errors.
+   */
   experimental: {
-    /**
-     * Prevent large multipart uploads (evidence ZIP/PDF/DOCX) from being cut by
-     * Next.js dev proxy, which appears in UI as generic "network error".
-     */
-    proxyClientMaxBodySize: 8 * 1024 * 1024 * 1024, // 8 GB
+    proxyClientMaxBodySize: EVIDENCE_MAX_UPLOAD_BYTES,
   },
   turbopack: {
     // Ensure Turbopack uses this repo as the root even if there are other lockfiles

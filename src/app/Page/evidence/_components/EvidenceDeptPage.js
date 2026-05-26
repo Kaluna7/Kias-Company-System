@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
-import { uploadEvidenceWithProgress } from "./uploadEvidenceWithProgress";
+import { getEvidenceApiUrl, uploadEvidenceWithProgress } from "./uploadEvidenceWithProgress";
 
 const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
 const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
@@ -132,7 +132,7 @@ export default function EvidenceDeptPage({
       // Sembunyikan data yang sudah dipublish (COMPLETE + ada file) dari halaman departemen;
       // data tersebut akan tampil di halaman Report.
       params.set("exclude_published", "1");
-      const res = await fetch(`/api/evidence/${evidenceApiSlug}?${params.toString()}`);
+      const res = await fetch(getEvidenceApiUrl(evidenceApiSlug, params));
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result?.error || `API Error: ${res.status} ${res.statusText}`);
 
@@ -252,7 +252,7 @@ export default function EvidenceDeptPage({
 
       let updatedAttachments = Array.isArray(row.attachments) ? [...row.attachments] : [];
       let bytesCompleted = 0;
-      const uploadUrl = `/api/evidence/${evidenceApiSlug}`;
+      const uploadUrl = getEvidenceApiUrl(evidenceApiSlug);
       let lastFailedFile = "";
 
       const patchOverlay = (patch) => {
@@ -278,8 +278,10 @@ export default function EvidenceDeptPage({
           lastFailedFile = safeName;
           formData.append("file", file, safeName);
           formData.append("original_name", safeName);
-          formData.append("ap_id", row.ap_id);
-          formData.append("ap_code", row.ap_code);
+          if (row.ap_id != null && row.ap_id !== "" && !Number.isNaN(Number(row.ap_id))) {
+            formData.append("ap_id", String(row.ap_id));
+          }
+          formData.append("ap_code", row.ap_code ?? "");
           formData.append("department", departmentLabel);
           formData.append("year", String(effectiveYear));
 
@@ -383,7 +385,7 @@ export default function EvidenceDeptPage({
     try {
       setUploadingIndex(rowIndex);
 
-      const response = await fetch(`/api/evidence/${evidenceApiSlug}`, {
+      const response = await fetch(getEvidenceApiUrl(evidenceApiSlug), {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -442,7 +444,7 @@ export default function EvidenceDeptPage({
         throw new Error("No valid evidence data to save");
       }
 
-      const response = await fetch(`/api/evidence/${evidenceApiSlug}`, {
+      const response = await fetch(getEvidenceApiUrl(evidenceApiSlug), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
