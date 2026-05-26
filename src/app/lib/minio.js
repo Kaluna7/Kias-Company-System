@@ -13,33 +13,80 @@ export const EVIDENCE_MAX_BYTES = 8 * 1024 * 1024 * 1024;
 
 const STORAGE_PREFIX = "/api/evidence/storage/";
 
-let clientSingleton = null;
+let internalClientSingleton = null;
+let presignClientSingleton = null;
+
+function getInternalEndpoint() {
+  return String(process.env.MINIO_ENDPOINT || "").replace(/\/$/, "");
+}
+
+/** URL reachable from the user's browser (not Docker hostname "minio"). */
+export function getPublicEndpoint() {
+  const pub = String(process.env.MINIO_PUBLIC_URL || "").replace(/\/$/, "");
+  if (pub) return pub;
+  const internal = getInternalEndpoint();
+  if (internal && !/:\/\/minio(?::|\/?|$)/i.test(internal)) {
+    return internal;
+  }
+  return "";
+}
 
 export function isMinioEnabled() {
   return Boolean(
-    process.env.MINIO_ENDPOINT &&
+    getInternalEndpoint() &&
       process.env.MINIO_ACCESS_KEY &&
       process.env.MINIO_SECRET_KEY &&
       process.env.MINIO_BUCKET,
   );
 }
 
-function getS3Client() {
+function getCredentials() {
+  return {
+    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    secretAccessKey: process.env.MINIO_SECRET_KEY,
+  };
+}
+
+function getRegion() {
+  return process.env.MINIO_REGION || "us-east-1";
+}
+
+/** Server-side calls (head/get/delete) — Docker network host `minio`. */
+function getInternalS3Client() {
   if (!isMinioEnabled()) {
     throw new Error("MinIO is not configured");
   }
-  if (!clientSingleton) {
-    clientSingleton = new S3Client({
-      endpoint: process.env.MINIO_ENDPOINT,
-      region: process.env.MINIO_REGION || "us-east-1",
-      credentials: {
-        accessKeyId: process.env.MINIO_ACCESS_KEY,
-        secretAccessKey: process.env.MINIO_SECRET_KEY,
-      },
+  if (!internalClientSingleton) {
+    internalClientSingleton = new S3Client({
+      endpoint: getInternalEndpoint(),
+      region: getRegion(),
+      credentials: getCredentials(),
       forcePathStyle: true,
     });
   }
-  return clientSingleton;
+  return internalClientSingleton;
+}
+
+/** Presigned URLs for browser upload — must use public host/IP. */
+function getPresignS3Client() {
+  if (!isMinioEnabled()) {
+    throw new Error("MinIO is not configured");
+  }
+  const publicEndpoint = getPublicEndpoint();
+  if (!publicEndpoint) {
+    throw new Error(
+      "MINIO_PUBLIC_URL is required (e.g. http://76.13.20.134:9000). Browser cannot resolve Docker hostname 'minio'.",
+    );
+  }
+  if (!presignClientSingleton) {
+    presignClientSingleton = new S3Client({
+      endpoint: publicEndpoint,
+      region: getRegion(),
+      credentials: getCredentials(),
+      forcePathStyle: true,
+    });
+  }
+  return presignClientSingleton;
 }
 
 export function getMinioBucket() {
@@ -47,7 +94,7 @@ export function getMinioBucket() {
 }
 
 export async function ensureMinioBucket() {
-  const client = getS3Client();
+  const client = getInternalS3Client();
   const bucket = getMinioBucket();
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }));
@@ -105,7 +152,7 @@ export function objectKeyFromFileUrl(fileUrl) {
 
 export async function createPresignedPutUrl(objectKey, contentType, expiresInSeconds = 86400) {
   await ensureMinioBucket();
-  const client = getS3Client();
+  const client = getPresignS3Client();
   const command = new PutObjectCommand({
     Bucket: getMinioBucket(),
     Key: objectKey,
@@ -116,7 +163,7 @@ export async function createPresignedPutUrl(objectKey, contentType, expiresInSec
 }
 
 export async function headMinioObject(objectKey) {
-  const client = getS3Client();
+  const client = getInternalS3Client();
   await client.send(
     new HeadObjectCommand({
       Bucket: getMinioBucket(),
@@ -126,7 +173,7 @@ export async function headMinioObject(objectKey) {
 }
 
 export async function getObjectStream(objectKey) {
-  const client = getS3Client();
+  const client = getInternalS3Client();
   const result = await client.send(
     new GetObjectCommand({
       Bucket: getMinioBucket(),
@@ -138,7 +185,7 @@ export async function getObjectStream(objectKey) {
 
 export async function deleteMinioObject(objectKey) {
   if (!objectKey) return;
-  const client = getS3Client();
+  const client = getInternalS3Client();
   await client.send(
     new DeleteObjectCommand({
       Bucket: getMinioBucket(),
