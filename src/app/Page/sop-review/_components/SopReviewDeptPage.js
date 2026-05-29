@@ -13,14 +13,34 @@ import {
 
 
 // Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
-const SopTableRow = memo(function SopTableRow({ row, idx, onUpdate, onRemove, isReviewer, isAdmin, isUser, useContentVisibility }) {
+const SopTableRow = memo(function SopTableRow({
+  row,
+  idx,
+  onUpdate,
+  onRemove,
+  isSelected,
+  onToggleSelect,
+  isReviewer,
+  isAdmin,
+  isUser,
+  useContentVisibility,
+}) {
   const rowStyle = useContentVisibility ? { contentVisibility: "auto", containIntrinsicSize: "0 80px" } : undefined;
   return (
     <tr
       style={rowStyle}
       className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-blue-50/30 transition-colors duration-150 border-b border-slate-100/60 group`}
     >
-      <td className="p-3 text-center align-top sticky left-0 bg-inherit border-r border-slate-200/40">
+      <td className="p-2 text-center align-top sticky left-0 bg-inherit border-r border-slate-200/40 z-[1]">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(idx)}
+          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer"
+          aria-label={`Select SOP item ${row.no}`}
+        />
+      </td>
+      <td className="p-3 text-center align-top sticky left-10 bg-inherit border-r border-slate-200/40 z-[1]">
         <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
           <span className="text-xs font-bold text-slate-600">{row.no}</span>
         </div>
@@ -206,7 +226,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [loadError, setLoadError] = useState(null);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
-  const [deleteConfirmIndex, setDeleteConfirmIndex] = useState(null);
+  const [selectedIndices, setSelectedIndices] = useState(() => new Set());
+  const [deleteConfirmIndices, setDeleteConfirmIndices] = useState(null);
   const [isGeneratingRowComments, setIsGeneratingRowComments] = useState(false);
 
   const searchParams = useSearchParams();
@@ -634,7 +655,41 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
 
   const removeRow = useCallback((index) => {
     setSopData((prev) => reindex(prev.filter((_, i) => i !== index)));
+    setSelectedIndices(new Set());
   }, []);
+
+  const removeRows = useCallback((indices) => {
+    const toRemove = new Set(indices);
+    setSopData((prev) => reindex(prev.filter((_, i) => !toRemove.has(i))));
+    setSelectedIndices(new Set());
+  }, []);
+
+  const toggleRowSelection = useCallback((index) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
+  const allRowsSelected = sopData.length > 0 && selectedIndices.size === sopData.length;
+  const someRowsSelected = selectedIndices.size > 0;
+
+  const toggleSelectAllRows = useCallback(() => {
+    setSelectedIndices((prev) => {
+      if (sopData.length === 0) return new Set();
+      if (prev.size === sopData.length) return new Set();
+      return new Set(sopData.map((_, i) => i));
+    });
+  }, [sopData.length]);
+
+  useEffect(() => {
+    setSelectedIndices((prev) => {
+      const next = new Set([...prev].filter((i) => i >= 0 && i < sopData.length));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [sopData.length]);
 
   const preparePayload = useCallback((list) =>
     reindex(list).map((it) => ({
@@ -989,6 +1044,22 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                       </span>
                     </button>
                     <button
+                      type="button"
+                      onClick={() => setDeleteConfirmIndices([...selectedIndices])}
+                      disabled={!someRowsSelected || isSaving}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 ${
+                        !someRowsSelected || isSaving
+                          ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                          : "bg-red-600 text-white hover:bg-red-700 shadow-sm hover:shadow-md"
+                      }`}
+                      title="Delete selected SOP items"
+                    >
+                      <span>🗑️</span>
+                      <span className="hidden sm:inline">
+                        Delete selected{someRowsSelected ? ` (${selectedIndices.size})` : ""}
+                      </span>
+                    </button>
+                    <button
                       onClick={addRow}
                       className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md flex items-center gap-1"
                       title="Add new SOP item"
@@ -1021,7 +1092,21 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 <table className="min-w-[1100px] w-full table-fixed border-collapse">
                   <thead className="bg-gradient-to-r from-slate-100 to-slate-50 sticky top-0 z-10">
                     <tr className="border-b border-slate-200/60">
-                      <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-12 sticky left-0 bg-gradient-to-r from-slate-100 to-slate-50">
+                      <th className="p-2 text-center font-bold text-slate-700 border-r border-slate-200/40 w-10 sticky left-0 bg-gradient-to-r from-slate-100 to-slate-50 z-[2]">
+                        <input
+                          type="checkbox"
+                          checked={allRowsSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someRowsSelected && !allRowsSelected;
+                          }}
+                          onChange={toggleSelectAllRows}
+                          disabled={sopData.length === 0}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label="Select all SOP items"
+                          title="Select all"
+                        />
+                      </th>
+                      <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-12 sticky left-10 bg-gradient-to-r from-slate-100 to-slate-50 z-[2]">
                         <div className="flex items-center justify-center gap-1">
                           <span className="text-xs">No</span>
                         </div>
@@ -1092,8 +1177,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                         row={row}
                         idx={idx}
                         onUpdate={updateRow}
+                        isSelected={selectedIndices.has(idx)}
+                        onToggleSelect={toggleRowSelection}
                         // Open confirmation modal instead of deleting immediately
-                        onRemove={setDeleteConfirmIndex}
+                        onRemove={(index) => setDeleteConfirmIndices([index])}
                         isReviewer={isReviewer}
                         isAdmin={isAdmin}
                         isUser={isUser}
@@ -1102,7 +1189,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     ))}
                     {sopData.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="border-0">
+                        <td colSpan={10} className="border-0">
                           <div className="flex flex-col items-center justify-center py-16 px-4">
                             <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-4 shadow-lg">
                               <span className="text-3xl">📄</span>
@@ -1239,11 +1326,11 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         </div>
       )}
       
-      {deleteConfirmIndex !== null && (
+      {deleteConfirmIndices !== null && deleteConfirmIndices.length > 0 && (
         <div className="fixed inset-0 z-[65] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setDeleteConfirmIndex(null)}
+            onClick={() => setDeleteConfirmIndices(null)}
             aria-hidden="true"
           />
           <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
@@ -1252,15 +1339,21 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 <span className="text-red-600 text-xl">🗑️</span>
               </div>
               <div>
-                <div className="text-base font-bold text-slate-900">Delete SOP item</div>
-                <div className="text-sm text-slate-600">Are you sure you want to delete this SOP item?</div>
+                <div className="text-base font-bold text-slate-900">
+                  {deleteConfirmIndices.length === 1 ? "Delete SOP item" : "Delete selected SOP items"}
+                </div>
+                <div className="text-sm text-slate-600">
+                  {deleteConfirmIndices.length === 1
+                    ? "Are you sure you want to delete this SOP item?"
+                    : `Are you sure you want to delete ${deleteConfirmIndices.length} selected SOP items?`}
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 flex justify-end gap-3">
               <button
                 type="button"
                 className="px-5 py-2 rounded-full text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                onClick={() => setDeleteConfirmIndex(null)}
+                onClick={() => setDeleteConfirmIndices(null)}
               >
                 No
               </button>
@@ -1268,10 +1361,12 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 type="button"
                 className="px-5 py-2 rounded-full text-sm font-semibold bg-red-600 text-white hover:bg-red-700 shadow-sm hover:shadow-md transition-colors"
                 onClick={() => {
-                  if (deleteConfirmIndex !== null) {
-                    removeRow(deleteConfirmIndex);
+                  if (deleteConfirmIndices.length === 1) {
+                    removeRow(deleteConfirmIndices[0]);
+                  } else {
+                    removeRows(deleteConfirmIndices);
                   }
-                  setDeleteConfirmIndex(null);
+                  setDeleteConfirmIndices(null);
                 }}
               >
                 Yes
