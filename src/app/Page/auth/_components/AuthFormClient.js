@@ -74,6 +74,7 @@ export default function AuthFormClient() {
             id="email"
             name="email"
             type="email"
+            suppressHydrationWarning
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -92,6 +93,7 @@ export default function AuthFormClient() {
               id="password"
               name="password"
               type={showPassword ? "text" : "password"}
+              suppressHydrationWarning
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -102,6 +104,7 @@ export default function AuthFormClient() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
+              suppressHydrationWarning
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 outline-none transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-[#2b4f82]/40"
               aria-label={showPassword ? "Hide password" : "Show password"}
               tabIndex={0}
@@ -124,6 +127,7 @@ export default function AuthFormClient() {
         <button
           type="submit"
           disabled={isLoading}
+          suppressHydrationWarning
           className="w-full rounded-xl bg-gradient-to-r from-[#141D38] to-[#2b4f82] px-4 py-3 font-semibold text-white shadow-md transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? "Signing in..." : "Sign In"}

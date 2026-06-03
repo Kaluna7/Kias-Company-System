@@ -2,9 +2,33 @@
 
 export const dynamic = "force-dynamic";
 
-import { useSearchParams } from "next/navigation";
-import { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from "react";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import {
+  createReportEditorSession,
+  downloadConsolidatedReport,
+  downloadReportSession,
+} from "@/app/lib/report/exportReportClient";
+import { formatDeptTocTitle } from "@/app/lib/report/docx/templateTitles";
+import {
+  filterMeaningfulHtmlPages,
+  htmlPageHasVisibleContent,
+} from "@/app/lib/report/docx/htmlPageUtils";
+import { resolveAuditTeamRows } from "@/app/lib/report/auditTeamDefaults";
+import {
+  COVER_FONT,
+  COVER_GOLD,
+  COVER_NAVY,
+  COVER_SUBTITLE,
+  COVER_TAGLINE,
+  COVER_YEAR_WHITE,
+  COVER_YEAR_SIZE,
+} from "@/app/lib/report/coverLayout";
+import { resolvePreparedByRow } from "@/app/lib/report/preparedByDefaults";
+import LoadingProgressOverlay, {
+  preloadLoadingAnimation,
+} from "@/app/components/shared/LoadingProgressOverlay";
 
 const REPORT_DEPARTMENTS = [
   { key: "finance", label: "FINANCE", apiPath: "finance" },
@@ -75,6 +99,9 @@ const EXECUTIVE_SUMMARY_FIRST_PAGE_EXTRA_PX = 72;
 const AUDIT_APPROACH_PAGE_SAFE_PX = 240;
 const AUDIT_APPROACH_FIRST_PAGE_EXTRA_PX = 100;
 const EXECUTIVE_SUMMARY_PARAGRAPH_SPLIT_CHARS = 320;
+/** Short lists stay one block so bullets are not forced to the next page alone. */
+const LIST_KEEP_TOGETHER_MAX_ITEMS = 12;
+const LIST_KEEP_TOGETHER_MAX_CHARS = 1400;
 const CONCLUSION_PARAGRAPH_SPLIT_CHARS = 280;
 const SOP_RELATED_ROW_SPLIT_CHARS = 260;
 const SOP_REVIEW_ROW_SPLIT_CHARS = 0;
@@ -249,9 +276,7 @@ function createDefaultExecutiveSummaryHtml(year) {
         Overall, the audit identified a combination of strengths and weaknesses across the audited areas. While several controls are operating effectively, there are also gaps that may expose the organization to operational, financial, and compliance risks.
       </p>
       <p><strong>1.4&nbsp;&nbsp;Conclusion</strong></p>
-      <p>&nbsp;</p>
       <p><strong>1.5&nbsp;&nbsp;Summary of Key Recommendations</strong></p>
-      <p>&nbsp;</p>
     `;
 }
 
@@ -510,6 +535,78 @@ function sanitizeHtmlWithFallback(html, fallbackHtml) {
   return normalizeHtmlWithFallback(cleanedWrapper.innerHTML, fallbackHtml);
 }
 
+function blockPlainText(blockHtml) {
+  return String(blockHtml || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isColonLabelParagraph(plainText) {
+  const t = String(plainText || "").trim();
+  return (
+    t.endsWith(":") &&
+    t.length <= 72 &&
+    !/^\d+(\.\d+)*[\s.]/.test(t)
+  );
+}
+
+function shouldKeepListIntact(items) {
+  const totalLen = items.reduce(
+    (sum, li) => sum + (li.textContent || "").trim().length,
+    0,
+  );
+  if (
+    items.some(
+      (li) =>
+        (li.textContent || "").trim().length > EXECUTIVE_SUMMARY_PARAGRAPH_SPLIT_CHARS,
+    )
+  ) {
+    return false;
+  }
+  return (
+    items.length <= LIST_KEEP_TOGETHER_MAX_ITEMS &&
+    totalLen <= LIST_KEEP_TOGETHER_MAX_CHARS
+  );
+}
+
+/** Merge consecutive "Advantages:" + ul + "Limitations:" + ul (etc.) into one pagination unit. */
+function mergeColonLabelListRuns(blocks) {
+  const result = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const t = blockPlainText(blocks[i]);
+    const next = blocks[i + 1] || "";
+    if (
+      isColonLabelParagraph(t) &&
+      (next.trim().startsWith("<ul") || next.trim().startsWith("<ol"))
+    ) {
+      let combined = blocks[i] + next;
+      let j = i + 2;
+      while (j < blocks.length) {
+        const tj = blockPlainText(blocks[j]);
+        const nextJ = blocks[j + 1] || "";
+        if (
+          isColonLabelParagraph(tj) &&
+          (nextJ.trim().startsWith("<ul") || nextJ.trim().startsWith("<ol"))
+        ) {
+          combined += blocks[j] + nextJ;
+          j += 2;
+          continue;
+        }
+        break;
+      }
+      result.push(combined);
+      i = j;
+      continue;
+    }
+    result.push(blocks[i]);
+    i += 1;
+  }
+  return result.length > 0 ? result : blocks;
+}
+
 function splitRichTextHtmlIntoBlocks(html, fallbackHtml) {
   const normalized = sanitizeHtmlWithFallback(html, fallbackHtml);
 
@@ -572,6 +669,15 @@ function splitRichTextHtmlIntoBlocks(html, fallbackHtml) {
       }
 
       if (
+        isColonLabelParagraph(plainText) &&
+        (nextTagName === "UL" || nextTagName === "OL")
+      ) {
+        blocks.push(`${node.outerHTML}${nextNode.outerHTML}`);
+        nodeIndex = nextNodeIndex;
+        continue;
+      }
+
+      if (
         isSectionHeading &&
         nextTagName === "P" &&
         (nextNode.textContent || "").trim()
@@ -601,6 +707,11 @@ function splitRichTextHtmlIntoBlocks(html, fallbackHtml) {
 
       if (items.length === 0) {
         if (node.outerHTML?.trim()) blocks.push(node.outerHTML);
+        continue;
+      }
+
+      if (shouldKeepListIntact(items)) {
+        blocks.push(node.outerHTML);
         continue;
       }
 
@@ -636,11 +747,63 @@ function splitRichTextHtmlIntoBlocks(html, fallbackHtml) {
     }
   }
 
-  return blocks.length > 0 ? blocks : [normalized];
+  const merged = mergeColonLabelListRuns(
+    blocks.length > 0 ? blocks : [normalized],
+  );
+  return merged.length > 0 ? merged : [normalized];
+}
+
+/** Section number at block start (e.g. 1.3 from "1.3 Key Findings"). */
+function getBlockSectionNumber(blockHtml) {
+  const text = String(blockHtml || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = text.match(/^1\.(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+/** Keep 1.3–1.5 in one pagination block (flows below Scope without extra page breaks). */
+function mergeExecutiveSummarySubsections13To15(blocks) {
+  const result = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const section = getBlockSectionNumber(blocks[i]);
+    if (section === 3) {
+      let combined = "";
+      let j = i;
+      while (j < blocks.length) {
+        const sec = getBlockSectionNumber(blocks[j]);
+        if (j > i && sec !== null && sec < 3) break;
+        if (j > i && sec !== null && sec > 5) break;
+        combined += blocks[j];
+        if (sec === 5) {
+          j += 1;
+          while (j < blocks.length && getBlockSectionNumber(blocks[j]) === null) {
+            combined += blocks[j];
+            j += 1;
+          }
+          break;
+        }
+        j += 1;
+      }
+      result.push(combined);
+      i = j;
+      continue;
+    }
+    result.push(blocks[i]);
+    i += 1;
+  }
+  return result.length > 0 ? result : blocks;
 }
 
 function splitExecutiveSummaryIntoBlocks(html, year) {
-  return splitRichTextHtmlIntoBlocks(html, createDefaultExecutiveSummaryHtml(year));
+  const blocks = splitRichTextHtmlIntoBlocks(
+    html,
+    createDefaultExecutiveSummaryHtml(year),
+  );
+  return mergeExecutiveSummarySubsections13To15(blocks);
 }
 
 function estimateAppendixTextUnits(text) {
@@ -819,6 +982,12 @@ function ReportPreviewPageContent() {
   const yearParam = searchParams.get("year");
   const downloadMode = searchParams.get("download");
   const shouldAutoDownloadWord = downloadMode === "word";
+  const onlyOfficeCreate = searchParams.get("onlyOfficeCreate") === "1";
+  const shouldOpenEditor =
+    onlyOfficeCreate ||
+    searchParams.get("editor") === "1" ||
+    searchParams.get("openEditor") === "1";
+  const router = useRouter();
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
   const [auditCoverage, setAuditCoverage] = useState(
@@ -828,7 +997,8 @@ function ReportPreviewPageContent() {
   const [area, setArea] = useState("BALI, JAKARTA, MEDAN AND BATAM");
 
   const [findingSections, setFindingSections] = useState([]);
-  const [loadingFindings, setLoadingFindings] = useState(false);
+  const [loadingFindings, setLoadingFindings] = useState(true);
+  const [findingsLoadCompleted, setFindingsLoadCompleted] = useState(false);
   /** Chunk berdasarkan ukuran riil (ukur setelah render), seperti Word: isi halaman sampai penuh lalu next page. */
   const [measuredChunks, setMeasuredChunks] = useState(null);
   const measureContainerRef = useRef(null);
@@ -864,9 +1034,62 @@ function ReportPreviewPageContent() {
   );
   const [presidentDirectorDate, setPresidentDirectorDate] = useState("");
 
+  const preparedByDisplayRow = useMemo(
+    () => resolvePreparedByRow(preparedBy),
+    [preparedBy],
+  );
+
+  const auditTeamDisplayRows = useMemo(
+    () => resolveAuditTeamRows(auditTeam),
+    [auditTeam],
+  );
+
   const pendingFieldUpdatesRef = useRef({});
   const fieldUpdateTimerRef = useRef(null);
   const hasAutoDownloadedWordRef = useRef(false);
+  const hasAutoOpenedEditorRef = useRef(false);
+  const emptyCreateAbortRef = useRef(false);
+  const [exportingFormat, setExportingFormat] = useState(null);
+  const [openingEditor, setOpeningEditor] = useState(false);
+  const [createProgress, setCreateProgress] = useState(5);
+  const [createStatus, setCreateStatus] = useState("Starting...");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (onlyOfficeCreate) {
+      preloadLoadingAnimation();
+    }
+  }, [onlyOfficeCreate]);
+
+  useEffect(() => {
+    if (!onlyOfficeCreate) return;
+    const id = window.setInterval(() => {
+      setCreateProgress((p) => (p < 88 ? p + 1 : p));
+    }, 350);
+    return () => window.clearInterval(id);
+  }, [onlyOfficeCreate]);
+
+  useEffect(() => {
+    if (!onlyOfficeCreate) return;
+    if (loadingFindings || !findingsLoadCompleted) {
+      setCreateStatus("Loading module data (SOP, Audit Review, Worksheet)...");
+      setCreateProgress((p) => Math.max(p, 20));
+      return;
+    }
+    if (findingSections.length === 0) {
+      setCreateStatus("No published data for this year.");
+      setCreateProgress((p) => Math.max(p, 35));
+      return;
+    }
+    if (openingEditor) {
+      setCreateStatus("Generating DOCX and opening OnlyOffice...");
+      setCreateProgress((p) => Math.max(p, 72));
+      return;
+    }
+    setCreateStatus("Preparing report...");
+    setCreateProgress((p) => Math.max(p, 48));
+  }, [onlyOfficeCreate, loadingFindings, findingsLoadCompleted, findingSections.length, openingEditor]);
 
   const flushPendingFieldUpdates = () => {
     if (fieldUpdateTimerRef.current) {
@@ -1371,7 +1594,8 @@ function ReportPreviewPageContent() {
         const height = node.offsetHeight + marginTop + marginBottom;
 
         if (sum + height > limit && current.length > 0) {
-          chunks.push(current.join(""));
+          const joined = current.join("");
+          if (htmlPageHasVisibleContent(joined)) chunks.push(joined);
           current = [];
           sum = 0;
           limit = nextLimit;
@@ -1382,12 +1606,14 @@ function ReportPreviewPageContent() {
       });
 
       if (current.length > 0) {
-        chunks.push(current.join(""));
+        const joined = current.join("");
+        if (htmlPageHasVisibleContent(joined)) chunks.push(joined);
       }
 
       if (!cancelled) {
+        const fallback = [normalizeExecutiveSummaryHtml(executiveSummaryHtml, year)];
         const nextChunks =
-          chunks.length > 0 ? chunks : [normalizeExecutiveSummaryHtml(executiveSummaryHtml, year)];
+          chunks.length > 0 ? chunks : filterMeaningfulHtmlPages(fallback);
         setExecutiveSummaryChunks((prev) =>
           isSerializedEqual(prev, nextChunks) ? prev : nextChunks,
         );
@@ -1475,7 +1701,8 @@ function ReportPreviewPageContent() {
         const height = node.offsetHeight + marginTop + marginBottom;
 
         if (sum + height > limit && current.length > 0) {
-          chunks.push(current.join(""));
+          const joined = current.join("");
+          if (htmlPageHasVisibleContent(joined)) chunks.push(joined);
           current = [];
           sum = 0;
           limit = nextLimit;
@@ -1486,19 +1713,19 @@ function ReportPreviewPageContent() {
       });
 
       if (current.length > 0) {
-        chunks.push(current.join(""));
+        const joined = current.join("");
+        if (htmlPageHasVisibleContent(joined)) chunks.push(joined);
       }
 
       if (!cancelled) {
+        const fallback = [
+          sanitizeHtmlWithFallback(
+            auditObjectivesScopeHtml,
+            createDefaultAuditObjectivesScopeHtml(),
+          ),
+        ];
         const nextChunks =
-          chunks.length > 0
-            ? chunks
-            : [
-                sanitizeHtmlWithFallback(
-                  auditObjectivesScopeHtml,
-                  createDefaultAuditObjectivesScopeHtml(),
-                ),
-              ];
+          chunks.length > 0 ? chunks : filterMeaningfulHtmlPages(fallback);
         setAuditObjectivesScopeChunks((prev) =>
           isSerializedEqual(prev, nextChunks) ? prev : nextChunks,
         );
@@ -1586,7 +1813,8 @@ function ReportPreviewPageContent() {
         const height = node.offsetHeight + marginTop + marginBottom;
 
         if (sum + height > limit && current.length > 0) {
-          chunks.push(current.join(""));
+          const joined = current.join("");
+          if (htmlPageHasVisibleContent(joined)) chunks.push(joined);
           current = [];
           sum = 0;
           limit = nextLimit;
@@ -1597,19 +1825,19 @@ function ReportPreviewPageContent() {
       });
 
       if (current.length > 0) {
-        chunks.push(current.join(""));
+        const joined = current.join("");
+        if (htmlPageHasVisibleContent(joined)) chunks.push(joined);
       }
 
       if (!cancelled) {
+        const fallback = [
+          sanitizeHtmlWithFallback(
+            auditApproachMethodologyHtml,
+            createDefaultAuditApproachMethodologyHtml(),
+          ),
+        ];
         const nextChunks =
-          chunks.length > 0
-            ? chunks
-            : [
-                sanitizeHtmlWithFallback(
-                  auditApproachMethodologyHtml,
-                  createDefaultAuditApproachMethodologyHtml(),
-                ),
-              ];
+          chunks.length > 0 ? chunks : filterMeaningfulHtmlPages(fallback);
         setAuditApproachMethodologyChunks((prev) =>
           isSerializedEqual(prev, nextChunks) ? prev : nextChunks,
         );
@@ -1634,8 +1862,9 @@ function ReportPreviewPageContent() {
     let cancelled = false;
 
     async function loadFindings() {
+      setLoadingFindings(true);
+      setFindingsLoadCompleted(false);
       try {
-        setLoadingFindings(true);
         const sections = [];
 
         for (const dept of REPORT_DEPARTMENTS) {
@@ -1812,6 +2041,7 @@ function ReportPreviewPageContent() {
       } finally {
         if (!cancelled) {
           setLoadingFindings(false);
+          setFindingsLoadCompleted(true);
         }
       }
     }
@@ -2345,11 +2575,12 @@ function ReportPreviewPageContent() {
     return pages;
   })();
 
-  const executiveSummaryPages =
+  const executiveSummaryPages = filterMeaningfulHtmlPages(
     Array.isArray(executiveSummaryChunks) && executiveSummaryChunks.length > 0
       ? executiveSummaryChunks
-      : [normalizeExecutiveSummaryHtml(executiveSummaryHtml, year)];
-  const auditObjectivesScopePages =
+      : [normalizeExecutiveSummaryHtml(executiveSummaryHtml, year)],
+  );
+  const auditObjectivesScopePages = filterMeaningfulHtmlPages(
     Array.isArray(auditObjectivesScopeChunks) && auditObjectivesScopeChunks.length > 0
       ? auditObjectivesScopeChunks
       : [
@@ -2357,8 +2588,9 @@ function ReportPreviewPageContent() {
             auditObjectivesScopeHtml,
             createDefaultAuditObjectivesScopeHtml(),
           ),
-        ];
-  const auditApproachMethodologyPages =
+        ],
+  );
+  const auditApproachMethodologyPages = filterMeaningfulHtmlPages(
     Array.isArray(auditApproachMethodologyChunks) && auditApproachMethodologyChunks.length > 0
       ? auditApproachMethodologyChunks
       : [
@@ -2366,7 +2598,8 @@ function ReportPreviewPageContent() {
             auditApproachMethodologyHtml,
             createDefaultAuditApproachMethodologyHtml(),
           ),
-        ];
+        ],
+  );
   const executiveSummaryStartPage = 5;
   const executiveSummaryEndPage = executiveSummaryStartPage + executiveSummaryPages.length - 1;
   const auditObjectivesStartPage = executiveSummaryEndPage + 1;
@@ -2403,7 +2636,7 @@ function ReportPreviewPageContent() {
       indices.forEach((rowIndex, i) => {
         const finding = section.auditRows[rowIndex] ?? null;
         if (!finding) return;
-        list.push({ section, finding, findingIndex: i + 1 });
+        list.push({ section, finding, findingIndex: i + 1, rowIndex });
       });
     });
     return list;
@@ -2429,110 +2662,346 @@ function ReportPreviewPageContent() {
     window.print();
   };
 
-  const inlineComputedStyles = (sourceNode, targetNode) => {
-    if (!(sourceNode instanceof Element) || !(targetNode instanceof Element)) return;
-    const computed = window.getComputedStyle(sourceNode);
-    const styleText = Array.from(computed)
-      .map((prop) => `${prop}:${computed.getPropertyValue(prop)};`)
-      .join("");
-    targetNode.setAttribute("style", styleText);
+  const buildReportExportPayload = useCallback(() => {
+    const periodStartVal = `JANUARY ${year}`;
+    const periodEndVal = `DECEMBER ${year}`;
+    const issuedDateVal = new Date().toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
 
-    const sourceChildren = Array.from(sourceNode.children);
-    const targetChildren = Array.from(targetNode.children);
-    for (let i = 0; i < sourceChildren.length; i += 1) {
-      inlineComputedStyles(sourceChildren[i], targetChildren[i]);
-    }
-  };
+    const tocItems = [
+      {
+        title: "Executive Summary",
+        page:
+          executiveSummaryPages.length > 1
+            ? `${executiveSummaryStartPage} - ${executiveSummaryEndPage}`
+            : String(executiveSummaryStartPage),
+      },
+      {
+        title: "Objective & Scope",
+        page:
+          auditObjectivesScopePages.length > 1
+            ? `${auditObjectivesStartPage} - ${auditObjectivesEndPage}`
+            : String(auditObjectivesStartPage),
+      },
+      {
+        title: "Audit Approach & Methodology",
+        page:
+          auditApproachMethodologyPages.length > 1
+            ? `${auditApproachStartPage} - ${auditApproachEndPage}`
+            : String(auditApproachStartPage),
+      },
+      ...REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
+        findingSections.some((section) => section.deptKey === row.deptKey),
+      )
+        .sort((a, b) => {
+          const ra = deptFindingPageRanges[a.deptKey];
+          const rb = deptFindingPageRanges[b.deptKey];
+          return (ra?.first ?? Infinity) - (rb?.first ?? Infinity);
+        })
+        .map((row) => {
+          const range = deptFindingPageRanges[row.deptKey];
+          const page =
+            range?.first && range?.last
+              ? range.first === range.last
+                ? String(range.first)
+                : `${range.first} - ${range.last}`
+              : "—";
+          return { title: formatDeptTocTitle(row), page };
+        }),
+    ];
 
-  const toAbsoluteUrl = (src) => {
-    try {
-      return new URL(src, window.location.origin).toString();
-    } catch {
-      return src;
-    }
-  };
+    const exportConclusionPages =
+      conclusionPages.length > 0
+        ? conclusionPages
+        : findingSections.length > 0
+          ? (() => {
+              const segments = findingSections
+                .map((section, i) => ({
+                  sectionNumber: i + 1,
+                  deptLabel: section.deptLabel,
+                  deptKey: section.deptKey,
+                  text: (conclusionValues[section.deptKey] || "").trim(),
+                }))
+                .filter((seg) => seg.text);
+              return segments.length > 0 ? [segments] : [[]];
+            })()
+          : [];
 
-  const convertImageToDataUrl = async (imgEl) => {
-    const src = imgEl.getAttribute("src");
-    if (!src || src.startsWith("data:")) return;
-    const absoluteSrc = toAbsoluteUrl(src);
-    try {
-      const response = await fetch(absoluteSrc);
-      if (!response.ok) return;
-      const blob = await response.blob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      if (typeof dataUrl === "string") {
-        imgEl.setAttribute("src", dataUrl);
-      }
-    } catch {
-      imgEl.setAttribute("src", absoluteSrc);
-    }
-  };
+    const conclusionPageCount =
+      findingSections.length > 0
+        ? exportConclusionPages.length || 1
+        : 0;
 
-  const handleDownloadWord = async () => {
-    if (typeof window === "undefined" || typeof document === "undefined") return;
-    const pageNodes = Array.from(document.querySelectorAll(".break-after-page"));
-    if (pageNodes.length === 0) return;
+    const totalPages =
+      4 +
+      executiveSummaryPages.length +
+      auditObjectivesScopePages.length +
+      auditApproachMethodologyPages.length +
+      findingPages.length +
+      findingDetailPages.length +
+      conclusionPageCount +
+      appendixPages.length;
 
-    const clonedPages = pageNodes
-      .map((node) => {
-        const clone = node.cloneNode(true);
-        if (!(clone instanceof HTMLElement)) return null;
-        clone.querySelectorAll(".print\\:hidden, [data-no-export='true']").forEach((el) => el.remove());
-        inlineComputedStyles(node, clone);
-        return clone;
+    const appendixStartPage =
+      findingsPageStartNumber +
+      findingPages.length +
+      1 +
+      findingDetailPages.length +
+      (findingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
+      1;
+
+    const departmentCompletionRows = REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
+      findingSections.some((section) => section.deptKey === row.deptKey),
+    )
+      .sort((a, b) => {
+        const ra = deptFindingPageRanges[a.deptKey];
+        const rb = deptFindingPageRanges[b.deptKey];
+        return (ra?.first ?? Infinity) - (rb?.first ?? Infinity);
       })
-      .filter(Boolean);
-    if (clonedPages.length === 0) return;
+      .map((row) => {
+        const month = row.monthIndex ?? 1;
+        const lastDayDate = new Date(year, month, 0);
+        const completionDate = lastDayDate.toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
+        const range = deptFindingPageRanges[row.deptKey];
+        const pageRange =
+          range?.first && range?.last
+            ? range.first === range.last
+              ? String(range.first)
+              : `${range.first} - ${range.last}`
+            : "—";
+        return { name: row.name, completionDate, pageRange };
+      });
 
-    await Promise.all(
-      clonedPages.flatMap((page) =>
-        Array.from(page.querySelectorAll("img")).map((img) => convertImageToDataUrl(img)),
-      ),
-    );
+    const conclusionTexts = [];
+    if (conclusionChunks?.length > 0) {
+      conclusionChunks.forEach((pageSections) => {
+        pageSections.forEach((seg) => {
+          if (seg?.text) conclusionTexts.push(String(seg.text));
+        });
+      });
+    } else {
+      findingSections.forEach((section, idx) => {
+        const text = (conclusionValues[section.deptKey] || "").trim();
+        if (text) {
+          conclusionTexts.push(`6.${idx + 1} ${section.deptLabel}: ${text}`);
+        }
+      });
+    }
 
-    const pagesHtml = clonedPages.map((node) => node.outerHTML).join("\n");
+    return {
+      year,
+      periodStart: periodStartVal,
+      periodEnd: periodEndVal,
+      issuedDate: issuedDateVal,
+      auditCoverage,
+      departmentCoverage,
+      area,
+      executiveSummaryHtml,
+      auditObjectivesScopeHtml,
+      auditApproachMethodologyHtml,
+      executiveSummaryPages: filterMeaningfulHtmlPages(executiveSummaryPages),
+      auditObjectivesScopePages: filterMeaningfulHtmlPages(auditObjectivesScopePages),
+      auditApproachMethodologyPages: filterMeaningfulHtmlPages(auditApproachMethodologyPages),
+      auditTeam: auditTeamDisplayRows,
+      preparedBy: [preparedByDisplayRow],
+      auditCommitteeName,
+      auditCommitteeDate: formattedAuditCommitteeDate,
+      presidentDirectorName,
+      presidentDirectorDate: formattedPresidentDirectorDate,
+      tableOfContents: tocItems,
+      departmentCompletionRows,
+      deptIndexMap,
+      conclusionChunks: conclusionTexts,
+      conclusionPages: exportConclusionPages,
+      findingSections: findingSections.map((section) => ({
+        deptKey: section.deptKey,
+        deptLabel: section.deptLabel,
+        areaAudit: section.areaAudit,
+        executiveSummary: section.executiveSummary,
+        sopRows: section.sopRows || [],
+        auditRows: section.auditRows || [],
+        conclusionText: (conclusionValues[section.deptKey] || "").trim(),
+      })),
+      appendices,
+      appendixPages: appendixPages.map((page) => ({
+        showAppendicesHeading: page.showAppendicesHeading,
+        segments: page.segments,
+      })),
+      findingPages: findingPages.map((page, idx) => ({
+        pageNumber: findingsPageStartNumber + idx,
+        deptKey: page.dept.deptKey,
+        deptLabel: page.dept.deptLabel,
+        deptNum: deptIndexMap[page.dept.deptKey] || 1,
+        executiveSummary: page.isFirstPageForDept ? page.dept.executiveSummary : null,
+        sopRows: page.sopRows || [],
+        auditRows: page.auditRows || [],
+        isFirstPageForDept: page.isFirstPageForDept,
+        isFirstSopChunk: page.isFirstSopChunk,
+        isFirstAuditChunk: page.isFirstAuditChunk,
+      })),
+      selectedFindingByDept,
+      findingDetailPages: findingDetailPages.map((item, idx) => ({
+        ...item,
+        pageNumber: findingsPageStartNumber + findingPages.length + 1 + idx,
+      })),
+      pageLayout: {
+        totalPages,
+        executiveSummaryStartPage,
+        auditObjectivesStartPage,
+        auditObjectivesEndPage,
+        auditApproachStartPage,
+        auditApproachEndPage,
+        findingsPageStartNumber,
+        conclusionStartPage:
+          findingsPageStartNumber +
+          findingPages.length +
+          1 +
+          findingDetailPages.length,
+        appendixStartPage,
+      },
+    };
+  }, [
+    year,
+    auditCoverage,
+    departmentCoverage,
+    area,
+    executiveSummaryHtml,
+    auditObjectivesScopeHtml,
+    auditApproachMethodologyHtml,
+    auditTeamDisplayRows,
+    preparedBy,
+    auditCommitteeName,
+    formattedAuditCommitteeDate,
+    presidentDirectorName,
+    formattedPresidentDirectorDate,
+    findingSections,
+    deptIndexMap,
+    deptFindingPageRanges,
+    findingDetailPages,
+    conclusionChunks,
+    conclusionValues,
+    appendices,
+    executiveSummaryPages.length,
+    executiveSummaryStartPage,
+    executiveSummaryEndPage,
+    auditObjectivesScopePages.length,
+    auditObjectivesStartPage,
+    auditObjectivesEndPage,
+    auditApproachMethodologyPages.length,
+    auditApproachStartPage,
+    auditApproachEndPage,
+    findingPages,
+    findingDetailPages,
+    selectedFindingByDept,
+    conclusionPages,
+    appendixPages,
+    findingsPageStartNumber,
+  ]);
 
-    const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="utf-8" />
-  <title>KIAS Consolidated Report ${year}</title>
-  <!--[if gte mso 9]>
-  <xml>
-    <w:WordDocument>
-      <w:View>Print</w:View>
-      <w:DoNotOptimizeForBrowser/>
-    </w:WordDocument>
-  </xml>
-  <![endif]-->
-  <style>
-    @page { size: A4; margin: 0; }
-    body { margin: 0; padding: 0; background: #ffffff; }
-    table { border-collapse: collapse; }
-    .break-after-page { page-break-after: always; break-after: page; }
-    .break-after-page:last-child { page-break-after: auto; break-after: auto; }
-  </style>
-</head>
-<body>
-${pagesHtml}
-</body>
-</html>`;
+  const runReportExport = async (format) => {
+    if (loadingFindings) return;
+    if (findingSections.length === 0) {
+      window.alert("No report data loaded yet. Please wait for data or publish SOP/Audit data first.");
+      return;
+    }
+    setExportingFormat(format);
+    try {
+      const payload = buildReportExportPayload();
+      const result = await downloadConsolidatedReport(payload, format);
+      if (!result.ok) {
+        window.alert(result.error || "Export failed.");
+      }
+    } catch (err) {
+      console.error("Report export error:", err);
+      window.alert(err?.message || "Export failed.");
+    } finally {
+      setExportingFormat(null);
+    }
+  };
 
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `KIAS-Consolidated-Report-${year}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const handleDownloadWord = () => runReportExport("docx");
+  const handleDownloadPdf = () => runReportExport("pdf");
+
+  const openDocumentEditor = async () => {
+    if (loadingFindings) return;
+    if (findingSections.length === 0) {
+      const msg =
+        "Belum ada data laporan. Publikasikan data SOP / Audit Review terlebih dahulu.";
+      if (onlyOfficeCreate) {
+        window.alert(msg);
+        router.replace(
+          `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
+        );
+      } else {
+        window.alert(msg);
+      }
+      return;
+    }
+    setOpeningEditor(true);
+    if (onlyOfficeCreate) {
+      setCreateProgress(60);
+      setCreateStatus("Building report snapshot...");
+    }
+    try {
+      const payload = buildReportExportPayload();
+      if (onlyOfficeCreate) {
+        setCreateProgress(75);
+        setCreateStatus("Generating DOCX file...");
+      }
+      const result = await createReportEditorSession(payload);
+      if (!result.ok) {
+        window.alert(result.error || "Could not open editor.");
+        if (onlyOfficeCreate) {
+          router.replace(
+            `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
+          );
+        }
+        return;
+      }
+      if (result.editorEnabled && result.onlyOfficeReachable === false) {
+        const downloadNow = window.confirm(
+          "OnlyOffice tidak berjalan (Docker Desktop + port 8082).\n\n" +
+            "DOCX report sudah dibuat di server.\n\n" +
+            "OK = unduh Word sekarang\n" +
+            "Cancel = buka halaman editor (akan error sampai OnlyOffice siap)",
+        );
+        if (downloadNow && result.sessionId) {
+          const dl = await downloadReportSession(result.sessionId, "docx", result.year);
+          if (!dl.ok) window.alert(dl.error || "Download failed.");
+          if (onlyOfficeCreate) {
+            router.replace(
+              `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
+            );
+          }
+          return;
+        }
+      }
+      if (result.editorPath) {
+        if (onlyOfficeCreate) {
+          setCreateProgress(100);
+          setCreateStatus("Opening OnlyOffice...");
+        }
+        const go = onlyOfficeCreate ? router.replace.bind(router) : router.push.bind(router);
+        go(result.editorPath);
+      }
+    } catch (e) {
+      console.error(e);
+      window.alert(e?.message || "Could not open editor.");
+      if (onlyOfficeCreate) {
+        router.replace(
+          `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
+        );
+      }
+    } finally {
+      setOpeningEditor(false);
+    }
   };
 
   useEffect(() => {
@@ -2543,11 +3012,45 @@ ${pagesHtml}
     const timer = window.setTimeout(() => {
       if (hasAutoDownloadedWordRef.current) return;
       hasAutoDownloadedWordRef.current = true;
-      handleDownloadWord();
+      openDocumentEditor();
     }, 600);
 
     return () => window.clearTimeout(timer);
   }, [shouldAutoDownloadWord, loadingFindings, findingSections.length]);
+
+  useEffect(() => {
+    if (!shouldOpenEditor || hasAutoOpenedEditorRef.current) return;
+    if (loadingFindings || !findingsLoadCompleted) return;
+
+    if (findingSections.length === 0) {
+      if (onlyOfficeCreate && !emptyCreateAbortRef.current) {
+        emptyCreateAbortRef.current = true;
+        hasAutoOpenedEditorRef.current = true;
+        window.alert(
+          "Belum ada data laporan. Publikasikan data SOP / Audit Review terlebih dahulu.",
+        );
+        router.replace(`/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`);
+      }
+      return;
+    }
+
+    const delayMs = onlyOfficeCreate ? 1400 : 600;
+    const timer = window.setTimeout(() => {
+      if (hasAutoOpenedEditorRef.current) return;
+      hasAutoOpenedEditorRef.current = true;
+      openDocumentEditor();
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    shouldOpenEditor,
+    loadingFindings,
+    findingsLoadCompleted,
+    findingSections.length,
+    onlyOfficeCreate,
+    year,
+    router,
+  ]);
 
   const periodStart = `JANUARY ${year}`;
   const periodEnd = `DECEMBER ${year}`;
@@ -2558,8 +3061,51 @@ ${pagesHtml}
     year: "numeric",
   });
 
+  if (!mounted) {
+    if (onlyOfficeCreate) {
+      return (
+        <LoadingProgressOverlay
+          open
+          progress={8}
+          title="Creating consolidated report"
+          subtitle={Number.isFinite(year) ? `Audit year ${year}` : ""}
+          statusLabel="Loading..."
+        />
+      );
+    }
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center text-sm text-slate-600">
+        Loading report preview...
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-start p-4 print:bg-white print:p-0 gap-6">
+    <div
+      suppressHydrationWarning
+      className={
+        onlyOfficeCreate
+          ? "min-h-screen bg-gray-100 h-screen overflow-hidden relative"
+          : "min-h-screen bg-gray-100 flex flex-col items-center justify-start p-4 print:bg-white print:p-0 gap-6"
+      }
+    >
+      {onlyOfficeCreate ? (
+        <LoadingProgressOverlay
+          open
+          progress={createProgress}
+          title="Creating consolidated report"
+          subtitle={Number.isFinite(year) ? `Audit year ${year}` : ""}
+          statusLabel={createStatus}
+        />
+      ) : null}
+      <div
+        className={
+          onlyOfficeCreate
+            ? "absolute -left-[10000px] top-0 w-[210mm] overflow-visible pointer-events-none [visibility:hidden]"
+            : "flex flex-col items-center justify-start gap-6 w-full"
+        }
+        aria-hidden={onlyOfficeCreate ? true : undefined}
+      >
       <style jsx global>{`
         @media print {
           * {
@@ -2568,10 +3114,12 @@ ${pagesHtml}
             color-adjust: exact !important;
           }
         }
-        .executive-summary-content p {
+        .executive-summary-content p,
+        .executive-summary-content div {
           margin: 0 0 0.65rem 0;
           overflow-wrap: anywhere;
           word-break: break-word;
+          text-align: justify;
         }
         .executive-summary-content ul,
         .executive-summary-content ol {
@@ -2590,6 +3138,7 @@ ${pagesHtml}
           margin: 0.2rem 0;
           overflow-wrap: anywhere;
           word-break: break-word;
+          text-align: justify;
         }
         .executive-summary-content strong,
         .executive-summary-content b {
@@ -2603,54 +3152,63 @@ ${pagesHtml}
           text-decoration: underline;
         }
       `}</style>
-      {loadingFindings && (
+      {loadingFindings && !onlyOfficeCreate ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 backdrop-blur-[1px] print:hidden">
           <div className="bg-white rounded-xl shadow-xl px-6 py-5 flex items-center gap-3 min-w-[260px]">
             <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
             <div className="text-sm text-gray-800 font-medium">Loading report data...</div>
           </div>
         </div>
-      )}
-      {/* Cover page - full A4: sama dengan cover.png (atas putih ~2/3, gelombang tengah, bawah biru gelap) */}
-      <div className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] overflow-hidden break-after-page relative">
-        {/* 1. Atas: background putih, elemen geometris pojok kanan atas */}
-        <div className="absolute top-0 right-0 h-[52%] w-[50%]">
-          <img
-            src="/images/upper_right.jpg"
-            alt=""
-            className="h-full w-full object-cover object-right object-top"
-          />
-        </div>
-        {/* 2. Judul: kiri, sedikit di bawah sepertiga atas — INTERNAL / AUDIT (abu gelap), REPORT (biru-abu terang) */}
-        <div className="absolute left-10 top-[28%] z-10">
-          <div className="text-[3.5rem] font-bold text-gray-800 tracking-tight leading-tight">INTERNAL</div>
-          <div className="text-[3.5rem] font-bold text-gray-800 tracking-tight leading-tight">AUDIT</div>
-          <div className="text-[3.25rem] font-bold text-slate-400 tracking-tight leading-tight">REPORT</div>
-        </div>
-        {/* 3. Tengah: lapisan gelombang (turquoise + teal) dari middle.jpg */}
-        <div className="absolute top-[50%] left-0 right-0 h-[20%]">
-          <img
-            src="/images/middle.jpg"
-            alt=""
-            className="w-full h-full object-cover object-center"
-          />
-        </div>
-        {/* 4. Bawah: biru-abu gelap solid (tanpa gelombang) */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[30%] bg-[#2c3e50]"
-          style={{
-            clipPath: "none",
-            WebkitClipPath: "none",
-          }}
+      ) : null}
+      {/* Cover — one A4: background fill + bordered text boxes (Arial only on page 1) */}
+      <div
+        className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] min-h-[297mm] max-h-[297mm] overflow-hidden break-after-page relative box-border isolate [print-size:A4] font-[Arial]"
+        style={{ fontFamily: COVER_FONT }}
+      >
+        <img
+          src="/images/report-cover/cover.png"
+          alt=""
+          className="absolute inset-0 h-[297mm] w-full object-cover object-center pointer-events-none select-none"
+          draggable={false}
         />
-        {/* 5. Logo KIAS kiri bawah, tahun kanan bawah */}
-        <div className="absolute bottom-0 left-0 right-0 h-[30%] flex items-end justify-between px-10 pb-10 z-10 pointer-events-none">
-          <img
-            src="/images/kias-logo.png"
-            alt="KIAS - PT KPU Internal Audit System"
-            className="h-32 w-auto object-contain pointer-events-auto"
+        <div className="absolute z-10 left-[8%] top-[18%] max-w-[52%] pointer-events-none border border-gray-300 rounded-sm px-3 py-2 bg-white/0">
+          <div className="font-bold tracking-tight leading-[0.98]" style={{ color: COVER_NAVY }}>
+            <div className="text-[3.35rem]">INTERNAL</div>
+            <div className="text-[3.35rem]">AUDIT</div>
+            <div className="text-[4.15rem] leading-none" style={{ color: COVER_GOLD }}>
+              REPORT
+            </div>
+          </div>
+          <div className="mt-2 mb-2 h-[2px] w-[5rem]" style={{ backgroundColor: COVER_GOLD }} />
+          <div
+            className="text-[0.8rem] font-semibold uppercase tracking-[0.12em]"
+            style={{ color: COVER_NAVY }}
+          >
+            {COVER_SUBTITLE}
+          </div>
+        </div>
+        <div className="absolute z-10 left-[8%] top-[45%] flex gap-3 pointer-events-none border border-gray-300 rounded-sm px-3 py-2">
+          <span
+            className="w-[3px] shrink-0 self-stretch min-h-[5rem]"
+            style={{ backgroundColor: COVER_GOLD }}
+            aria-hidden="true"
           />
-          <span className="text-white text-7xl font-bold tracking-wide">{year}</span>
+          <div className="text-[1.2rem] leading-snug font-medium" style={{ color: COVER_NAVY }}>
+            {COVER_TAGLINE.map((line) => (
+              <div key={line}>{line}</div>
+            ))}
+          </div>
+        </div>
+        <div
+          className="absolute z-10 right-[8%] bottom-[8%] pointer-events-none"
+          aria-label={`Audit year ${year}`}
+        >
+          <div
+            className="font-bold tracking-tight leading-none tabular-nums text-right"
+            style={{ color: COVER_YEAR_WHITE, fontSize: `${COVER_YEAR_SIZE / 2}pt` }}
+          >
+            {year}
+          </div>
         </div>
       </div>
 
@@ -2706,7 +3264,7 @@ ${pagesHtml}
                   const role = newPreparedRole.trim();
                   const date = newPreparedDate.trim();
                   if (!name || !role) return;
-                  setPreparedBy((prev) => [...prev, { name, role, date }]);
+                  setPreparedBy([{ name, role, date }]);
                   setIsPreparedByModalOpen(false);
                 }}
                 className="px-3 py-1 rounded bg-blue-600 text-white"
@@ -2746,14 +3304,10 @@ ${pagesHtml}
             <div className="font-semibold tracking-wide w-[230px] shrink-0 whitespace-nowrap text-gray-700">
               PERIOD <span>:</span>
             </div>
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="px-3 py-1 bg-gray-100 rounded font-semibold inline-block min-w-[120px] text-center">
-                {periodStart}
-              </span>
-              <span className="font-semibold">-</span>
-              <span className="px-3 py-1 bg-gray-100 rounded font-semibold inline-block min-w-[120px] text-center">
-                {periodEnd}
-              </span>
+            <div className="flex-1 min-w-0 font-semibold tracking-wide text-gray-900">
+              {periodStart}
+              <span className="mx-2">-</span>
+              {periodEnd}
             </div>
           </div>
 
@@ -2822,12 +3376,11 @@ ${pagesHtml}
 
       {/* Audit team, department completion date, and footer (satu halaman) */}
       <div className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] overflow-hidden flex flex-col px-20 pt-24 pb-16 break-after-page">
-        {/* Audit Team */}
-        <div className="mb-20 text-[10px]">
-          <div className="text-center font-bold tracking-wide mb-2">
+        {/* Audit Team — borderless table, example row when empty */}
+        <div className="mb-20 text-[11px]">
+          <div className="text-center font-bold tracking-wide mb-2 text-[10px]">
             AUDIT TEAM <span>:</span>
           </div>
-          {/* Tombol tambah di bawah judul; hanya tampil di layar, tidak tercetak */}
           <div className="flex justify-center mb-3 print:hidden">
             <button
               type="button"
@@ -2841,41 +3394,38 @@ ${pagesHtml}
               + Add Member
             </button>
           </div>
-          <div className="flex justify-center gap-12">
-            {/* Kolom nama, dibuat rata tengah */}
-            <div className="space-y-1 w-48 text-center">
-              {auditTeam.map((member, idx) => (
-                <div
-                  key={`${member.name}-${member.role}-${idx}`}
-                  className="px-2 py-[2px] bg-gray-100 font-semibold flex items-center justify-center gap-1"
-                >
-                  <span className="truncate flex-1">{member.name}</span>
-                  {/* Tombol delete hanya tampil di layar, tidak tercetak */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAuditTeam((prev) =>
-                        prev.filter((_, i) => i !== idx),
-                      )
-                    }
-                    className="print:hidden ml-1 text-[7px] text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-            {/* Kolom role, rata tengah */}
-            <div className="space-y-1 w-48 text-center">
-              {auditTeam.map((member, idx) => (
-                <div
-                  key={`${member.name}-${member.role}-role-${idx}`}
-                  className="px-2 py-[2px] bg-gray-100 font-semibold"
-                >
-                  {member.role}
-                </div>
-              ))}
-            </div>
+          <div className="flex justify-center">
+            <table className="w-full max-w-md border-collapse table-fixed">
+              <colgroup>
+                <col className="w-1/2" />
+                <col className="w-1/2" />
+              </colgroup>
+              <tbody>
+                {auditTeamDisplayRows.map((member, idx) => (
+                  <tr key={`audit-team-${idx}-${member.name}-${member.role}`}>
+                    <td className="py-2 pr-6 text-center font-semibold align-middle">
+                      <span className="inline-flex items-center justify-center gap-1">
+                        <span>{member.name}</span>
+                        {auditTeam.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAuditTeam((prev) => prev.filter((_, i) => i !== idx))
+                            }
+                            className="print:hidden text-[7px] text-red-600 hover:text-red-800 shrink-0"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-2 text-center font-semibold align-middle uppercase tracking-wide">
+                      {member.role}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {/* Popup add audit team member (hanya layar) */}
@@ -2941,57 +3491,54 @@ ${pagesHtml}
             DEPARTMENT COMPLETION DATE <span>:</span>
           </div>
           <div className="flex justify-center">
-            <div className="grid grid-cols-[170px_190px_70px] gap-y-1">
-              <div className="font-bold">
-                DEPARTMENT <span>:</span>
-              </div>
-              <div />
-              <div className="font-bold text-right">PAGE</div>
-
-              {REPORT_DEPARTMENT_COMPLETION_ROWS
-                .filter((row) =>
+            <table className="border-collapse w-full max-w-[640px] text-[10px] font-bold table-fixed">
+              <colgroup>
+                <col className="w-[33%]" />
+                <col className="w-[51%]" />
+                <col className="w-[16%]" />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td className="py-1 pr-6 align-bottom whitespace-nowrap">DEPARTMENT :</td>
+                  <td className="py-1" />
+                  <td className="py-1 text-right align-bottom whitespace-nowrap">PAGE</td>
+                </tr>
+                {REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
                   findingSections.some((section) => section.deptKey === row.deptKey),
                 )
-                // Urutkan berdasarkan first page (PAGE) dari Findings & Recommendations,
-                // bukan berdasarkan nama atau bulan.
-                .sort((a, b) => {
-                  const ra = deptFindingPageRanges[a.deptKey];
-                  const rb = deptFindingPageRanges[b.deptKey];
-                  const pa = ra?.first ?? Number.POSITIVE_INFINITY;
-                  const pb = rb?.first ?? Number.POSITIVE_INFINITY;
-                  return pa - pb;
-                })
-                .map((row) => {
-                // Tanggal completion mengikuti tahun audit (year) dan akhir bulan
-                // audit period start per department (monthIndex).
-                const month = row.monthIndex ?? 1;
-                const lastDayDate = new Date(year, month, 0);
-                const completionDate = lastDayDate.toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                });
+                  .sort((a, b) => {
+                    const ra = deptFindingPageRanges[a.deptKey];
+                    const rb = deptFindingPageRanges[b.deptKey];
+                    const pa = ra?.first ?? Number.POSITIVE_INFINITY;
+                    const pb = rb?.first ?? Number.POSITIVE_INFINITY;
+                    return pa - pb;
+                  })
+                  .map((row) => {
+                    const month = row.monthIndex ?? 1;
+                    const lastDayDate = new Date(year, month, 0);
+                    const completionDate = lastDayDate.toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    });
+                    const range = deptFindingPageRanges[row.deptKey];
+                    const pageRange =
+                      range && range.first && range.last
+                        ? `${range.first} - ${range.last}`
+                        : "—";
 
-                // PAGE mengikuti range halaman Findings & Recommendations untuk department tsb.
-                const range = deptFindingPageRanges[row.deptKey];
-                const pageRange =
-                  range && range.first && range.last
-                    ? `${range.first} - ${range.last}`
-                    : "—";
-
-                return (
-                  <div key={row.deptKey} className="contents">
-                    <div className="px-2 py-[2px] bg-gray-100">{row.name}</div>
-                    <div className="px-2 py-[2px] bg-gray-100 font-semibold">
-                      {completionDate}
-                    </div>
-                    <div className="px-2 py-[2px] bg-gray-100 text-right">
-                      {pageRange}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    return (
+                      <tr key={row.deptKey}>
+                        <td className="py-1 pr-6 align-top whitespace-nowrap">{row.name}</td>
+                        <td className="py-1 pr-6 align-top font-semibold whitespace-nowrap">
+                          {completionDate}
+                        </td>
+                        <td className="py-1 text-right align-top whitespace-nowrap">{pageRange}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -3003,7 +3550,7 @@ ${pagesHtml}
           <div className="flex items-center justify-center gap-2 text-[10px] font-semibold tracking-wide">
             <span>DATE OF ISSUED</span>
             <span>:</span>
-            <span className="px-3 py-[2px] bg-gray-100 font-semibold">{issuedDate}</span>
+            <span className="font-semibold">{issuedDate}</span>
           </div>
         </div>
 
@@ -3057,11 +3604,10 @@ ${pagesHtml}
             </div>
           </div>
 
-          {/* Prepared by */}
-          <div className="mb-16 text-xs">
+          {/* Prepared by — one table: Name | MEMBER | underline | DATE | date */}
+          <div className="mb-16 text-[9px]">
             <div className="flex items-center justify-between mb-4">
-              <div className="font-bold tracking-wide">PREPARED BY :</div>
-              {/* Tombol tambah member - hanya tampil di layar, tidak tercetak */}
+              <div className="font-bold tracking-wide text-[9px]">PREPARED BY :</div>
               <button
                 type="button"
                 onClick={() => {
@@ -3076,33 +3622,42 @@ ${pagesHtml}
               </button>
             </div>
 
-            <div className="space-y-4">
-              {preparedBy.map((p, idx) => (
-                <div key={`${p.name}-${p.role}-${idx}`} className="flex items-end gap-4">
-                  <div className="px-3 py-1 bg-gray-100 font-semibold min-w-[180px]">
-                    {p.name}
-                  </div>
-                  <div className="px-3 py-1 bg-gray-100 font-semibold min-w-[180px]">
-                    {p.role}
-                  </div>
-                  <div className="flex-1 border-b border-gray-400" />
-                  <div className="text-[10px] font-semibold mr-1 pb-[2px]">DATE</div>
-                  <div className="px-3 py-1 bg-gray-100 min-w-[90px] text-[10px] font-semibold text-center">
-                    {p.date || ""}
-                  </div>
-                  {/* Tombol delete hanya di layar */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPreparedBy((prev) => prev.filter((_, i) => i !== idx))
-                    }
-                    className="print:hidden ml-1 text-[9px] text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
+            <table className="w-full max-w-[640px] border-collapse table-fixed">
+              <colgroup>
+                <col className="w-[28%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+                <col className="w-[10%]" />
+                <col className="w-[36%]" />
+              </colgroup>
+              <tbody>
+                <tr className="align-bottom">
+                  <td className="py-1.5 pr-3 font-semibold">{preparedByDisplayRow.name}</td>
+                  <td className="py-1.5 pr-2 font-semibold uppercase tracking-wide whitespace-nowrap">
+                    {preparedByDisplayRow.role}
+                  </td>
+                  <td className="py-1.5 pr-3 align-bottom">
+                    <span
+                      className="block w-full border-0 border-b border-black border-solid min-h-[0.5em] leading-none"
+                      aria-hidden="true"
+                    />
+                  </td>
+                  <td className="py-1.5 pr-2 font-semibold whitespace-nowrap">DATE</td>
+                  <td className="py-1.5 font-semibold whitespace-nowrap">
+                    {preparedByDisplayRow.date}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {preparedBy.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPreparedBy([])}
+                className="print:hidden mt-2 text-[9px] text-red-600 hover:text-red-800"
+              >
+                Delete
+              </button>
+            )}
           </div>
 
           {/* Management approval: jabatan + tanggal satu baris (sejajar), lalu ruang tanda tangan → garis → nama */}
@@ -3470,7 +4025,7 @@ ${pagesHtml}
           )}
 
           <div
-            className={`executive-summary-content flex-1 min-h-0 overflow-hidden text-[11px] leading-relaxed pb-8 ${pageIdx > 0 ? "pt-2" : ""}`}
+            className={`executive-summary-content flex-1 min-h-0 overflow-hidden text-[11px] leading-relaxed text-justify pb-8 ${pageIdx > 0 ? "pt-2" : ""}`}
             dangerouslySetInnerHTML={{ __html: pageHtml }}
           />
 
@@ -3694,7 +4249,7 @@ ${pagesHtml}
           )}
 
           <div
-            className={`executive-summary-content flex-1 min-h-0 overflow-hidden text-[11px] leading-relaxed ${pageIdx > 0 ? "pt-2" : ""}`}
+            className={`executive-summary-content flex-1 min-h-0 overflow-hidden text-[11px] leading-relaxed text-justify ${pageIdx > 0 ? "pt-2" : ""}`}
             dangerouslySetInnerHTML={{ __html: pageHtml }}
           />
 
@@ -3740,7 +4295,7 @@ ${pagesHtml}
           )}
 
           <div
-            className={`executive-summary-content flex-1 min-h-0 overflow-hidden text-[11px] leading-relaxed ${pageIdx > 0 ? "pt-2" : ""}`}
+            className={`executive-summary-content flex-1 min-h-0 overflow-hidden text-[11px] leading-relaxed text-justify ${pageIdx > 0 ? "pt-2" : ""}`}
             dangerouslySetInnerHTML={{ __html: pageHtml }}
           />
 
@@ -3903,7 +4458,7 @@ ${pagesHtml}
                     </colgroup>
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-1.5 py-1 text-left">
+                        <th className="border border-gray-300 px-1.5 py-1 text-center whitespace-nowrap">
                           No
                         </th>
                         <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">
@@ -3923,7 +4478,7 @@ ${pagesHtml}
                     <tbody>
                       {page.sopRows.map((row, rIdx) => (
                         <tr key={`sop-${page.dept.deptKey}-${idx}-${rIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top"}>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>
                             {row.no}
                           </td>
                           <td className={row.__continuedRow ? (row.sopRelated ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
@@ -3972,7 +4527,7 @@ ${pagesHtml}
                     </colgroup>
                     <thead>
                       <tr className="bg-blue-900 text-white">
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
+                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle leading-tight whitespace-nowrap">
                           <span className="block whitespace-nowrap">No</span>
                         </th>
                         <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
@@ -4018,7 +4573,7 @@ ${pagesHtml}
                     <tbody>
                       {page.auditRows.map((row, aIdx) => (
                         <tr key={`audit-${page.dept.deptKey}-${idx}-${aIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top"}>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>
                             {row.no}
                           </td>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>
@@ -4443,7 +4998,7 @@ ${pagesHtml}
                         </colgroup>
                         <thead>
                           <tr className="bg-gray-100">
-                            <th className="border border-gray-300 px-1.5 py-1 text-left">No</th>
+                            <th className="border border-gray-300 px-1.5 py-1 text-center whitespace-nowrap">No</th>
                             <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">SOP</th>
                             <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">Review</th>
                             <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">A</th>
@@ -4453,7 +5008,7 @@ ${pagesHtml}
                         <tbody>
                           {section.sopRows.map((row, rIdx) => (
                             <tr key={rIdx} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
-                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top"}>{row.no}</td>
+                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>{row.no}</td>
                               <td className={row.__continuedRow ? (row.sopRelated ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words"}>{row.sopRelated || ""}</td>
                               <td className={row.__continuedRow ? (row.reviewComment ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words"}>{row.reviewComment || (row.__continuedRow ? "" : "-")}</td>
                               <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
@@ -4495,7 +5050,7 @@ ${pagesHtml}
                       </colgroup>
                       <thead>
                         <tr className="bg-blue-900 text-white">
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">No</th>
+                          <th className="border border-blue-800 px-1.5 py-0.5 text-center whitespace-nowrap">No</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">RID</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Risk</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">L</th>
@@ -4511,7 +5066,7 @@ ${pagesHtml}
                       <tbody>
                         {section.auditRows.map((row, aIdx) => (
                           <tr key={aIdx} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top"}>{row.no}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>{row.no}</td>
                             <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>{row.riskId || ""}</td>
                             <td className={row.__continuedRow ? (row.riskDetails ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.riskDetails || ""}</td>
                             <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>{row.riskLevel ?? ""}</td>
@@ -4829,25 +5384,46 @@ ${pagesHtml}
         ))
       )}
 
-      {/* Tombol print (tidak ikut tercetak) */}
-      <div className="mt-4 print:hidden">
-        <div className="flex items-center gap-2">
+      </div>
+
+      {/* Export & editor actions (screen only) */}
+      {!onlyOfficeCreate ? (
+      <div className="mt-4 print:hidden w-full max-w-[210mm] mx-auto px-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={openDocumentEditor}
+            disabled={openingEditor || !!exportingFormat}
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {openingEditor ? "Opening editor…" : "Edit in OnlyOffice"}
+          </button>
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-[#141D38] to-[#2D3A5A] text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg hover:from-[#141D38]/90 hover:to-[#2D3A5A]/90 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2"
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-[#141D38] to-[#2D3A5A] text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg"
           >
-            Print / Save as PDF
+            Print HTML preview
           </button>
           <button
             type="button"
             onClick={handleDownloadWord}
-            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg hover:from-emerald-700 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2"
+            disabled={!!exportingFormat || openingEditor}
+            className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-600 text-emerald-800 bg-emerald-50 text-xs sm:text-sm font-semibold hover:bg-emerald-100 disabled:opacity-60"
           >
-            Download Word
+            {exportingFormat === "docx" ? "Generating…" : "Direct DOCX (no editor)"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={!!exportingFormat || openingEditor}
+            className="inline-flex items-center px-4 py-2 rounded-lg border border-red-600 text-red-800 bg-red-50 text-xs sm:text-sm font-semibold hover:bg-red-100 disabled:opacity-60"
+          >
+            {exportingFormat === "pdf" ? "Generating…" : "Direct PDF (fallback)"}
           </button>
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

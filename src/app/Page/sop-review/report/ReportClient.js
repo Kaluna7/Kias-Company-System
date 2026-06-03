@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { jsPDF } from "jspdf";
@@ -40,9 +40,11 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
 
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const viewBaselineRef = useRef(null);
   const [detailEditing, setDetailEditing] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState(null);
   const [savingPublished, setSavingPublished] = useState(false);
+  const [savingAuditeeFields, setSavingAuditeeFields] = useState(false);
   const [deletingPublished, setDeletingPublished] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
@@ -340,10 +342,121 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       toast.show(`No data yet. Please publish data first on the ${group.department} SOP Review page.`, "error");
       return;
     }
+    viewBaselineRef.current = deepClone(group);
     setSelectedDetail(group);
     setDetailEditing(false);
     setEditSnapshot(null);
     setViewOpen(true);
+  };
+
+  const patchViewStep = useCallback((itemIdx, stepIdx, patch) => {
+    setSelectedDetail((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((it, i) => {
+        if (i !== itemIdx) return it;
+        const steps = [...(it._detail?.steps || [])];
+        if (!steps[stepIdx]) return it;
+        steps[stepIdx] = { ...steps[stepIdx], ...patch };
+        return { ...it, _detail: { ...it._detail, steps } };
+      });
+      return { ...prev, items };
+    });
+  }, []);
+
+  const hasAuditeeDirty = useMemo(() => {
+    if (detailEditing || !selectedDetail || !viewBaselineRef.current) return false;
+    const baselineItems = viewBaselineRef.current.items || [];
+    const currentItems = selectedDetail.items || [];
+    for (let i = 0; i < currentItems.length; i++) {
+      const baseSteps = baselineItems[i]?._detail?.steps || [];
+      const curSteps = currentItems[i]?._detail?.steps || [];
+      for (let j = 0; j < curSteps.length; j++) {
+        const cur = curSteps[j];
+        const base = baseSteps[j];
+        if ((cur?.auditee_comment || "") !== (base?.auditee_comment || "")) return true;
+        if ((cur?.follow_up_detail || "") !== (base?.follow_up_detail || "")) return true;
+      }
+    }
+    return false;
+  }, [selectedDetail, detailEditing]);
+
+  const cancelAuditeeEdits = () => {
+    if (viewBaselineRef.current) {
+      setSelectedDetail(deepClone(viewBaselineRef.current));
+    }
+  };
+
+  const buildPublishedUpdatesPayload = (detail) =>
+    (detail?.items || []).map((item) => {
+      const meta = { ...(item._detail?.meta || {}) };
+      const metaId = meta.id;
+      const steps = (item._detail?.steps || []).map((s) => ({
+        id: s.id,
+        no: s.no,
+        sop_related: s.sop_related,
+        status: s.status,
+        comment: s.comment,
+        reviewer_feedback: s.reviewer_feedback,
+        reviewer: s.reviewer,
+        auditee_comment: s.auditee_comment,
+        follow_up_detail: s.follow_up_detail,
+      }));
+      return {
+        meta_id: metaId,
+        deleted_step_ids: item._pendingDeletedStepIds || [],
+        meta: {
+          department_name: item.department || meta.department_name,
+          preparer_name: meta.preparer_name,
+          preparer_date: meta.preparer_date,
+          reviewer_name: meta.reviewer_name,
+          reviewer_date: meta.reviewer_date,
+          reviewer_comment: meta.reviewer_comment,
+          preparer_status: meta.preparer_status,
+          reviewer_status: meta.reviewer_status,
+          audit_fieldwork_start_date: meta.audit_fieldwork_start_date,
+          audit_fieldwork_end_date: meta.audit_fieldwork_end_date,
+        },
+        steps,
+      };
+    });
+
+  const saveAuditeeFields = async () => {
+    if (!selectedDetail?.items?.length) return;
+    const apiPath = selectedDetail.items[0]?.apiPath;
+    if (!apiPath) {
+      toast.show("Missing department (apiPath) for save.", "error");
+      return;
+    }
+    setSavingAuditeeFields(true);
+    try {
+      const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates: buildPublishedUpdatesPayload(selectedDetail) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        toast.show("Please sign in to save.", "error");
+        return;
+      }
+      if (res.status === 403) {
+        toast.show(data?.error || "You do not have permission to edit published data.", "error");
+        return;
+      }
+      if (!res.ok || !data.success) {
+        toast.show("Save failed: " + (data.error || res.status), "error");
+        return;
+      }
+      viewBaselineRef.current = deepClone(selectedDetail);
+      toast.show("Auditee comment & follow-up detail saved.", "success");
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      toast.show("Error: " + (e?.message || ""), "error");
+    } finally {
+      setSavingAuditeeFields(false);
+    }
   };
 
   const beginDetailEdit = () => {
@@ -456,36 +569,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     }
     setSavingPublished(true);
     try {
-      const updates = editSnapshot.items.map((item) => {
-        const meta = { ...(item._detail?.meta || {}) };
-        const metaId = meta.id;
-        const steps = (item._detail?.steps || []).map((s) => ({
-          id: s.id,
-          no: s.no,
-          sop_related: s.sop_related,
-          status: s.status,
-          comment: s.comment,
-          reviewer_feedback: s.reviewer_feedback,
-          reviewer: s.reviewer,
-        }));
-        return {
-          meta_id: metaId,
-          deleted_step_ids: item._pendingDeletedStepIds || [],
-          meta: {
-            department_name: item.department || meta.department_name,
-            preparer_name: meta.preparer_name,
-            preparer_date: meta.preparer_date,
-            reviewer_name: meta.reviewer_name,
-            reviewer_date: meta.reviewer_date,
-            reviewer_comment: meta.reviewer_comment,
-            preparer_status: meta.preparer_status,
-            reviewer_status: meta.reviewer_status,
-            audit_fieldwork_start_date: meta.audit_fieldwork_start_date,
-            audit_fieldwork_end_date: meta.audit_fieldwork_end_date,
-          },
-          steps,
-        };
-      });
+      const updates = buildPublishedUpdatesPayload(editSnapshot);
 
       const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
         method: "PATCH",
@@ -508,10 +592,10 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       }
 
       toast.show("Changes saved.", "success");
+      viewBaselineRef.current = deepClone(editSnapshot);
+      setSelectedDetail(deepClone(editSnapshot));
       setDetailEditing(false);
       setEditSnapshot(null);
-      setViewOpen(false);
-      setSelectedDetail(null);
       router.refresh();
     } catch (e) {
       console.error(e);
@@ -544,6 +628,8 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
             "Comment": step.comment || "",
             "Reviewer Feedback": step.reviewer_feedback || "",
             "Step Reviewer": step.reviewer || "",
+            "Auditee Comment": step.auditee_comment || "",
+            "Follow-Up Detail": step.follow_up_detail || "",
             "Preparer Status": item.sop_preparer_status || "DRAFT",
             "Reviewer Status": item.sop_reviewer_status || "DRAFT",
             "Reviewer Comments": item.reviewer_comments || "",
@@ -567,6 +653,8 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       { header: "Comment", key: "Comment" },
       { header: "Reviewer Feedback", key: "Reviewer Feedback" },
       { header: "Step Reviewer", key: "Step Reviewer" },
+      { header: "Auditee Comment", key: "Auditee Comment" },
+      { header: "Follow-Up Detail", key: "Follow-Up Detail" },
       { header: "Preparer Status", key: "Preparer Status" },
       { header: "Reviewer Status", key: "Reviewer Status" },
       { header: "Reviewer Comments", key: "Reviewer Comments" },
@@ -611,7 +699,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       if (item._detail?.steps?.length && stepCountDesktop < maxStepsDesktop) {
         item._detail.steps.forEach((step) => {
           if (stepCountDesktop >= maxStepsDesktop) return;
-          tableRowsDesktop += `<tr style="page-break-inside:avoid;"><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.no || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.sop_related || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.status || "DRAFT")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer_feedback || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer || "")}</td></tr>`;
+          tableRowsDesktop += `<tr style="page-break-inside:avoid;"><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.no || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.sop_related || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.status || "DRAFT")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer_feedback || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.reviewer || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.auditee_comment || "")}</td><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(step.follow_up_detail || "")}</td></tr>`;
           stepCountDesktop++;
         });
       }
@@ -655,9 +743,9 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
 <p><strong>Audit Period End:</strong> ${escapeHtml(formatDateForDisplay(group.audit_period_end))}</p>
 <p><strong>Preparer:</strong> ${escapeHtml(group.preparer || "-")}</p>
 <p><strong>Reviewer:</strong> ${escapeHtml(group.reviewer || "-")}</p>
-<table><thead><tr><th>No</th><th>SOP Related</th><th>Status</th><th>Comment</th><th>Reviewer Feedback</th><th>Reviewer</th></tr></thead><tbody>
+<table><thead><tr><th>No</th><th>SOP Related</th><th>Status</th><th>Comment</th><th>Reviewer Feedback</th><th>Reviewer</th><th>Auditee Comment</th><th>Follow-Up Detail</th></tr></thead><tbody>
 ${tableRowsDesktop}
-${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:center;color:#666;font-style:italic;">... (showing ${maxStepsDesktop} of total steps)</td></tr>` : ""}
+${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:center;color:#666;font-style:italic;">... (showing ${maxStepsDesktop} of total steps)</td></tr>` : ""}
 </tbody></table>
 </body></html>`;
 
@@ -719,6 +807,8 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
               String(step.comment ?? ""),
               String(step.reviewer_feedback ?? ""),
               String(step.reviewer ?? ""),
+              String(step.auditee_comment ?? ""),
+              String(step.follow_up_detail ?? ""),
             ]);
             stepCount++;
           });
@@ -732,7 +822,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
       const maxY = pageH - margin;
 
       // Kolom total = 190mm supaya pas dengan margin 10mm kiri-kanan
-      const colW = [10, 45, 20, 45, 40, 30];
+      const colW = [8, 32, 16, 32, 28, 24, 28, 22];
       const colX = [
         margin,
         margin + colW[0],
@@ -793,7 +883,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
         doc.setTextColor(0, 0, 0);
-        const labels = ["No", "SOP Related", "Status", "Comment", "Reviewer Feedback", "Reviewer"];
+        const labels = ["No", "SOP Related", "Status", "Comment", "Reviewer Feedback", "Reviewer", "Auditee Comment", "Follow-Up Detail"];
         labels.forEach((label, idx) => {
           doc.text(label, colX[idx] + padX, y + 5.5);
         });
@@ -1128,13 +1218,34 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                 SOP Review Data Detail — {modalDetail?.department || "Department"}
               </h3>
               <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+                {canEditPublished && !detailEditing && hasAuditeeDirty && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={cancelAuditeeEdits}
+                      disabled={savingAuditeeFields || savingPublished}
+                      className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-medium hover:bg-slate-200 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveAuditeeFields}
+                      disabled={savingAuditeeFields || savingPublished}
+                      className="px-2.5 py-1.5 bg-amber-600 text-white border border-amber-700 rounded-full text-[11px] font-medium hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {savingAuditeeFields ? "Saving..." : "Save auditee fields"}
+                    </button>
+                  </>
+                )}
                 {canEditPublished && !detailEditing && modalDetail?.items?.length > 0 && (
                   <button
                     type="button"
                     onClick={beginDetailEdit}
-                    className="px-2.5 py-1.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-full text-[11px] font-medium hover:bg-indigo-100"
+                    disabled={savingAuditeeFields}
+                    className="px-2.5 py-1.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-full text-[11px] font-medium hover:bg-indigo-100 disabled:opacity-50"
                   >
-                    Edit
+                    Edit all
                   </button>
                 )}
                 {detailEditing && (
@@ -1142,7 +1253,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                     <button
                       type="button"
                       onClick={cancelDetailEdit}
-                      disabled={savingPublished || deletingPublished}
+                      disabled={savingPublished || deletingPublished || savingAuditeeFields}
                       className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-medium hover:bg-slate-200 disabled:opacity-50"
                     >
                       Cancel
@@ -1150,7 +1261,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                     <button
                       type="button"
                       onClick={savePublishedEdits}
-                      disabled={savingPublished || deletingPublished}
+                      disabled={savingPublished || deletingPublished || savingAuditeeFields}
                       className="px-2.5 py-1.5 bg-blue-600 text-white border border-blue-700 rounded-full text-[11px] font-medium hover:bg-blue-700 disabled:opacity-50"
                     >
                       {savingPublished ? "Saving..." : "Save"}
@@ -1186,6 +1297,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                   onClick={() => {
                     setViewOpen(false);
                     setSelectedDetail(null);
+                    viewBaselineRef.current = null;
                     setDetailEditing(false);
                     setEditSnapshot(null);
                   }}
@@ -1203,11 +1315,18 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
               </div>
             </div>
             <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-sm text-slate-800">
-              {detailEditing && editSnapshot && (
+              {canEditPublished && !detailEditing && modalDetail?.items?.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
-                  Edit mode: only the <strong>SOP steps table</strong> below can be changed (row fields and{" "}
-                  <strong>Remove</strong> for a step). Header and audit period are read-only here; use the report list to
-                  adjust audit period if needed. Click <strong>Save</strong> to apply table changes.{" "}
+                  <strong>Auditee Comment</strong> and <strong>Follow-Up Detail</strong> can be edited directly in the
+                  table below. Click <strong>Save auditee fields</strong> after changes. Use <strong>Edit all</strong> to
+                  change other columns or remove steps.
+                </div>
+              )}
+              {detailEditing && editSnapshot && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-xs text-indigo-900">
+                  Edit mode: all <strong>SOP steps table</strong> columns can be changed (including auditee fields),{" "}
+                  <strong>Remove</strong> for a step. Header and audit period are read-only here; use the report list to
+                  adjust audit period if needed. Click <strong>Save</strong> to apply.{" "}
                   <strong>Delete published record</strong> removes the entire publication.
                 </div>
               )}
@@ -1234,6 +1353,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                       return "bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-200";
                     };
                     const ed = detailEditing;
+                    const canEditAuditeeInline = canEditPublished && !ed;
                     return (
                       <div
                         key={itemMeta.id ?? `item-${itemIdx}`}
@@ -1360,7 +1480,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                             SOP Steps ({stepRows.length} items)
                           </h4>
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                            <table className={`w-full text-xs border-collapse ${ed ? "min-w-[920px]" : "min-w-[840px]"}`}>
+                            <table className={`w-full text-xs border-collapse ${ed ? "min-w-[1180px]" : "min-w-[1080px]"}`}>
                               <thead>
                                 <tr className="bg-slate-50 text-slate-700">
                                   <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
@@ -1380,6 +1500,18 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                                   </th>
                                   <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
                                     Reviewer Feedback
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200 min-w-[140px]">
+                                    <span className="inline-flex items-center gap-1">
+                                      <span className="text-amber-600" aria-hidden>💬</span>
+                                      Auditee Comment
+                                    </span>
+                                  </th>
+                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200 min-w-[140px]">
+                                    <span className="inline-flex items-center gap-1">
+                                      <span className="text-orange-600" aria-hidden>📋</span>
+                                      Follow-Up Detail
+                                    </span>
                                   </th>
                                   {ed && (
                                     <th className="px-2.5 py-2 text-center font-semibold text-slate-700 border border-slate-200 w-24">
@@ -1492,6 +1624,42 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                                         step.reviewer_feedback || "-"
                                       )}
                                     </td>
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                      {ed || canEditAuditeeInline ? (
+                                        <textarea
+                                          rows={2}
+                                          className="w-full min-w-[100px] border border-amber-200 rounded px-1 py-1 text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                                          value={step.auditee_comment ?? ""}
+                                          placeholder="Auditee comment..."
+                                          disabled={savingAuditeeFields || savingPublished}
+                                          onChange={(e) =>
+                                            (ed ? patchEditStep : patchViewStep)(itemIdx, idx, {
+                                              auditee_comment: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      ) : (
+                                        step.auditee_comment || "-"
+                                      )}
+                                    </td>
+                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                      {ed || canEditAuditeeInline ? (
+                                        <textarea
+                                          rows={2}
+                                          className="w-full min-w-[100px] border border-orange-200 rounded px-1 py-1 text-xs focus:border-orange-400 focus:ring-1 focus:ring-orange-400/30"
+                                          value={step.follow_up_detail ?? ""}
+                                          placeholder="Follow-up detail..."
+                                          disabled={savingAuditeeFields || savingPublished}
+                                          onChange={(e) =>
+                                            (ed ? patchEditStep : patchViewStep)(itemIdx, idx, {
+                                              follow_up_detail: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      ) : (
+                                        step.follow_up_detail || "-"
+                                      )}
+                                    </td>
                                     {ed && (
                                       <td className="px-2 py-2 border border-slate-200 text-center align-top">
                                         <button
@@ -1508,7 +1676,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="6" style="text-align:c
                                 {ed && stepRows.length === 0 && (
                                   <tr>
                                     <td
-                                      colSpan={7}
+                                      colSpan={9}
                                       className="p-4 text-center text-slate-500 border border-slate-200"
                                     >
                                       No steps left. Click <strong>Save</strong> to update the record, or{" "}

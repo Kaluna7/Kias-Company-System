@@ -37,8 +37,8 @@ if (typeof window !== "undefined") {
 export default function LoadingProgressOverlay({
   open = false,
   progress = 0,
-  title = "Memuat...",
-  subtitle = "Jangan tutup halaman hingga proses selesai.",
+  title = "Loading...",
+  subtitle = "Please do not close this page until the process completes.",
   statusLabel = "",
   fileName = "",
 }) {

@@ -20,6 +20,12 @@
 # production
 /build
 
+# generated report documents (OnlyOffice sessions)
+/data/reports/
+
+# dashboard file uploads (grouped by year)
+/data/files/
+
 # misc
 .DS_Store
 *.pem

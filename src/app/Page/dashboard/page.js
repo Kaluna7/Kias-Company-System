@@ -21,6 +21,7 @@ const BASE_AUDIT_ITEMS = [
   { id: "A3", title: "Audit Program", category: "planning", href: "/Page/audit-program/" },
   { id: "B3", title: "Evidences", category: "execution", href: "/Page/evidence/" },
   { id: "C3", title: "Guidelines", category: "review", href: "/Page/guidelines/" },
+  { id: "C4", title: "Files", category: "review", href: "/Page/files/" },
   { id: "S1", title: "Sampling", category: "review", href: null, openSampling: true },
 ];
 

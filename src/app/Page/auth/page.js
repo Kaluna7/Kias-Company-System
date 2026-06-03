@@ -8,7 +8,14 @@ export default function AuthPage() {
         <div className="grid w-full overflow-hidden rounded-3xl border border-[#d7e1f2] bg-white shadow-2xl md:grid-cols-2">
           <div className="relative hidden flex-col justify-between border-r border-[#e3e9f5] bg-gradient-to-br from-[#141D38] to-[#223f68] p-10 text-white md:flex">
             <div>
-              <Image src="/images/kias-logo.webp" alt="KIAS logo" width={180} height={180} priority />
+              <Image
+                src="/images/kias-logo.webp"
+                alt="KIAS logo"
+                width={180}
+                height={180}
+                priority
+                style={{ width: "auto", height: "auto" }}
+              />
               <p className="mt-6 text-sm text-blue-100">PT KPU Internal Audit System</p>
               <h1 className="mt-3 text-3xl font-bold leading-tight">
                 Welcome back to your internal audit workspace.

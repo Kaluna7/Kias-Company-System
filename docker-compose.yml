@@ -5,6 +5,8 @@ services:
       args:
         SOP_EXTRACT_MODE: vision
         NEXT_PUBLIC_SOP_EXTRACT_MODE: vision
+        # Bundled into client — must match browser URL to OnlyOffice (port 8082)
+        NEXT_PUBLIC_ONLYOFFICE_URL: ${NEXT_PUBLIC_ONLYOFFICE_URL:-http://76.13.20.134:8082}
 
     container_name: kias-app
     restart: always
@@ -36,9 +38,19 @@ services:
       MINIO_BUCKET: evidence
       MINIO_REGION: us-east-1
 
+      # OnlyOffice Document Server — report editor, co-edit, PDF export
+      # Browser → NEXT_PUBLIC_ONLYOFFICE_URL (8082) | app → ONLYOFFICE_URL (internal)
+      ONLYOFFICE_URL: http://onlyoffice
+      NEXT_PUBLIC_ONLYOFFICE_URL: ${NEXT_PUBLIC_ONLYOFFICE_URL:-http://76.13.20.134:8082}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-kias_onlyoffice_jwt_change_me}
+      ONLYOFFICE_JWT_ENABLED: "true"
+      REPORT_DOCUMENT_HOST_URL: http://app:3000
+      REPORT_DOCUMENT_STATIC_FILES: "false"
+
     volumes:
       # Legacy local evidence/worksheet files (before MinIO); keep until all files migrated
       - /var/www/kias-uploads:/app/public/uploads
+      - kias_report_docs:/app/data/reports
 
     ulimits:
       nofile:
@@ -48,6 +60,32 @@ services:
     depends_on:
       minio:
         condition: service_started
+      onlyoffice:
+        condition: service_healthy
+
+  # OnlyOffice Document Server — required for consolidated report editor
+  # Health: http://<host>:8082/healthcheck | Editor loads api.js from :8082
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: kias-onlyoffice
+    restart: always
+    ports:
+      - "8082:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-kias_onlyoffice_jwt_change_me}
+      # Fetch DOCX + save callback from app container (http://app:3000)
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      ALLOW_META_IP_ADDRESS: "true"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_logs:/var/log/onlyoffice
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 180s
 
   minio:
     image: minio/minio:latest
@@ -75,3 +113,6 @@ networks:
 
 volumes:
   minio_data:
+  kias_report_docs:
+  onlyoffice_data:
+  onlyoffice_logs:
