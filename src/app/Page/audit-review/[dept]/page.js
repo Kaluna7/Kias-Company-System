@@ -62,26 +62,6 @@ async function loadAuditReviewData(dept, selectedYear = null) {
       console.warn(`Error fetching findings for ${dept}:`, err);
     }
 
-    // Fetch executive summary data
-    let executiveSummary = null;
-    try {
-      const summaryUrl = new URL(
-        `${baseUrl}/api/audit-review/${deptInfo.apiPath}/executive-summary`,
-      );
-      if (Number.isInteger(selectedYear)) {
-        summaryUrl.searchParams.set("year", String(selectedYear));
-      }
-      const summaryRes = await fetch(summaryUrl.toString(), noStore);
-      if (summaryRes.ok) {
-        const summaryJson = await summaryRes.json();
-        if (summaryJson.success && summaryJson.data) {
-          executiveSummary = summaryJson.data;
-        }
-      }
-    } catch (err) {
-      console.warn(`Error fetching executive summary for ${dept}:`, err);
-    }
-
     // Fetch schedule data
     let schedule = null;
     try {
@@ -146,6 +126,36 @@ async function loadAuditReviewData(dept, selectedYear = null) {
 
     const findingsQueryYear =
       Number.isInteger(selectedYear) ? selectedYear : auditYearFromFindings ?? scheduleYear;
+
+    // Executive summary row must use the same audit year as findings save/load (getAuditYear).
+    let executiveSummary = null;
+    try {
+      const summaryUrl = new URL(
+        `${baseUrl}/api/audit-review/${deptInfo.apiPath}/executive-summary`,
+      );
+      summaryUrl.searchParams.set("year", String(findingsQueryYear));
+      const summaryRes = await fetch(summaryUrl.toString(), noStore);
+      if (summaryRes.ok) {
+        const summaryJson = await summaryRes.json();
+        if (summaryJson.success && summaryJson.data) {
+          executiveSummary = summaryJson.data;
+        }
+      }
+      if (!executiveSummary) {
+        const latestRes = await fetch(
+          `${baseUrl}/api/audit-review/${deptInfo.apiPath}/executive-summary`,
+          noStore,
+        );
+        if (latestRes.ok) {
+          const latestJson = await latestRes.json();
+          if (latestJson.success && latestJson.data) {
+            executiveSummary = latestJson.data;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`Error fetching executive summary for ${dept}:`, err);
+    }
 
     // Fetch saved audit-review findings first, because report preview must follow reviewed data.
     let reviewedFindings = [];

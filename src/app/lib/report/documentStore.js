@@ -45,6 +45,25 @@ export async function saveDocx(sessionId, buffer) {
   await fs.promises.writeFile(getDocxPath(sessionId), buffer);
 }
 
+/** Bump OnlyOffice key when DOCX on disk changed (e.g. regenerate or autosave). */
+export async function syncDocumentKeyForFileChange(sessionId) {
+  const meta = (await readMeta(sessionId)) || { sessionId, version: 1, saveCount: 0 };
+  try {
+    const stat = await fs.promises.stat(getDocxPath(sessionId));
+    const mtimeMs = stat.mtimeMs;
+    const known = Number(meta.docxMtimeMs || 0);
+    if (mtimeMs > known) {
+      meta.saveCount = Number(meta.saveCount || 0) + 1;
+      meta.docxMtimeMs = mtimeMs;
+      meta.updatedAt = new Date().toISOString();
+      await writeMeta(sessionId, meta);
+    }
+  } catch {
+    /* docx missing */
+  }
+  return meta;
+}
+
 export async function readDocx(sessionId) {
   return fs.promises.readFile(getDocxPath(sessionId));
 }

@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { readMeta, docxExists } from "@/app/lib/report/documentStore";
 import { createReportSession, REPORT_TEMPLATE_VERSION } from "@/app/lib/report/reportService";
+import { computeAuditReviewSnapshotHash } from "@/app/lib/report/auditReviewSnapshotHash";
 import { isOnlyOfficeEnabled } from "@/app/lib/report/onlyoffice/jwt";
 
 export async function GET(req) {
@@ -51,11 +52,14 @@ export async function POST(req) {
     const forceRegenerate = String(payload.forceRegenerateSession ?? "false").toLowerCase() === "true";
     const templateUpToDate =
       String(existingMeta?.templateVersion || "") === String(REPORT_TEMPLATE_VERSION);
+    const snapshotHash = computeAuditReviewSnapshotHash(payload);
+    const snapshotUpToDate =
+      String(existingMeta?.auditReviewSnapshotHash || "") === String(snapshotHash);
     const hasExistingDocx =
       sharedSessionId && existingMeta && (await docxExists(sharedSessionId));
 
-    // Reuse edited DOCX only when layout template matches (collaboration + no stale layout)
-    if (hasExistingDocx && templateUpToDate && !forceRegenerate) {
+    // Reuse edited DOCX only when layout + locked audit-review data match current snapshot
+    if (hasExistingDocx && templateUpToDate && snapshotUpToDate && !forceRegenerate) {
       return NextResponse.json({
         success: true,
         sessionId: sharedSessionId,

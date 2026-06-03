@@ -6,6 +6,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from "react";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
 import {
+  buildDeptExecutiveSummaryFromRow,
+  executiveSummaryRowHasContent,
+  isAuditReviewLocked,
+  parseStoredJsonList,
+} from "@/app/utils/parseStoredJsonList";
+import {
   createReportEditorSession,
   downloadConsolidatedReport,
   downloadReportSession,
@@ -26,6 +32,7 @@ import {
   COVER_YEAR_SIZE,
 } from "@/app/lib/report/coverLayout";
 import { resolvePreparedByRow } from "@/app/lib/report/preparedByDefaults";
+import { AUDIT_TABLE_WIDTHS_PCT } from "@/app/lib/report/docx/templateStyles";
 import LoadingProgressOverlay, {
   preloadLoadingAnimation,
 } from "@/app/components/shared/LoadingProgressOverlay";
@@ -43,6 +50,12 @@ const REPORT_DEPARTMENTS = [
   { key: "ops", label: "OPERATIONAL", apiPath: "ops" },
   { key: "whs", label: "WAREHOUSE", apiPath: "whs" },
 ];
+
+function auditTableColgroup() {
+  return AUDIT_TABLE_WIDTHS_PCT.map((w, i) => (
+    <col key={`audit-col-${i}`} style={{ width: `${w}%` }} />
+  ));
+}
 
 // Konfigurasi untuk \"Department completion date\".
 // - monthIndex: bulan audit (1 = Jan, 2 = Feb, ...), dipakai untuk hitung tanggal selesai
@@ -950,14 +963,70 @@ function buildAppendixPages(appendices) {
 }
 
 function parseJsonList(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  return parseStoredJsonList(value);
+}
+
+function deriveAuditYearFromReviewRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const years = rows
+    .map((row) => row?.completion_date || row?.updated_at || null)
+    .filter(Boolean)
+    .map((value) => {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed.getFullYear();
+    })
+    .filter((y) => y != null);
+  return years.length > 0 ? Math.max(...years) : null;
+}
+
+async function fetchExecutiveSummaryForDept(apiPath, yearsToTry) {
+  const orderedYears = [...new Set(yearsToTry.filter((y) => Number.isFinite(y)))];
+  let bestLocked = null;
+  let bestAny = null;
+
+  const consider = (row) => {
+    if (!row) return;
+    if (executiveSummaryRowHasContent(row)) bestAny = bestAny || row;
+    if (isAuditReviewLocked(row)) bestLocked = bestLocked || row;
+  };
+
+  for (const y of orderedYears) {
+    try {
+      const res = await fetch(
+        `/api/audit-review/${apiPath}/executive-summary?year=${encodeURIComponent(String(y))}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) continue;
+      const json = await res.json().catch(() => ({}));
+      const row = json?.data || null;
+      consider(row);
+      if (row && isAuditReviewLocked(row) && executiveSummaryRowHasContent(row)) {
+        return row;
+      }
+    } catch {
+      /* try next year */
+    }
   }
+
+  try {
+    const res = await fetch(`/api/audit-review/${apiPath}/executive-summary`, {
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      consider(json?.data || null);
+      const row = json?.data || null;
+      if (row && isAuditReviewLocked(row) && executiveSummaryRowHasContent(row)) {
+        return row;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  if (bestLocked && executiveSummaryRowHasContent(bestLocked)) return bestLocked;
+  if (bestLocked && isAuditReviewLocked(bestLocked)) return bestLocked;
+  return bestAny;
 }
 
 function formatExecutiveSummaryItem(item) {
@@ -1928,19 +1997,6 @@ function ReportPreviewPageContent() {
           let auditRows = [];
           let executiveSummary = null;
           try {
-            try {
-              const summaryUrl = year
-                ? `/api/audit-review/${dept.apiPath}/executive-summary?year=${encodeURIComponent(String(year))}`
-                : `/api/audit-review/${dept.apiPath}/executive-summary`;
-              const summaryRes = await fetch(summaryUrl);
-              if (summaryRes.ok) {
-                const summaryJson = await summaryRes.json().catch(() => ({}));
-                executiveSummary = summaryJson?.data || null;
-              }
-            } catch {
-              executiveSummary = null;
-            }
-
             const loadAuditReviewRows = async (withYear = true) => {
               const reviewUrl = withYear
                 ? `/api/audit-review/${dept.apiPath}/findings?year=${encodeURIComponent(String(year))}`
@@ -1955,6 +2011,12 @@ function ReportPreviewPageContent() {
             if (rows.length === 0 && year) {
               rows = await loadAuditReviewRows(false);
             }
+
+            const auditYearFromRows = deriveAuditYearFromReviewRows(rows);
+            executiveSummary = await fetchExecutiveSummaryForDept(dept.apiPath, [
+              year,
+              auditYearFromRows,
+            ]);
 
             if (rows.length > 0) {
               auditRows = sortByRiskId(rows).map((r, idx) => ({
@@ -1980,7 +2042,9 @@ function ReportPreviewPageContent() {
               dept: dept.label,
               apiPath: dept.apiPath,
               year,
-              isLocked: Boolean(executiveSummary?.is_locked),
+              auditYearFromRows,
+              isLocked: isAuditReviewLocked(executiveSummary),
+              hasExecSummary: executiveSummaryRowHasContent(executiveSummary),
               totalBackendRows: auditRows.length,
               mappedRows: auditRows.length,
             });
@@ -2006,8 +2070,8 @@ function ReportPreviewPageContent() {
             // fallback ke department label
           }
 
-          const isAuditReviewLocked = executiveSummary?.is_locked === true;
           const visibleAuditRows = auditRows.length > 0 ? auditRows : [];
+          const deptExecutiveSummary = buildDeptExecutiveSummaryFromRow(executiveSummary);
 
           if (sopRows.length > 0 || visibleAuditRows.length > 0) {
             const normalizedSopRows = sopRows.map((row, idx) => ({
@@ -2018,17 +2082,7 @@ function ReportPreviewPageContent() {
               deptKey: dept.key,
               deptLabel: dept.label,
               areaAudit,
-              executiveSummary: isAuditReviewLocked && executiveSummary
-                ? {
-                    objectiveOfAudit: parseJsonList(executiveSummary.objective_of_audit),
-                    scopeAreasCovered: parseJsonList(executiveSummary.scope_areas_covered),
-                    scopeMethodology: parseJsonList(executiveSummary.scope_methodology),
-                    limitationsScope: parseJsonList(executiveSummary.limitations_scope),
-                    limitationsTime: parseJsonList(executiveSummary.limitations_time),
-                    limitationsResource: parseJsonList(executiveSummary.limitations_resource),
-                    internalAuditTeam: parseJsonList(executiveSummary.internal_audit_team),
-                  }
-                : null,
+              executiveSummary: deptExecutiveSummary,
               sopRows: normalizedSopRows,
               auditRows: visibleAuditRows,
             });
@@ -4512,28 +4566,16 @@ function ReportPreviewPageContent() {
                 )}
                 <div className="px-2 min-w-0 w-full overflow-hidden">
                   <table className="w-full border-collapse text-[9px] leading-tight table-fixed" style={{ tableLayout: "fixed", width: "100%" }}>
-                    <colgroup>
-                      <col style={{ width: "4%" }} />
-                      <col style={{ width: "7%" }} />
-                      <col style={{ width: "13%" }} />
-                      <col style={{ width: "8%" }} />
-                      <col style={{ width: "11%" }} />
-                      <col style={{ width: "8%" }} />
-                      <col style={{ width: "9%" }} />
-                      <col style={{ width: "8%" }} />
-                      <col style={{ width: "13%" }} />
-                      <col style={{ width: "9.5%" }} />
-                      <col style={{ width: "9.5%" }} />
-                    </colgroup>
+                    <colgroup>{auditTableColgroup()}</colgroup>
                     <thead>
                       <tr className="bg-blue-900 text-white">
                         <th className="border border-blue-800 px-1 py-1.5 text-center align-middle leading-tight whitespace-nowrap">
                           <span className="block whitespace-nowrap">No</span>
                         </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
+                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
                           <span className="block whitespace-nowrap">Risk ID</span>
                         </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
+                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
                           <span className="block">Risk</span>
                           <span className="block">Details</span>
                         </th>
@@ -4541,7 +4583,7 @@ function ReportPreviewPageContent() {
                           <span className="block">Risk</span>
                           <span className="block">Level</span>
                         </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
+                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
                           <span className="block">Audit Program</span>
                           <span className="block">Code</span>
                         </th>
@@ -4552,11 +4594,11 @@ function ReportPreviewPageContent() {
                         <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
                           <span className="block whitespace-nowrap">Methodology</span>
                         </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
+                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
                           <span className="block">Finding</span>
                           <span className="block">Result</span>
                         </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
+                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
                           <span className="block">Finding</span>
                           <span className="block">Description</span>
                         </th>
@@ -4576,16 +4618,16 @@ function ReportPreviewPageContent() {
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>
                             {row.no}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>
                             {row.riskId || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.riskDetails ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                          <td className={row.__continuedRow ? (row.riskDetails ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>
                             {row.riskDetails || ""}
                           </td>
                           <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>
                             {row.riskLevel ?? ""}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>
+                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>
                             {row.apCode || ""}
                           </td>
                           <td className={row.__continuedRow ? (row.substantiveTest ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
@@ -4594,10 +4636,10 @@ function ReportPreviewPageContent() {
                           <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
                             {row.methodology || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.findingResult ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                          <td className={row.__continuedRow ? (row.findingResult ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>
                             {row.findingResult || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.findingDescription ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                          <td className={row.__continuedRow ? (row.findingDescription ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>
                             {row.findingDescription || ""}
                           </td>
                           <td className={row.__continuedRow ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
@@ -5035,30 +5077,18 @@ function ReportPreviewPageContent() {
                       className="w-full max-w-full border-collapse text-[9px] leading-tight table-fixed"
                       style={{ tableLayout: "fixed" }}
                     >
-                      <colgroup>
-                        <col style={{ width: "4%" }} />
-                        <col style={{ width: "7%" }} />
-                        <col style={{ width: "13%" }} />
-                        <col style={{ width: "8%" }} />
-                        <col style={{ width: "11%" }} />
-                        <col style={{ width: "8%" }} />
-                        <col style={{ width: "9%" }} />
-                        <col style={{ width: "8%" }} />
-                        <col style={{ width: "13%" }} />
-                        <col style={{ width: "9.5%" }} />
-                        <col style={{ width: "9.5%" }} />
-                      </colgroup>
+                      <colgroup>{auditTableColgroup()}</colgroup>
                       <thead>
                         <tr className="bg-blue-900 text-white">
                           <th className="border border-blue-800 px-1.5 py-0.5 text-center whitespace-nowrap">No</th>
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">RID</th>
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Risk</th>
+                          <th className={`border border-blue-800 px-1.5 py-0.5 min-w-0`}>RID</th>
+                          <th className={`border border-blue-800 px-1.5 py-0.5 min-w-0`}>Risk</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">L</th>
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Code</th>
+                          <th className={`border border-blue-800 px-1.5 py-0.5 min-w-0`}>Code</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Test</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Method</th>
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Result</th>
-                          <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">Desc</th>
+                          <th className={`border border-blue-800 px-1.5 py-0.5 min-w-0`}>Result</th>
+                          <th className={`border border-blue-800 px-1.5 py-0.5 min-w-0`}>Desc</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">A</th>
                           <th className="border border-blue-800 px-1.5 py-0.5 min-w-0">B</th>
                         </tr>
@@ -5067,14 +5097,14 @@ function ReportPreviewPageContent() {
                         {section.auditRows.map((row, aIdx) => (
                           <tr key={aIdx} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
                             <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>{row.no}</td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>{row.riskId || ""}</td>
-                            <td className={row.__continuedRow ? (row.riskDetails ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.riskDetails || ""}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>{row.riskId || ""}</td>
+                            <td className={row.__continuedRow ? (row.riskDetails ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>{row.riskDetails || ""}</td>
                             <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>{row.riskLevel ?? ""}</td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden"}>{row.apCode || ""}</td>
+                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>{row.apCode || ""}</td>
                             <td className={row.__continuedRow ? (row.substantiveTest ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.substantiveTest || ""}</td>
                             <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.methodology || ""}</td>
-                            <td className={row.__continuedRow ? (row.findingResult ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.findingResult || ""}</td>
-                            <td className={row.__continuedRow ? (row.findingDescription ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.findingDescription || ""}</td>
+                            <td className={row.__continuedRow ? (row.findingResult ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>{row.findingResult || ""}</td>
+                            <td className={row.__continuedRow ? (row.findingDescription ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>{row.findingDescription || ""}</td>
                             <td className={row.__continuedRow ? (row.auditeeComment ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
                               <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
                                 {row.auditeeComment || (row.__continuedRow ? "" : "-")}

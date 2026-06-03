@@ -46,6 +46,7 @@ import {
   SOP_TABLE_WIDTHS_PCT,
   AUDIT_TABLE_WIDTHS_PCT,
   FINDING_TABLE_DATA_SIZE,
+  AUDIT_TABLE_CELL_SIZES,
 } from "./templateStyles";
 import {
   pageBreakParagraph,
@@ -1267,7 +1268,7 @@ function buildAuditTableRows(auditRows, showTitle = true) {
       [
         makeHeaderRowBlue(AUDIT_HEADERS, null, {
           columnWidthsDxa: AUDIT_COL_DXA,
-          size: FINDING_TABLE_DATA_SIZE,
+          cellSizes: AUDIT_TABLE_CELL_SIZES,
           nowrapCells: [0],
         }),
         ...auditRows.map((row, idx) =>
@@ -1287,7 +1288,7 @@ function buildAuditTableRows(auditRows, showTitle = true) {
             ],
             {
               columnWidthsDxa: AUDIT_COL_DXA,
-              size: FINDING_TABLE_DATA_SIZE,
+              cellSizes: AUDIT_TABLE_CELL_SIZES,
               compact: true,
               nowrapCells: [0],
               center: [true, false, false, true, false, false, false, false, false, false, false],

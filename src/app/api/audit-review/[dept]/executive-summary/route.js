@@ -109,6 +109,8 @@ export async function POST(req, { params }) {
     const auditYear = Number.isFinite(Number(auditYearRaw))
       ? parseInt(String(auditYearRaw), 10)
       : new Date().getFullYear();
+    const lockOnly = body?.lockOnly === true;
+
     const client = await pool.connect();
     
     try {
@@ -150,37 +152,48 @@ export async function POST(req, { params }) {
       );
       
       if (existing.rows.length > 0) {
-        // Update existing record
-        await client.query(`
-          UPDATE ${tableName} SET
-            audit_year = $1,
-            objective_of_audit = $2,
-            scope_areas_covered = $3,
-            scope_methodology = $4,
-            scope_timeframe_audit_period = $5,
-            scope_timeframe_fieldwork_dates = $6,
-            limitations_scope = $7,
-            limitations_time = $8,
-            limitations_resource = $9,
-            internal_audit_team = $10,
-            is_locked = $11,
-            updated_at = NOW()
-          WHERE id = $12
-        `, [
-          auditYear,
-          body.objectiveOfAudit || null,
-          body.scopeAreasCovered || null,
-          body.scopeMethodology || null,
-          body.scopeTimeframeAuditPeriod || null,
-          body.scopeTimeframeFieldworkDates || null,
-          body.limitationsScope || null,
-          body.limitationsTime || null,
-          body.limitationsResource || null,
-          body.internalAuditTeam || null,
-          body.isLocked === true,
-          existing.rows[0].id,
-        ]);
-        
+        if (lockOnly) {
+          await client.query(
+            `
+              UPDATE ${tableName} SET
+                is_locked = $1,
+                updated_at = NOW()
+              WHERE id = $2
+            `,
+            [body.isLocked === true, existing.rows[0].id],
+          );
+        } else {
+          await client.query(`
+            UPDATE ${tableName} SET
+              audit_year = $1,
+              objective_of_audit = $2,
+              scope_areas_covered = $3,
+              scope_methodology = $4,
+              scope_timeframe_audit_period = $5,
+              scope_timeframe_fieldwork_dates = $6,
+              limitations_scope = $7,
+              limitations_time = $8,
+              limitations_resource = $9,
+              internal_audit_team = $10,
+              is_locked = $11,
+              updated_at = NOW()
+            WHERE id = $12
+          `, [
+            auditYear,
+            body.objectiveOfAudit ?? null,
+            body.scopeAreasCovered ?? null,
+            body.scopeMethodology ?? null,
+            body.scopeTimeframeAuditPeriod ?? null,
+            body.scopeTimeframeFieldworkDates ?? null,
+            body.limitationsScope ?? null,
+            body.limitationsTime ?? null,
+            body.limitationsResource ?? null,
+            body.internalAuditTeam ?? null,
+            body.isLocked === true,
+            existing.rows[0].id,
+          ]);
+        }
+
         const updated = await client.query(`SELECT * FROM ${tableName} WHERE id = $1`, [existing.rows[0].id]);
         return NextResponse.json({ success: true, data: updated.rows[0] }, { status: 200 });
       } else {

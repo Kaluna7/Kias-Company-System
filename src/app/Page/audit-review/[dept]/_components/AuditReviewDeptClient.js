@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import { parseStoredJsonList } from "@/app/utils/parseStoredJsonList";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
 
 const AUDIT_REVIEW_TABLE_WIDTH = 3276;
@@ -110,15 +111,25 @@ function normalizeFollowUpStatus(raw) {
   return FOLLOW_UP_STATUS_IN_PROGRESS;
 }
 
-function parseStoredArray(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function applyExecutiveSummaryRow(row, setters) {
+  if (!row) return;
+  setters.setObjectiveOfAudit(parseStoredJsonList(row.objective_of_audit));
+  setters.setScopeAreasCovered(parseStoredJsonList(row.scope_areas_covered));
+  setters.setScopeMethodology(parseStoredJsonList(row.scope_methodology));
+  setters.setScopeTimeframeAuditPeriod(row.scope_timeframe_audit_period || "");
+  setters.setScopeTimeframeFieldworkDates(row.scope_timeframe_fieldwork_dates || "");
+  setters.setLimitationsScope(parseStoredJsonList(row.limitations_scope));
+  setters.setLimitationsTime(parseStoredJsonList(row.limitations_time));
+  setters.setLimitationsResource(parseStoredJsonList(row.limitations_resource));
+  setters.setInternalAuditTeam(parseStoredJsonList(row.internal_audit_team));
+  setters.setIsLocked(Boolean(row.is_locked));
+}
+
+function pickSummaryArrayForSave(local, serverRow, field) {
+  if (Array.isArray(local) && local.length > 0) return local;
+  if (!serverRow) return local;
+  const fromServer = parseStoredJsonList(serverRow[field]);
+  return fromServer.length > 0 ? fromServer : local;
 }
 
 function normalizeKeyFindingRows(findings) {
@@ -296,16 +307,18 @@ export default function AuditReviewDeptClient({
     const storageKey = `auditReviewExecutiveSummary_${apiPath}_${selectedYear || "default"}`;
     try {
       if (initialExecutiveSummary) {
-        setObjectiveOfAudit(parseStoredArray(initialExecutiveSummary.objective_of_audit));
-        setScopeAreasCovered(parseStoredArray(initialExecutiveSummary.scope_areas_covered));
-        setScopeMethodology(parseStoredArray(initialExecutiveSummary.scope_methodology));
-        setScopeTimeframeAuditPeriod(initialExecutiveSummary.scope_timeframe_audit_period || "");
-        setScopeTimeframeFieldworkDates(initialExecutiveSummary.scope_timeframe_fieldwork_dates || "");
-        setLimitationsScope(parseStoredArray(initialExecutiveSummary.limitations_scope));
-        setLimitationsTime(parseStoredArray(initialExecutiveSummary.limitations_time));
-        setLimitationsResource(parseStoredArray(initialExecutiveSummary.limitations_resource));
-        setInternalAuditTeam(parseStoredArray(initialExecutiveSummary.internal_audit_team));
-        setIsLocked(Boolean(initialExecutiveSummary.is_locked));
+        applyExecutiveSummaryRow(initialExecutiveSummary, {
+          setObjectiveOfAudit,
+          setScopeAreasCovered,
+          setScopeMethodology,
+          setScopeTimeframeAuditPeriod,
+          setScopeTimeframeFieldworkDates,
+          setLimitationsScope,
+          setLimitationsTime,
+          setLimitationsResource,
+          setInternalAuditTeam,
+          setIsLocked,
+        });
       } else {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
@@ -620,6 +633,69 @@ export default function AuditReviewDeptClient({
     }
   };
 
+  const executiveSummarySetters = {
+    setObjectiveOfAudit,
+    setScopeAreasCovered,
+    setScopeMethodology,
+    setScopeTimeframeAuditPeriod,
+    setScopeTimeframeFieldworkDates,
+    setLimitationsScope,
+    setLimitationsTime,
+    setLimitationsResource,
+    setInternalAuditTeam,
+    setIsLocked,
+  };
+
+  const fetchExecutiveSummaryFromServer = async () => {
+    const auditYear = getAuditYear();
+    const yearQ =
+      auditYear != null && Number.isFinite(Number(auditYear))
+        ? `?year=${encodeURIComponent(String(auditYear))}`
+        : "";
+    const res = await fetch(
+      `/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary${yearQ}`,
+      { cache: "no-store" },
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success) return null;
+    return json.data || null;
+  };
+
+  /** Unlock only — do not overwrite saved fields with empty local state. */
+  const handleToggleUnlock = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const auditYear = getAuditYear();
+      const summaryRes = await fetch(
+        `/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            auditYear,
+            lockOnly: true,
+            isLocked: false,
+          }),
+        },
+      );
+      if (!summaryRes.ok) {
+        const summaryText = await summaryRes.text().catch(() => "");
+        throw new Error(summaryText || "Failed to unlock executive summary");
+      }
+      const row = await fetchExecutiveSummaryFromServer();
+      if (row) applyExecutiveSummaryRow(row, executiveSummarySetters);
+      else setIsLocked(false);
+      toast.show("Unlocked for editing. Saved data is unchanged.", "success");
+      router.refresh();
+    } catch (e) {
+      setError(e?.message || String(e));
+      toast.show("Error: " + (e?.message || String(e)), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Save all data
   const handleSaveAll = async (nextLocked = isLocked) => {
     try {
@@ -628,21 +704,59 @@ export default function AuditReviewDeptClient({
 
       const auditYear = getAuditYear();
 
+      const serverRow =
+        nextLocked === true ? await fetchExecutiveSummaryFromServer() : null;
+      const saveObjective = pickSummaryArrayForSave(
+        objectiveOfAudit,
+        serverRow,
+        "objective_of_audit",
+      );
+      const saveScopeAreas = pickSummaryArrayForSave(
+        scopeAreasCovered,
+        serverRow,
+        "scope_areas_covered",
+      );
+      const saveMethodology = pickSummaryArrayForSave(
+        scopeMethodology,
+        serverRow,
+        "scope_methodology",
+      );
+      const saveLimitationsScope = pickSummaryArrayForSave(
+        limitationsScope,
+        serverRow,
+        "limitations_scope",
+      );
+      const saveLimitationsTime = pickSummaryArrayForSave(
+        limitationsTime,
+        serverRow,
+        "limitations_time",
+      );
+      const saveLimitationsResource = pickSummaryArrayForSave(
+        limitationsResource,
+        serverRow,
+        "limitations_resource",
+      );
+      const saveTeam = pickSummaryArrayForSave(
+        internalAuditTeam,
+        serverRow,
+        "internal_audit_team",
+      );
+
       // Save executive summary
       const summaryRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           auditYear,
-          objectiveOfAudit: JSON.stringify(objectiveOfAudit),
-          scopeAreasCovered: JSON.stringify(scopeAreasCovered),
-          scopeMethodology: JSON.stringify(scopeMethodology),
+          objectiveOfAudit: JSON.stringify(saveObjective),
+          scopeAreasCovered: JSON.stringify(saveScopeAreas),
+          scopeMethodology: JSON.stringify(saveMethodology),
           scopeTimeframeAuditPeriod: scopeTimeframeAuditPeriod,
           scopeTimeframeFieldworkDates: scopeTimeframeFieldworkDates,
-          limitationsScope: JSON.stringify(limitationsScope),
-          limitationsTime: JSON.stringify(limitationsTime),
-          limitationsResource: JSON.stringify(limitationsResource),
-          internalAuditTeam: JSON.stringify(internalAuditTeam),
+          limitationsScope: JSON.stringify(saveLimitationsScope),
+          limitationsTime: JSON.stringify(saveLimitationsTime),
+          limitationsResource: JSON.stringify(saveLimitationsResource),
+          internalAuditTeam: JSON.stringify(saveTeam),
           isLocked: nextLocked,
         }),
       });
@@ -661,6 +775,11 @@ export default function AuditReviewDeptClient({
           summaryText ||
           "Failed to save executive summary"
         );
+      }
+
+      const summarySaved = await summaryRes.json().catch(() => ({}));
+      if (summarySaved?.data) {
+        applyExecutiveSummaryRow(summarySaved.data, executiveSummarySetters);
       }
 
       const findingsRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/findings`, {
@@ -1100,7 +1219,7 @@ export default function AuditReviewDeptClient({
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => handleSaveAll(!isLocked)}
+                  onClick={() => (isLocked ? handleToggleUnlock() : handleSaveAll(true))}
                   className={`inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                     isLocked
                       ? "bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200"

@@ -116,6 +116,8 @@ function ReportEditorContent() {
               refreshJson.editorConfig
             ) {
               docEditorRef.current.refreshFile(refreshJson.editorConfig);
+              setError("");
+              markReady();
             }
           } catch {
             /* ignore */

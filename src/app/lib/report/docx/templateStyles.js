@@ -56,7 +56,8 @@ export const FOOTER_RESERVE_TWIPS = 720;
 export const CONTENT_BODY_HEIGHT = PAGE_BODY_HEIGHT - FOOTER_RESERVE_TWIPS;
 
 export const SOP_TABLE_WIDTHS_PCT = [4, 42, 18, 18, 18];
-export const AUDIT_TABLE_WIDTHS_PCT = [4, 7, 13, 8, 11, 8, 9, 8, 13, 9.5, 9.5];
+/** Audit grid: narrow Risk ID / Details / AP Code; wide Finding Description */
+export const AUDIT_TABLE_WIDTHS_PCT = [4, 6, 5, 6, 7, 7, 8, 13, 25, 9.5, 9.5];
 /** Minimum width for "No" column so row numbers stay on one line */
 export const FINDING_TABLE_NO_COL_MIN_TWIPS = 520;
 
@@ -67,5 +68,7 @@ export const TABLE_SIZE = 12; // 6pt — appendix / misc tables
 export const AUDIT_TABLE_SIZE = 11; // legacy header default in helpers
 /** 10pt — SOP Review & Audit Findings table data (matches HTML text-[10px]) */
 export const FINDING_TABLE_DATA_SIZE = 20;
+/** Per-column half-points for audit findings grid (11 columns) — uniform 10pt */
+export const AUDIT_TABLE_CELL_SIZES = Array(11).fill(FINDING_TABLE_DATA_SIZE);
 export const TITLE_SIZE = 32; // 16pt
 export const H1_SIZE = 28; // 14pt

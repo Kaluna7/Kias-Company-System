@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { readMeta, docxExists } from "@/app/lib/report/documentStore";
+import { readMeta, docxExists, syncDocumentKeyForFileChange } from "@/app/lib/report/documentStore";
 import {
   buildOnlyOfficeEditorConfig,
   buildDocumentFileUrl,
@@ -64,7 +64,7 @@ export async function GET(req) {
       return NextResponse.json({ success: false, error: "Document not found" }, { status: 404 });
     }
 
-    const meta = await readMeta(sessionId);
+    const meta = await syncDocumentKeyForFileChange(sessionId);
     const editorConfig = buildOnlyOfficeEditorConfig({
       sessionId,
       meta,

@@ -14,18 +14,20 @@ import {
   readMeta,
   readDocx,
   docxExists,
+  getDocxPath,
 } from "./documentStore";
 import { isOnlyOfficeEnabled } from "./onlyoffice/jwt";
 import { checkOnlyOfficeDocumentServer } from "./onlyoffice/health";
 import { convertDocxToPdfViaOnlyOffice } from "./onlyoffice/convertToPdf";
 import { convertDocxToPdf } from "./libreOffice";
+import { computeAuditReviewSnapshotHash } from "./auditReviewSnapshotHash";
 import fs from "fs";
 import path from "path";
 import os from "os";
 
 export { generateReportDocx, getReportDocxEngine } from "./docx/generateReportDocx";
 export { REPORT_PIPELINE_STEPS } from "./reportPipeline";
-export const REPORT_TEMPLATE_VERSION = "2026-06-03-date-issued-plain";
+export const REPORT_TEMPLATE_VERSION = "2026-06-03-audit-table-col-widths-v5";
 
 /**
  * @param {object} payload Consolidated report snapshot
@@ -46,9 +48,6 @@ export async function createReportSession(payload, createdBy = {}, options = {})
   const sessionId = options?.sessionId || createSessionId();
   const existingMeta = await readMeta(sessionId);
   const bumpVersion = options.bumpVersion === true;
-  const templateStale =
-    existingMeta &&
-    String(existingMeta.templateVersion || "") !== String(REPORT_TEMPLATE_VERSION);
   const docxBuffer = await buildReportDocxBuffer(payload);
 
   await saveDocx(sessionId, docxBuffer);
@@ -57,17 +56,22 @@ export async function createReportSession(payload, createdBy = {}, options = {})
       ? Number(existingMeta.version || 0) + 1
       : Number(existingMeta.version || 1)
     : 1;
-  const nextSaveCount = bumpVersion
-    ? 0
-    : templateStale
-      ? Number(existingMeta?.saveCount || 0) + 1
-      : Number(existingMeta?.saveCount || 0);
+  const nextSaveCount = bumpVersion ? 0 : Number(existingMeta?.saveCount || 0) + 1;
+  let docxMtimeMs = Date.now();
+  try {
+    const stat = await fs.promises.stat(getDocxPath(sessionId));
+    docxMtimeMs = stat.mtimeMs;
+  } catch {
+    /* ignore */
+  }
   await writeMeta(sessionId, {
     sessionId,
     year,
     version: nextVersion,
     saveCount: nextSaveCount,
+    docxMtimeMs,
     templateVersion: REPORT_TEMPLATE_VERSION,
+    auditReviewSnapshotHash: computeAuditReviewSnapshotHash(payload),
     docxEngine: getReportDocxEngine(),
     title: `KIAS-Consolidated-Report-${year}.docx`,
     createdAt: existingMeta?.createdAt || new Date().toISOString(),
