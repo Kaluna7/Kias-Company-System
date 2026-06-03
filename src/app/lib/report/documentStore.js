@@ -43,21 +43,28 @@ export async function writeMeta(sessionId, meta) {
 export async function saveDocx(sessionId, buffer) {
   ensureReportsDir();
   await fs.promises.writeFile(getDocxPath(sessionId), buffer);
+  const meta = (await readMeta(sessionId)) || { sessionId, version: 1, saveCount: 0 };
+  try {
+    const stat = await fs.promises.stat(getDocxPath(sessionId));
+    meta.docxMtimeMs = stat.mtimeMs;
+    meta.updatedAt = new Date().toISOString();
+    await writeMeta(sessionId, meta);
+  } catch {
+    /* ignore */
+  }
 }
 
-/** Bump OnlyOffice key when DOCX on disk changed (e.g. regenerate or autosave). */
+/**
+ * Read meta and sync docx mtime only — do NOT bump saveCount here.
+ * saveCount changes only on editor close (recordDocumentSave) or new report generation,
+ * so the OnlyOffice document.key stays stable during an editing session (no version-changed loop).
+ */
 export async function syncDocumentKeyForFileChange(sessionId) {
   const meta = (await readMeta(sessionId)) || { sessionId, version: 1, saveCount: 0 };
   try {
     const stat = await fs.promises.stat(getDocxPath(sessionId));
-    const mtimeMs = stat.mtimeMs;
-    const known = Number(meta.docxMtimeMs || 0);
-    if (mtimeMs > known) {
-      meta.saveCount = Number(meta.saveCount || 0) + 1;
-      meta.docxMtimeMs = mtimeMs;
-      meta.updatedAt = new Date().toISOString();
-      await writeMeta(sessionId, meta);
-    }
+    meta.docxMtimeMs = stat.mtimeMs;
+    await writeMeta(sessionId, meta);
   } catch {
     /* docx missing */
   }

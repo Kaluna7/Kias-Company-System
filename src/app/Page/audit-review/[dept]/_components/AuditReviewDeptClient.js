@@ -5,7 +5,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import { resolveAuditReviewYear } from "@/app/lib/audit-review/resolveAuditReviewYear";
+import { mergeReviewFindingRows } from "@/app/lib/audit-review/keyFindingRow";
 import { parseStoredJsonList } from "@/app/utils/parseStoredJsonList";
+import { notifyAuditReviewPublishChanged } from "@/app/lib/audit-review/reportPublishLockClient";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
 
 const AUDIT_REVIEW_TABLE_WIDTH = 3276;
@@ -147,7 +150,10 @@ function normalizeKeyFindingRow(finding, idx) {
     substantiveTest: finding?.substantiveTest || finding?.substantive_test || "",
     checkYn: finding?.checkYn || finding?.check_yn || "",
     method: finding?.method || "",
-    risk: finding?.risk || "",
+    risk:
+      finding?.risk != null && finding?.risk !== ""
+        ? String(finding.risk)
+        : "",
     riskLevel: finding?.riskLevel || finding?.risk || "",
     preparer: finding?.preparer || "",
     findingResult: finding?.findingResult || finding?.finding_result || "",
@@ -167,41 +173,16 @@ function normalizeKeyFindingRow(finding, idx) {
   };
 }
 
-function getFindingIdentity(finding) {
-  const riskId = String(finding?.riskId || finding?.risk_id || "").trim();
-  const apNo = String(finding?.apNo || finding?.ap_code || finding?.apCode || "").trim();
-  return `${riskId}::${apNo}`;
-}
-
-function mergeReviewFindings(latestFindings = [], savedReviewFindings = []) {
-  const normalizedLatest = Array.isArray(latestFindings)
-    ? latestFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx))
-    : [];
-  const normalizedSaved = Array.isArray(savedReviewFindings)
-    ? savedReviewFindings.map((finding, idx) => normalizeKeyFindingRow(finding, idx))
-    : [];
-
-  if (normalizedSaved.length === 0) return normalizeKeyFindingRows(latestFindings);
-  if (normalizedLatest.length === 0) return normalizeKeyFindingRows(savedReviewFindings);
-
-  const savedMap = new Map(normalizedSaved.map((finding) => [getFindingIdentity(finding), finding]));
-  // Seluruh baris yang disimpan di audit-review (JSON) harus menang atas snapshot audit-finding
-  // untuk kolom yang sama — bukan hanya reviewNote/reviewStatus. Kalau tidak, setelah Save/Done
-  // atau router.refresh() nilai PREPARER, FINDING RESULT, dll. kembali ke data finding mentah.
-  const merged = normalizedLatest.map((finding, idx) => {
-    const saved = savedMap.get(getFindingIdentity(finding));
-    if (!saved) return finding;
-
-    return normalizeKeyFindingRow({ ...finding, ...saved }, idx);
-  });
-
-  const latestKeys = new Set(normalizedLatest.map((finding) => getFindingIdentity(finding)));
-  const savedOnlyRows = normalizedSaved.filter((finding) => !latestKeys.has(getFindingIdentity(finding)));
-
-  return normalizeKeyFindingRows([...merged, ...savedOnlyRows]);
+function buildKeyFindingsFromSources(latestFindings, savedReviewFindings) {
+  return mergeReviewFindingRows(
+    latestFindings,
+    savedReviewFindings,
+    normalizeKeyFindingRow,
+  );
 }
 
 export default function AuditReviewDeptClient({
+  deptKey,
   apiPath,
   deptName,
   titleCode,
@@ -210,6 +191,7 @@ export default function AuditReviewDeptClient({
   initialExecutiveSummary = null,
   initialSchedule = null,
   selectedYear = null,
+  persistYear = null,
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -301,10 +283,42 @@ export default function AuditReviewDeptClient({
   const [teamNameInput, setTeamNameInput] = useState("");
   const [teamRegionInput, setTeamRegionInput] = useState("");
 
+  const scheduleYear = useMemo(() => {
+    if (initialSchedule?.end_date) {
+      return new Date(initialSchedule.end_date).getFullYear();
+    }
+    if (initialSchedule?.start_date) {
+      return new Date(initialSchedule.start_date).getFullYear();
+    }
+    return null;
+  }, [initialSchedule]);
+
+  /** Must match server load (persistYear) so save and reload hit the same DB row. */
+  const getAuditYear = useCallback(() => {
+    if (Number.isInteger(persistYear)) return persistYear;
+    return resolveAuditReviewYear({
+      selectedYear: Number.isInteger(selectedYear) ? selectedYear : null,
+      findings: initialFindings,
+      auditPeriodEnd,
+      auditPeriodStart,
+      scheduleYear: Number.isInteger(scheduleYear) ? scheduleYear : null,
+    });
+  }, [
+    persistYear,
+    selectedYear,
+    initialFindings,
+    auditPeriodEnd,
+    auditPeriodStart,
+    scheduleYear,
+  ]);
+
+  const summaryStorageYear =
+    Number.isInteger(persistYear) ? persistYear : selectedYear || "default";
+
   // Hydrate executive summary. Prefer server data when available so saved/locked
   // records reopen with the latest persisted values instead of stale local cache.
   useEffect(() => {
-    const storageKey = `auditReviewExecutiveSummary_${apiPath}_${selectedYear || "default"}`;
+    const storageKey = `auditReviewExecutiveSummary_${apiPath}_${summaryStorageYear}`;
     try {
       if (initialExecutiveSummary) {
         applyExecutiveSummaryRow(initialExecutiveSummary, {
@@ -340,26 +354,104 @@ export default function AuditReviewDeptClient({
     } finally {
       setSummaryHydrated(true);
     }
-  }, [apiPath, initialExecutiveSummary, selectedYear]);
+  }, [apiPath, initialExecutiveSummary, summaryStorageYear]);
 
-  // Initialize findings by merging the latest audit-finding rows with any saved
-  // audit-review fields so older saved review data does not hide newer findings.
+  const fetchCompletedAuditFindings = useCallback(async () => {
+    const auditYear = getAuditYear();
+    const params = new URLSearchParams({
+      include_completed: "1",
+      pageSize: "10000",
+      page: "1",
+    });
+    if (Number.isInteger(auditYear)) {
+      params.set("year", String(auditYear));
+    }
+    const res = await fetch(
+      `/api/audit-finding/${encodeURIComponent(apiPath)}?${params.toString()}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return initialFindings;
+    const json = await res.json().catch(() => ({}));
+    const dataArray = Array.isArray(json.data) ? json.data : [];
+    return sortByRiskId(
+      dataArray.filter((row) => {
+        const status = row.completion_status?.toUpperCase();
+        return status === "COMPLETED";
+      }),
+    );
+  }, [apiPath, getAuditYear, initialFindings]);
+
+  const reloadReviewFindingsFromServer = useCallback(async () => {
+    const auditYear = getAuditYear();
+    const [latestRows, reviewRes] = await Promise.all([
+      fetchCompletedAuditFindings(),
+      fetch(
+        `/api/audit-review/${encodeURIComponent(apiPath)}/findings?year=${encodeURIComponent(String(auditYear))}`,
+        { cache: "no-store" },
+      ),
+    ]);
+    if (!reviewRes.ok) return null;
+    const json = await reviewRes.json().catch(() => ({}));
+    const reviewed = sortByRiskId(Array.isArray(json.rows) ? json.rows : []);
+    const merged = buildKeyFindingsFromSources(latestRows, reviewed);
+    setKeyFindings(merged);
+    setHasSavedReviewFindings(reviewed.length > 0);
+    return reviewed;
+  }, [apiPath, fetchCompletedAuditFindings, getAuditYear]);
+
+  // Load saved review rows from DB (SSR + client) so edits survive refresh/build.
   useEffect(() => {
-    if (Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0) {
-      setKeyFindings(mergeReviewFindings(initialFindings, initialReviewedFindings));
-      setHasSavedReviewFindings(true);
-      return;
+    if (isTableEditMode) return;
+
+    const mergedFromProps = buildKeyFindingsFromSources(
+      initialFindings,
+      initialReviewedFindings,
+    );
+    if (mergedFromProps.length > 0) {
+      setKeyFindings(mergedFromProps);
+      setHasSavedReviewFindings(
+        Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0,
+      );
+    } else if (initialFindings?.length > 0) {
+      setKeyFindings(buildKeyFindingsFromSources(initialFindings, []));
     }
 
-    if (initialFindings && initialFindings.length > 0) {
-      setKeyFindings(normalizeKeyFindingRows(initialFindings));
-    }
-  }, [initialReviewedFindings, initialFindings]);
+    let cancelled = false;
+    (async () => {
+      const auditYear = getAuditYear();
+      const [latestRows, reviewRes] = await Promise.all([
+        fetchCompletedAuditFindings(),
+        fetch(
+          `/api/audit-review/${encodeURIComponent(apiPath)}/findings?year=${encodeURIComponent(String(auditYear))}`,
+          { cache: "no-store" },
+        ),
+      ]);
+      if (!reviewRes.ok || cancelled) return;
+      const json = await reviewRes.json().catch(() => ({}));
+      const reviewed = sortByRiskId(Array.isArray(json.rows) ? json.rows : []);
+      if (cancelled) return;
+      const merged = buildKeyFindingsFromSources(latestRows, reviewed);
+      setKeyFindings(merged);
+      setHasSavedReviewFindings(reviewed.length > 0);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    apiPath,
+    persistYear,
+    initialFindings,
+    initialReviewedFindings,
+    isTableEditMode,
+    getAuditYear,
+    fetchCompletedAuditFindings,
+  ]);
 
   // Save executive summary to localStorage
   useEffect(() => {
     if (!summaryHydrated) return;
-    const storageKey = `auditReviewExecutiveSummary_${apiPath}_${selectedYear || "default"}`;
+    const storageKey = `auditReviewExecutiveSummary_${apiPath}_${summaryStorageYear}`;
     try {
       localStorage.setItem(
         storageKey,
@@ -383,6 +475,7 @@ export default function AuditReviewDeptClient({
     apiPath,
     selectedYear,
     summaryHydrated,
+    summaryStorageYear,
     objectiveOfAudit,
     scopeAreasCovered,
     scopeMethodology,
@@ -567,16 +660,6 @@ export default function AuditReviewDeptClient({
     setKeyFindings(updated.map((f, i) => ({ ...f, no: i + 1 })));
   };
 
-  const getAuditYear = () => {
-    if (auditPeriodEnd && !Number.isNaN(new Date(auditPeriodEnd).getFullYear())) {
-      return new Date(auditPeriodEnd).getFullYear();
-    }
-    if (auditPeriodStart && !Number.isNaN(new Date(auditPeriodStart).getFullYear())) {
-      return new Date(auditPeriodStart).getFullYear();
-    }
-    return selectedYear || new Date().getFullYear();
-  };
-
   /** Persists key findings only (e.g. when finishing table edit). */
   const handleSaveFindingsOnly = async () => {
     try {
@@ -609,13 +692,9 @@ export default function AuditReviewDeptClient({
         );
       }
 
-      const findingsJson = await findingsRes.json().catch(() => ({}));
-      if (Array.isArray(findingsJson.rows)) {
-        setKeyFindings(normalizeKeyFindingRows(findingsJson.rows));
-      }
-      setHasSavedReviewFindings(true);
+      await findingsRes.json().catch(() => ({}));
+      await reloadReviewFindingsFromServer();
       toast.show("Key findings saved.", "success");
-      router.refresh();
       return true;
     } catch (e) {
       setError(e?.message || String(e));
@@ -686,8 +765,14 @@ export default function AuditReviewDeptClient({
       const row = await fetchExecutiveSummaryFromServer();
       if (row) applyExecutiveSummaryRow(row, executiveSummarySetters);
       else setIsLocked(false);
+      notifyAuditReviewPublishChanged({
+        auditYear,
+        reportYear: selectedYear || auditYear,
+        deptKey,
+        apiPath,
+        isLocked: false,
+      });
       toast.show("Unlocked for editing. Saved data is unchanged.", "success");
-      router.refresh();
     } catch (e) {
       setError(e?.message || String(e));
       toast.show("Error: " + (e?.message || String(e)), "error");
@@ -807,15 +892,18 @@ export default function AuditReviewDeptClient({
         );
       }
 
-      const findingsJson = await findingsRes.json().catch(() => ({}));
-      if (Array.isArray(findingsJson.rows)) {
-        setKeyFindings(normalizeKeyFindingRows(findingsJson.rows));
-      }
-      setHasSavedReviewFindings(true);
+      await findingsRes.json().catch(() => ({}));
+      await reloadReviewFindingsFromServer();
       setIsLocked(nextLocked);
+      notifyAuditReviewPublishChanged({
+        auditYear,
+        reportYear: selectedYear || auditYear,
+        deptKey,
+        apiPath,
+        isLocked: nextLocked,
+      });
 
       toast.show(nextLocked ? "Data saved and locked for report!" : "Data saved and unlocked from report!", "success");
-      router.refresh();
     } catch (e) {
       setError(e?.message || String(e));
       toast.show("Error: " + (e?.message || String(e)), "error");

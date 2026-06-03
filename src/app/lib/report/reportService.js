@@ -21,6 +21,10 @@ import { checkOnlyOfficeDocumentServer } from "./onlyoffice/health";
 import { convertDocxToPdfViaOnlyOffice } from "./onlyoffice/convertToPdf";
 import { convertDocxToPdf } from "./libreOffice";
 import { computeAuditReviewSnapshotHash } from "./auditReviewSnapshotHash";
+import { computeModuleTablesHash } from "./moduleTablesHash";
+import { filterReportPayloadForPublish } from "./filterFindingSectionsForReport";
+import { savePreviewPayload } from "./previewPayloadStore";
+import { enrichRegeneratePayloadWithOnlyOffice } from "./enrichRegeneratePayload";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -48,15 +52,27 @@ export async function createReportSession(payload, createdBy = {}, options = {})
   const sessionId = options?.sessionId || createSessionId();
   const existingMeta = await readMeta(sessionId);
   const bumpVersion = options.bumpVersion === true;
-  const docxBuffer = await buildReportDocxBuffer(payload);
+  const regenerateDocx = options.regenerateDocx === true || bumpVersion;
+  const fromHtmlPreview = payload?.source === "html-preview";
+  let publishPayload = fromHtmlPreview
+    ? payload
+    : await filterReportPayloadForPublish(payload);
+  if (regenerateDocx && fromHtmlPreview) {
+    publishPayload = await enrichRegeneratePayloadWithOnlyOffice(year, publishPayload);
+  }
+  const docxBuffer = await buildReportDocxBuffer(publishPayload);
 
   await saveDocx(sessionId, docxBuffer);
   const nextVersion = existingMeta
-    ? bumpVersion
+    ? regenerateDocx || bumpVersion
       ? Number(existingMeta.version || 0) + 1
       : Number(existingMeta.version || 1)
     : 1;
-  const nextSaveCount = bumpVersion ? 0 : Number(existingMeta?.saveCount || 0) + 1;
+  /** saveCount only advances on OnlyOffice close (recordDocumentSave) — keeps co-editing key stable. */
+  const nextSaveCount =
+    bumpVersion || (regenerateDocx && existingMeta)
+      ? 0
+      : Number(existingMeta?.saveCount || 0);
   let docxMtimeMs = Date.now();
   try {
     const stat = await fs.promises.stat(getDocxPath(sessionId));
@@ -64,6 +80,7 @@ export async function createReportSession(payload, createdBy = {}, options = {})
   } catch {
     /* ignore */
   }
+  await savePreviewPayload(sessionId, publishPayload);
   await writeMeta(sessionId, {
     sessionId,
     year,
@@ -71,7 +88,11 @@ export async function createReportSession(payload, createdBy = {}, options = {})
     saveCount: nextSaveCount,
     docxMtimeMs,
     templateVersion: REPORT_TEMPLATE_VERSION,
-    auditReviewSnapshotHash: computeAuditReviewSnapshotHash(payload),
+    /** Hash of preview when this DOCX was generated — used to detect stale Word vs HTML preview. */
+    previewSnapshotHash: publishPayload.previewSnapshotHash || null,
+    moduleTablesHash: computeModuleTablesHash(publishPayload.findingSections || []),
+    onlyOfficeSyncRevision: Number(existingMeta?.onlyOfficeSyncRevision) || 0,
+    auditReviewSnapshotHash: computeAuditReviewSnapshotHash(publishPayload),
     docxEngine: getReportDocxEngine(),
     title: `KIAS-Consolidated-Report-${year}.docx`,
     createdAt: existingMeta?.createdAt || new Date().toISOString(),
@@ -111,8 +132,9 @@ export async function createReportSession(payload, createdBy = {}, options = {})
  * @param {"docx"|"pdf"} format
  */
 export async function exportReportDirect(payload, format = "docx") {
-  const docxBuffer = await buildReportDocxBuffer(payload);
-  const year = payload?.year ?? new Date().getFullYear();
+  const publishPayload = await filterReportPayloadForPublish(payload);
+  const docxBuffer = await buildReportDocxBuffer(publishPayload);
+  const year = publishPayload?.year ?? new Date().getFullYear();
 
   if (format === "docx") {
     return { buffer: docxBuffer, contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", year };

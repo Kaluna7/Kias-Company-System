@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { saveDocx, recordDocumentSave } from "@/app/lib/report/documentStore";
 import { parseOnlyOfficeCallbackBody } from "@/app/lib/report/onlyoffice/jwt";
+import { syncReportStateFromOnlyOfficeSession } from "@/app/lib/report/syncPreviewFromOnlyOffice";
 
 /**
  * OnlyOffice Document Server save callback.
@@ -32,6 +33,7 @@ export async function POST(req) {
       if (status === 2) {
         await recordDocumentSave(sessionId);
       }
+      await syncReportStateFromOnlyOfficeSession(sessionId);
     }
 
     return NextResponse.json({ error: 0 });

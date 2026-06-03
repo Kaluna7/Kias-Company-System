@@ -1,5 +1,6 @@
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import { resolveAuditReviewYear } from "@/app/lib/audit-review/resolveAuditReviewYear";
 import AuditReviewDeptClient from "./_components/AuditReviewDeptClient";
 
 /** Always read fresh audit-review data from DB after edits (avoid stale Next.js fetch cache). */
@@ -40,6 +41,8 @@ async function loadAuditReviewData(dept, selectedYear = null) {
         `${baseUrl}/api/audit-finding/${encodeURIComponent(deptInfo.apiPath)}`,
       );
       findingsUrl.searchParams.set("include_completed", "1");
+      findingsUrl.searchParams.set("pageSize", "10000");
+      findingsUrl.searchParams.set("page", "1");
       if (Number.isInteger(selectedYear)) {
         findingsUrl.searchParams.set("year", String(selectedYear));
       }
@@ -109,23 +112,11 @@ async function loadAuditReviewData(dept, selectedYear = null) {
           ? new Date(schedule.start_date).getFullYear()
           : new Date().getFullYear();
 
-    /** Align with client getAuditYear() (from finding completion dates) so POST and GET use the same row. */
-    const auditYearFromFindings = (() => {
-      if (!Array.isArray(findings) || findings.length === 0) return null;
-      const years = findings
-        .map((row) => row?.completion_date || row?.updated_at || null)
-        .filter(Boolean)
-        .map((v) => {
-          const d = new Date(v);
-          return Number.isNaN(d.getTime()) ? null : d.getFullYear();
-        })
-        .filter((y) => y != null);
-      if (years.length === 0) return null;
-      return Math.max(...years);
-    })();
-
-    const findingsQueryYear =
-      Number.isInteger(selectedYear) ? selectedYear : auditYearFromFindings ?? scheduleYear;
+    const findingsQueryYear = resolveAuditReviewYear({
+      selectedYear,
+      findings,
+      scheduleYear,
+    });
 
     // Executive summary row must use the same audit year as findings save/load (getAuditYear).
     let executiveSummary = null;
@@ -168,25 +159,20 @@ async function loadAuditReviewData(dept, selectedYear = null) {
         const reviewedJson = await reviewedFindingsRes.json();
         reviewedFindings = sortByRiskId(Array.isArray(reviewedJson.rows) ? reviewedJson.rows : []);
       }
-      // Only fallback to latest when there is no explicit year filter.
-      if (reviewedFindings.length === 0 && !Number.isInteger(selectedYear)) {
-        const latestRes = await fetch(
-          `${baseUrl}/api/audit-review/${encodeURIComponent(deptInfo.apiPath)}/findings`,
-          noStore,
-        );
-        if (latestRes.ok) {
-          const latestJson = await latestRes.json();
-          reviewedFindings = sortByRiskId(Array.isArray(latestJson.rows) ? latestJson.rows : []);
-        }
-      }
     } catch (err) {
       console.warn(`Error fetching reviewed findings for ${dept}:`, err);
     }
 
-    return { findings, reviewedFindings, executiveSummary, schedule };
+    return { findings, reviewedFindings, executiveSummary, schedule, persistYear: findingsQueryYear };
   } catch (err) {
     console.error(`Error loading audit review data for ${dept}:`, err);
-    return { findings: [], reviewedFindings: [], executiveSummary: null, schedule: null };
+    return {
+      findings: [],
+      reviewedFindings: [],
+      executiveSummary: null,
+      schedule: null,
+      persistYear: resolveAuditReviewYear({ selectedYear }),
+    };
   }
 }
 
@@ -220,13 +206,12 @@ export default async function AuditReviewDeptPage({ params, searchParams }) {
   const selectedYearParsed = selectedYearRaw ? parseInt(String(selectedYearRaw), 10) : null;
   const selectedYear = Number.isNaN(selectedYearParsed) ? null : selectedYearParsed;
 
-  const { findings, reviewedFindings, executiveSummary, schedule } = await loadAuditReviewData(
-    dept,
-    selectedYear,
-  );
+  const { findings, reviewedFindings, executiveSummary, schedule, persistYear } =
+    await loadAuditReviewData(dept, selectedYear);
 
   return (
     <AuditReviewDeptClient
+      deptKey={dept}
       apiPath={deptInfo.apiPath}
       deptName={deptInfo.deptName}
       titleCode={deptInfo.titleCode}
@@ -235,6 +220,7 @@ export default async function AuditReviewDeptPage({ params, searchParams }) {
       initialExecutiveSummary={executiveSummary}
       initialSchedule={schedule}
       selectedYear={selectedYear}
+      persistYear={persistYear}
     />
   );
 }

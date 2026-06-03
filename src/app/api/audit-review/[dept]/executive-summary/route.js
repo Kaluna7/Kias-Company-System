@@ -43,6 +43,7 @@ export async function GET(req, { params }) {
     const yearParam = url.searchParams.get("year");
     const year = yearParam ? parseInt(yearParam, 10) : null;
     const hasValidYear = Number.isInteger(year);
+    const forReport = url.searchParams.get("forReport") === "1";
     
     if (!tableName) {
       return NextResponse.json({ success: false, error: "Invalid department" }, { status: 400 });
@@ -75,9 +76,21 @@ export async function GET(req, { params }) {
           )
         : await client.query(`SELECT * FROM ${tableName} ORDER BY id DESC LIMIT 1`);
 
-      return NextResponse.json({ 
-        success: true, 
-        data: result.rows[0] || null 
+      let data = result.rows[0] || null;
+      if (forReport) {
+        const { getAuditReviewPublishStateForReport } = await import(
+          "@/app/lib/audit-review/reportPublishLock"
+        );
+        const publishState = await getAuditReviewPublishStateForReport(
+          dept,
+          hasValidYear ? year : null,
+        );
+        data = publishState.isPublished ? publishState.row : null;
+      }
+
+      return NextResponse.json({
+        success: true,
+        data,
       }, { status: 200 });
     } catch (dbErr) {
       console.error(`DB error GET ${tableName}:`, dbErr);
@@ -145,14 +158,21 @@ export async function POST(req, { params }) {
         `CREATE UNIQUE INDEX IF NOT EXISTS ${tableName}_audit_year_unique ON ${tableName}(audit_year)`
       );
 
+      const latest = await client.query(
+        `SELECT id FROM ${tableName} ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`,
+      );
+      const latestId = latest.rows[0]?.id ?? null;
+
       // Check if record exists for this audit year
       const existing = await client.query(
         `SELECT id FROM ${tableName} WHERE audit_year = $1 ORDER BY id DESC LIMIT 1`,
         [auditYear],
       );
-      
-      if (existing.rows.length > 0) {
-        if (lockOnly) {
+
+      if (lockOnly) {
+        // Must match GET ?year= — lock/unlock the row for this audit year, not another year's row.
+        const targetId = existing.rows[0]?.id ?? latestId ?? null;
+        if (targetId) {
           await client.query(
             `
               UPDATE ${tableName} SET
@@ -160,10 +180,24 @@ export async function POST(req, { params }) {
                 updated_at = NOW()
               WHERE id = $2
             `,
-            [body.isLocked === true, existing.rows[0].id],
+            [body.isLocked === true, targetId],
           );
-        } else {
-          await client.query(`
+          const updated = await client.query(`SELECT * FROM ${tableName} WHERE id = $1`, [targetId]);
+          return NextResponse.json({ success: true, data: updated.rows[0] }, { status: 200 });
+        }
+        const inserted = await client.query(
+          `
+            INSERT INTO ${tableName} (audit_year, is_locked)
+            VALUES ($1, $2)
+            RETURNING *
+          `,
+          [auditYear, body.isLocked === true],
+        );
+        return NextResponse.json({ success: true, data: inserted.rows[0] }, { status: 200 });
+      }
+
+      if (existing.rows.length > 0) {
+        await client.query(`
             UPDATE ${tableName} SET
               audit_year = $1,
               objective_of_audit = $2,
@@ -192,7 +226,6 @@ export async function POST(req, { params }) {
             body.isLocked === true,
             existing.rows[0].id,
           ]);
-        }
 
         const updated = await client.query(`SELECT * FROM ${tableName} WHERE id = $1`, [existing.rows[0].id]);
         return NextResponse.json({ success: true, data: updated.rows[0] }, { status: 200 });

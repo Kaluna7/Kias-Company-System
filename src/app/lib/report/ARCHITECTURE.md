@@ -73,14 +73,44 @@ Set di `.env`: `REPORT_DOCX_ENGINE=docxjs` (default).
 - SOP + audit di halaman preview yang sama → DOCX memecah: portrait (SOP) lalu landscape (audit) supaya tidak “hancur” di Word.
 - Footer Word asli (`PAGE X of Y`), bukan teks di tengah halaman.
 
-## Preview HTML vs DOCX
+## Preview HTML = auto-generate dari hub
 
-| | HTML preview (`/Page/report/preview`) | DOCX + ONLYOFFICE |
-|---|--------------------------------------|-------------------|
-| Tujuan | Layout check cepat di browser | Dokumen resmi, edit, PDF |
-| Pagination | CSS / pengukuran DOM | Word engine |
-| Edit | Rich text di preview | Editor penuh ONLYOFFICE |
-| Export PDF | Tidak direkomendasikan | OnlyOffice → PDF |
+Setiap perubahan **OnlyOffice (Ctrl+S)** atau **modul (SOP / Audit lock)** menaikkan `hubRevision` di DB. Tab HTML preview memanggil `GET /api/report/hub/snapshot` (poll 2s + SSE) dan menerapkan ulang seluruh tampilan (narasi + tabel).
+
+## Preview HTML = hub (seperti container GitHub)
+
+| | HTML preview + `consolidated_report_state` | DOCX + ONLYOFFICE |
+|---|---------------------------------------------|-------------------|
+| Peran | **Container / source of truth** | View + edit Word + export PDF |
+| Jalur `narrative` | ES, objectives, approach, conclusions, appendices | Ctrl+S → ekstrak ke hub (`onlyOfficeSyncRevision`) |
+| Jalur `moduleTables` | Tabel SOP + Audit, lock/unlock (`moduleTablesRevision`) | Regenerate DOCX dari hub (narasi DB tidak ditimpa) |
+| Realtime | SSE `/api/report/state-stream` + poll | `refreshFile` setelah `kias-report-modules-synced` |
+
+```mermaid
+flowchart LR
+  subgraph modules [Modul]
+    SOP[SOP Review]
+    AUD[Audit Review]
+  end
+  subgraph hub [Hub]
+    PRE[HTML Preview UI]
+    DB[(consolidated_report_state)]
+  end
+  OO[OnlyOffice]
+  SOP --> PRE
+  AUD --> PRE
+  PRE --> DB
+  OO -->|narasi Ctrl+S| DB
+  DB --> PRE
+  DB -->|regenerate| OO
+```
+
+Alur KIAS:
+
+1. **Simpan ke hub** — Preview POST `/api/report/state` dengan `syncMode: moduleTablesOnly` bila narasi sudah dari OnlyOffice (`onlyOfficeSyncRevision > 0`). Server: `mergeReportStateForPersist` / `mergeModuleTablesIntoHub` di `reportPreviewHub.js`.
+2. **OnlyOffice → hub** — Callback → `syncReportStateFromOnlyOffice` → naikkan `onlyOfficeSyncRevision` → broadcast SSE; tab preview hanya mengubah **jalur narasi** (bukan tabel modul).
+3. **Modul → hub** — `loadFindings` / POST `/api/report/hub/sync-modules` (lock/unlock) → naikkan `moduleTablesRevision` → broadcast SSE; tab lain reload tabel dari API **tanpa** menimpa narasi.
+4. **Hub → Word** — `regenerateReportDocxFromModules` memakai payload DB; narasi kosong diisi dari DOCX, yang sudah ada di DB tetap (`enrichRegeneratePayload`).
 
 **Jangan** mengandalkan React → HTML → Puppeteer untuk laporan 50–200 halaman.
 
@@ -122,3 +152,6 @@ Lokal: `pnpm onlyoffice:up` lalu `pnpm dev`.
 | `documentStore.js` | Penyimpanan `data/reports/` |
 | `onlyoffice/*` | Config editor, JWT, PDF convert |
 | `exportReportClient.js` | Helper client |
+| `reportPreviewHub.js` | Kontrak hub: jalur narasi vs moduleTables |
+| `syncPreviewFromOnlyOffice.js` | OnlyOffice save → hub narasi |
+| `useReportStateRealtime.js` | SSE/poll: narasi + moduleTables revision |

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import { resolveSopDept } from "@/app/api/SopReview/_shared/dept";
 import { requireSopPublisher } from "@/app/api/SopReview/_shared/auth";
+import { notifySopReviewDataFromServer } from "@/app/lib/sop-review/broadcastFromServer";
 
 // Map apiPath to schedule department_id
 const API_PATH_TO_SCHEDULE_ID = {
@@ -325,6 +326,12 @@ export async function POST(req, { params }) {
       } catch (e) {
         // ignore cache revalidation failures; publish is already committed
       }
+
+      notifySopReviewDataFromServer(dept, {
+        action: "publish",
+        auditFieldworkStartDate,
+        auditFieldworkEndDate,
+      });
 
       return NextResponse.json({ success: true, published: steps.length }, { status: 200 });
     } catch (err) {

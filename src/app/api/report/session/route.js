@@ -5,8 +5,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { readMeta, docxExists } from "@/app/lib/report/documentStore";
 import { createReportSession, REPORT_TEMPLATE_VERSION } from "@/app/lib/report/reportService";
-import { computeAuditReviewSnapshotHash } from "@/app/lib/report/auditReviewSnapshotHash";
+import { computeModuleTablesHash } from "@/app/lib/report/moduleTablesHash";
 import { isOnlyOfficeEnabled } from "@/app/lib/report/onlyoffice/jwt";
+import { buildModuleSyncRegeneratePayload } from "@/app/lib/report/onlyOfficeDocxGuard";
 
 export async function GET(req) {
   try {
@@ -50,16 +51,28 @@ export async function POST(req) {
     const sharedSessionId = reuseExisting ? `shared-report-${payloadYear}` : undefined;
     const existingMeta = sharedSessionId ? await readMeta(sharedSessionId) : null;
     const forceRegenerate = String(payload.forceRegenerateSession ?? "false").toLowerCase() === "true";
+    const previewHash = String(payload.previewSnapshotHash || "");
+    const previewHashChanged =
+      previewHash &&
+      String(existingMeta?.previewSnapshotHash || "") !== previewHash;
+    const moduleTablesHash =
+      String(payload.moduleTablesHash || "") ||
+      computeModuleTablesHash(payload.findingSections || []);
+    const moduleTablesHashChanged =
+      moduleTablesHash &&
+      String(existingMeta?.moduleTablesHash || "") !== moduleTablesHash;
     const templateUpToDate =
       String(existingMeta?.templateVersion || "") === String(REPORT_TEMPLATE_VERSION);
-    const snapshotHash = computeAuditReviewSnapshotHash(payload);
-    const snapshotUpToDate =
-      String(existingMeta?.auditReviewSnapshotHash || "") === String(snapshotHash);
     const hasExistingDocx =
       sharedSessionId && existingMeta && (await docxExists(sharedSessionId));
 
-    // Reuse edited DOCX only when layout + locked audit-review data match current snapshot
-    if (hasExistingDocx && templateUpToDate && snapshotUpToDate && !forceRegenerate) {
+    if (
+      hasExistingDocx &&
+      templateUpToDate &&
+      !forceRegenerate &&
+      !previewHashChanged &&
+      !moduleTablesHashChanged
+    ) {
       return NextResponse.json({
         success: true,
         sessionId: sharedSessionId,
@@ -71,18 +84,33 @@ export async function POST(req) {
         editorPath: `/Page/report/editor?session=${encodeURIComponent(sharedSessionId)}`,
         reusedExistingSession: true,
         collaborationSession: true,
+        createdBy: existingMeta?.createdBy ?? null,
+        previewSnapshotHash: existingMeta?.previewSnapshotHash ?? null,
       });
     }
 
     const user = session.user;
+    const wantsRegenerate =
+      forceRegenerate || previewHashChanged || moduleTablesHashChanged;
+    const regenerateDocx = wantsRegenerate;
+
+    let publishPayload = payload;
+    if (regenerateDocx) {
+      const fromDb = await buildModuleSyncRegeneratePayload(payloadYear);
+      if (fromDb) publishPayload = fromDb;
+    }
+
     const result = await createReportSession(
-      payload,
+      publishPayload,
       {
         id: user.id || user.email,
         name: user.name || user.email,
         email: user.email,
       },
-      { sessionId: sharedSessionId, bumpVersion: forceRegenerate },
+      {
+        sessionId: sharedSessionId,
+        regenerateDocx,
+      },
     );
 
     return NextResponse.json({
@@ -94,7 +122,10 @@ export async function POST(req) {
       onlyOfficeReachable: result.onlyOfficeReachable,
       onlyOfficeDetail: result.onlyOfficeDetail,
       editorPath: result.editorPath,
-      reusedExistingSession: Boolean(existingMeta),
+      reusedExistingSession: false,
+      createdNewDocument: true,
+      collaborationSession: true,
+      createdBy: (await readMeta(result.sessionId))?.createdBy ?? null,
     });
   } catch (err) {
     console.error("POST /api/report/session error:", err);

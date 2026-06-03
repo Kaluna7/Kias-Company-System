@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import { resolveSopDept } from "@/app/api/SopReview/_shared/dept";
 import { requireSopReportPublishedEditor } from "@/app/api/SopReview/_shared/auth";
+import { notifySopReviewDataFromServer } from "@/app/lib/sop-review/broadcastFromServer";
 
 function toPgDate(v) {
   if (v == null || v === "") return null;
@@ -102,7 +103,15 @@ export async function GET(req, { params }) {
         );
         publishes.push({ meta, rows: steps });
       }
-      return NextResponse.json({ success: true, publishes }, { status: 200 });
+      return NextResponse.json(
+        { success: true, publishes },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+          },
+        },
+      );
     }
 
     const [rows, metaRows] = await Promise.all([
@@ -165,6 +174,7 @@ export async function DELETE(req, { params }) {
       } catch (_) {
         /* ignore */
       }
+      notifySopReviewDataFromServer(dept, { action: "delete" });
       return NextResponse.json({ success: true }, { status: 200 });
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
@@ -302,6 +312,24 @@ export async function PATCH(req, { params }) {
       }
 
       await client.query("COMMIT");
+
+      let publishedAt = null;
+      try {
+        const metaRow = await client.query(
+          `SELECT published_at, audit_fieldwork_end_date, audit_fieldwork_start_date FROM ${metaTable} WHERE id = $1 LIMIT 1`,
+          [Number(updates[0]?.meta_id)],
+        );
+        publishedAt = metaRow.rows[0]?.published_at;
+        notifySopReviewDataFromServer(dept, {
+          action: "update",
+          publishedAt,
+          auditFieldworkEndDate: metaRow.rows[0]?.audit_fieldwork_end_date,
+          auditFieldworkStartDate: metaRow.rows[0]?.audit_fieldwork_start_date,
+        });
+      } catch {
+        notifySopReviewDataFromServer(dept, { action: "update" });
+      }
+
       try {
         revalidatePath("/Page/sop-review/report");
       } catch (_) {

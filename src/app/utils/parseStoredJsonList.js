@@ -35,6 +35,7 @@ export function parseStoredJsonList(value) {
 export function isAuditReviewLocked(row) {
   if (!row) return false;
   const locked = row.is_locked;
+  if (locked === false || locked === "f" || locked === "false" || locked === 0) return false;
   return locked === true || locked === "t" || locked === "true" || locked === 1;
 }
 

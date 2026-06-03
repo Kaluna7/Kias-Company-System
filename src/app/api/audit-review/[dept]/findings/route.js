@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import pkg from "pg";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import { getAuditReviewPublishStateForReport } from "@/app/lib/audit-review/reportPublishLock";
 
 const { Pool } = pkg;
 
@@ -61,6 +62,17 @@ export async function GET(req, { params }) {
     const yearParam = url.searchParams.get("year");
     const year = yearParam ? parseInt(yearParam, 10) : null;
     const hasValidYear = Number.isInteger(year);
+    const forReport = url.searchParams.get("forReport") === "1";
+
+    if (forReport) {
+      const publishState = await getAuditReviewPublishStateForReport(
+        dept,
+        hasValidYear ? year : null,
+      );
+      if (!publishState.isPublished) {
+        return NextResponse.json({ success: true, rows: [], data: null }, { status: 200 });
+      }
+    }
 
     const client = await pool.connect();
     try {

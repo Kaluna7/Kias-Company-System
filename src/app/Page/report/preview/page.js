@@ -11,11 +11,33 @@ import {
   isAuditReviewLocked,
   parseStoredJsonList,
 } from "@/app/utils/parseStoredJsonList";
+import { AUDIT_REVIEW_PUBLISH_CHANGED_KEY } from "@/app/lib/audit-review/reportPublishLockClient";
+import { useReportAuditPublishRealtime } from "@/app/lib/audit-review/useReportAuditPublishRealtime";
+import { isDeptPublishedToReport } from "@/app/lib/report/applyPublishStateToFindingSections";
 import {
-  createReportEditorSession,
+  applyPublishStateToFindingSections,
+  filterFindingSectionsForDisplay,
+} from "@/app/lib/report/applyPublishStateToFindingSections";
+import {
+  buildEffectivePublishMap,
+  computePreviewSnapshotHash,
+} from "@/app/lib/report/previewAuditVisibility";
+import { computeModuleTablesHash } from "@/app/lib/report/moduleTablesHash";
+import {
+  collectHiddenAuditEdits,
+  mergePreservedFindingSections,
+  stripFindingSectionsForClient,
+} from "@/app/lib/report/mergePreservedFindingSections";
+import {
+  openSharedReportEditor,
   downloadConsolidatedReport,
   downloadReportSession,
 } from "@/app/lib/report/exportReportClient";
+import { usePreviewHubAutoRefresh } from "@/app/lib/report/usePreviewHubAutoRefresh";
+import { useSopReviewRealtime } from "@/app/lib/sop-review/useSopReviewRealtime";
+import { loadFindingSectionsFromModules } from "@/app/lib/report/loadFindingSectionsFromModules";
+import { pickNarrativeFromReportState } from "@/app/lib/report/reportStateNarrative";
+import { buildPersistPayloadWithProtectedNarrative } from "@/app/lib/report/mergeReportStateForPersist";
 import { formatDeptTocTitle } from "@/app/lib/report/docx/templateTitles";
 import {
   filterMeaningfulHtmlPages,
@@ -979,54 +1001,29 @@ function deriveAuditYearFromReviewRows(rows) {
   return years.length > 0 ? Math.max(...years) : null;
 }
 
-async function fetchExecutiveSummaryForDept(apiPath, yearsToTry) {
-  const orderedYears = [...new Set(yearsToTry.filter((y) => Number.isFinite(y)))];
-  let bestLocked = null;
-  let bestAny = null;
-
-  const consider = (row) => {
-    if (!row) return;
-    if (executiveSummaryRowHasContent(row)) bestAny = bestAny || row;
-    if (isAuditReviewLocked(row)) bestLocked = bestLocked || row;
-  };
-
-  for (const y of orderedYears) {
-    try {
-      const res = await fetch(
-        `/api/audit-review/${apiPath}/executive-summary?year=${encodeURIComponent(String(y))}`,
-        { cache: "no-store" },
-      );
-      if (!res.ok) continue;
-      const json = await res.json().catch(() => ({}));
-      const row = json?.data || null;
-      consider(row);
-      if (row && isAuditReviewLocked(row) && executiveSummaryRowHasContent(row)) {
-        return row;
-      }
-    } catch {
-      /* try next year */
-    }
-  }
-
+/** Uses latest Audit Review executive-summary row (same lock state as Unlock/Lock button). */
+async function fetchAuditReviewPublishState(apiPath, reportYear) {
   try {
-    const res = await fetch(`/api/audit-review/${apiPath}/executive-summary`, {
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const json = await res.json().catch(() => ({}));
-      consider(json?.data || null);
-      const row = json?.data || null;
-      if (row && isAuditReviewLocked(row) && executiveSummaryRowHasContent(row)) {
-        return row;
-      }
+    const yearQ = Number.isFinite(reportYear)
+      ? `?year=${encodeURIComponent(String(reportYear))}`
+      : "";
+    const res = await fetch(
+      `/api/audit-review/${apiPath}/publish-status${yearQ}${yearQ ? "&" : "?"}_=${Date.now()}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) {
+      return { isLocked: false, row: null, auditYear: reportYear ?? null };
     }
+    const json = await res.json().catch(() => ({}));
+    const isLocked = json.isPublished === true || json.isLocked === true;
+    return {
+      isLocked,
+      row: isLocked ? json.row ?? null : null,
+      auditYear: json.auditYear ?? reportYear ?? null,
+    };
   } catch {
-    /* ignore */
+    return { isLocked: false, row: null, auditYear: reportYear ?? null };
   }
-
-  if (bestLocked && executiveSummaryRowHasContent(bestLocked)) return bestLocked;
-  if (bestLocked && isAuditReviewLocked(bestLocked)) return bestLocked;
-  return bestAny;
 }
 
 function formatExecutiveSummaryItem(item) {
@@ -1068,6 +1065,107 @@ function ReportPreviewPageContent() {
   const [findingSections, setFindingSections] = useState([]);
   const [loadingFindings, setLoadingFindings] = useState(true);
   const [findingsLoadCompleted, setFindingsLoadCompleted] = useState(false);
+  const [findingsReloadToken, setFindingsReloadToken] = useState(0);
+  /** First load always pulls module APIs fresh (avoids stale DB snapshot on open). */
+  const sopModuleRefreshRef = useRef(true);
+  const findingsLoadInProgressRef = useRef(false);
+  const moduleLoadSeqRef = useRef(0);
+  const [reportStateHydrated, setReportStateHydrated] = useState(false);
+  const findingSectionsRef = useRef([]);
+  const savedFindingSectionsRef = useRef([]);
+  const hiddenAuditEditsRef = useRef({});
+  const persistReportStateRef = useRef(null);
+  const hubRevisionInitRef = useRef(null);
+  /** Lock/unlock from Audit Review before DB publish-status catches up. */
+  const pendingPublishByDeptRef = useRef({});
+
+  const {
+    publishStatusByDept,
+    streamConnected,
+    refreshPublishStatus,
+  } = useReportAuditPublishRealtime(year);
+
+  /** HTML preview visibility — overrides DB when user unlocks (saved to report state). */
+  const [auditVisibleByDept, setAuditVisibleByDept] = useState({});
+  const auditVisibleByDeptRef = useRef({});
+
+  const effectivePublishByDept = useMemo(
+    () => buildEffectivePublishMap(publishStatusByDept, auditVisibleByDept),
+    [publishStatusByDept, auditVisibleByDept],
+  );
+
+  const displayFindingSections = useMemo(
+    () => filterFindingSectionsForDisplay(findingSections, effectivePublishByDept),
+    [findingSections, effectivePublishByDept],
+  );
+
+  useEffect(() => {
+    auditVisibleByDeptRef.current = auditVisibleByDept;
+  }, [auditVisibleByDept]);
+
+  /** Sync visibility from API; locked in Audit Review always shows in HTML preview. */
+  useEffect(() => {
+    if (!findingsLoadCompleted) return;
+    setAuditVisibleByDept((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [deptKey, locked] of Object.entries(publishStatusByDept)) {
+        if (locked === true && next[deptKey] !== true) {
+          next[deptKey] = true;
+          changed = true;
+        } else if (next[deptKey] === undefined) {
+          next[deptKey] = locked === true;
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      auditVisibleByDeptRef.current = next;
+      return next;
+    });
+  }, [publishStatusByDept, findingsLoadCompleted]);
+
+  const prevPublishStatusRef = useRef({});
+
+  /** SSE/batch: dept baru di-lock → muat ulang data audit ke HTML preview. */
+  useEffect(() => {
+    if (!findingsLoadCompleted) return;
+    let shouldReload = false;
+    for (const [deptKey, locked] of Object.entries(publishStatusByDept)) {
+      const wasLocked = prevPublishStatusRef.current[deptKey] === true;
+      if (locked === true && !wasLocked) {
+        pendingPublishByDeptRef.current[deptKey] = true;
+        setAuditVisibleByDept((prev) => {
+          const next = { ...prev, [deptKey]: true };
+          auditVisibleByDeptRef.current = next;
+          return next;
+        });
+        shouldReload = true;
+      }
+      if (locked === false && wasLocked) {
+        pendingPublishByDeptRef.current[deptKey] = false;
+        setAuditVisibleByDept((prev) => {
+          const next = { ...prev, [deptKey]: false };
+          auditVisibleByDeptRef.current = next;
+          return next;
+        });
+        shouldReload = true;
+      }
+    }
+    prevPublishStatusRef.current = { ...publishStatusByDept };
+    if (shouldReload) {
+      setMeasuredChunks(null);
+      setFindingsReloadToken((t) => t + 1);
+    }
+  }, [publishStatusByDept, findingsLoadCompleted]);
+
+  /** Lock/unlock + preview visibility: strip audit blocks in HTML preview immediately. */
+  useEffect(() => {
+    setFindingSections((prev) =>
+      applyPublishStateToFindingSections(prev, effectivePublishByDept),
+    );
+    setMeasuredChunks(null);
+  }, [effectivePublishByDept]);
+
   /** Chunk berdasarkan ukuran riil (ukur setelah render), seperti Word: isi halaman sampai penuh lalu next page. */
   const [measuredChunks, setMeasuredChunks] = useState(null);
   const measureContainerRef = useRef(null);
@@ -1146,7 +1244,7 @@ function ReportPreviewPageContent() {
       setCreateProgress((p) => Math.max(p, 20));
       return;
     }
-    if (findingSections.length === 0) {
+    if (displayFindingSections.length === 0) {
       setCreateStatus("No published data for this year.");
       setCreateProgress((p) => Math.max(p, 35));
       return;
@@ -1158,7 +1256,7 @@ function ReportPreviewPageContent() {
     }
     setCreateStatus("Preparing report...");
     setCreateProgress((p) => Math.max(p, 48));
-  }, [onlyOfficeCreate, loadingFindings, findingsLoadCompleted, findingSections.length, openingEditor]);
+  }, [onlyOfficeCreate, loadingFindings, findingsLoadCompleted, displayFindingSections.length, openingEditor]);
 
   const flushPendingFieldUpdates = () => {
     if (fieldUpdateTimerRef.current) {
@@ -1503,6 +1601,452 @@ function ReportPreviewPageContent() {
     }
   }, [appendicesStorageKey]);
 
+  // Load report edits from database (shared across users/browsers).
+  useEffect(() => {
+    let cancelled = false;
+    setReportStateHydrated(false);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/report/state?year=${encodeURIComponent(String(year))}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled || !json.success || !json.state) return;
+
+        const saved = json.state;
+        if (Array.isArray(saved.appendices) && saved.appendices.length > 0) {
+          setAppendices(mergeWithDefaultAppendices(saved.appendices));
+        }
+        if (saved.executiveSummaryHtml) {
+          const html = normalizeExecutiveSummaryHtml(saved.executiveSummaryHtml, year);
+          setExecutiveSummaryHtml(html);
+          setDraftRichTextHtml(html);
+        }
+        if (saved.auditObjectivesScopeHtml) {
+          setAuditObjectivesScopeHtml(
+            normalizeHtmlWithFallback(
+              saved.auditObjectivesScopeHtml,
+              createDefaultAuditObjectivesScopeHtml(),
+            ),
+          );
+        }
+        if (saved.auditApproachMethodologyHtml) {
+          setAuditApproachMethodologyHtml(
+            ensureAuditApproachMethodologyCompleteness(
+              normalizeHtmlWithFallback(
+                saved.auditApproachMethodologyHtml,
+                createDefaultAuditApproachMethodologyHtml(),
+              ),
+            ),
+          );
+        }
+        if (saved.conclusionValues && typeof saved.conclusionValues === "object") {
+          setConclusionValues(saved.conclusionValues);
+        }
+        // Do not hydrate findingSections from DB — loadFindings pulls live module APIs.
+        if (
+          saved.hiddenAuditFindingEdits &&
+          typeof saved.hiddenAuditFindingEdits === "object"
+        ) {
+          hiddenAuditEditsRef.current = saved.hiddenAuditFindingEdits;
+        }
+        if (saved.auditVisibleByDept && typeof saved.auditVisibleByDept === "object") {
+          setAuditVisibleByDept(saved.auditVisibleByDept);
+          auditVisibleByDeptRef.current = saved.auditVisibleByDept;
+        }
+        hubRevisionInitRef.current = {
+          onlyOffice: Number(saved.onlyOfficeSyncRevision) || 0,
+          moduleTables: Number(saved.moduleTablesRevision) || 0,
+          hub: Number(saved.hubRevision) || 0,
+        };
+        lastDbNarrativeRef.current = saved;
+      } catch (err) {
+        console.warn("[REPORT-PREVIEW] load report state:", err);
+      } finally {
+        if (!cancelled) setReportStateHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [year]);
+
+  const persistReportStateNow = useCallback(async (options = {}) => {
+    if (!Number.isFinite(year)) return;
+    const effective = buildEffectivePublishMap(
+      publishStatusByDept,
+      auditVisibleByDeptRef.current,
+    );
+    const sectionsForDb = stripFindingSectionsForClient(
+      applyPublishStateToFindingSections(findingSections, effective),
+    );
+    const hiddenAuditFindingEdits = {
+      ...hiddenAuditEditsRef.current,
+      ...collectHiddenAuditEdits(findingSections),
+    };
+    hiddenAuditEditsRef.current = hiddenAuditFindingEdits;
+    savedFindingSectionsRef.current = sectionsForDb;
+
+    const tablesPayload = {
+      appendices,
+      executiveSummaryHtml: sanitizeExecutiveSummaryHtml(executiveSummaryHtml, year),
+      auditObjectivesScopeHtml: sanitizeHtmlWithFallback(
+        auditObjectivesScopeHtml,
+        createDefaultAuditObjectivesScopeHtml(),
+      ),
+      auditApproachMethodologyHtml: ensureAuditApproachMethodologyCompleteness(
+        sanitizeHtmlWithFallback(
+          auditApproachMethodologyHtml,
+          createDefaultAuditApproachMethodologyHtml(),
+        ),
+      ),
+      conclusionValues,
+      auditVisibleByDept: auditVisibleByDeptRef.current,
+      findingSections: sectionsForDb,
+      hiddenAuditFindingEdits,
+      onlyOfficeSyncRevision: onlyOfficeSyncRevisionRef.current,
+    };
+
+    let dbState = lastDbNarrativeRef.current;
+    const protectNarrative =
+      options.protectOnlyOfficeNarrative === true ||
+      (onlyOfficeSyncRevisionRef.current > 0 &&
+        options.narrativeFromPreviewEdit !== true);
+
+    if (protectNarrative) {
+      try {
+        const res = await fetch(`/api/report/state?year=${encodeURIComponent(String(year))}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const json = await res.json().catch(() => ({}));
+        if (json.success && json.state) {
+          dbState = json.state;
+          lastDbNarrativeRef.current = json.state;
+        }
+      } catch {
+        dbState = lastDbNarrativeRef.current;
+      }
+    }
+
+    const useModuleTablesOnly =
+      options.syncMode === "moduleTablesOnly" ||
+      (protectNarrative && onlyOfficeSyncRevisionRef.current > 0);
+
+    const stateBody = useModuleTablesOnly
+      ? {
+          findingSections: sectionsForDb,
+          hiddenAuditFindingEdits,
+          auditVisibleByDept: auditVisibleByDeptRef.current,
+        }
+      : protectNarrative
+        ? buildPersistPayloadWithProtectedNarrative({
+            dbState,
+            tablesPayload,
+            onlyOfficeSyncRevision: onlyOfficeSyncRevisionRef.current,
+          })
+        : tablesPayload;
+
+    try {
+      return await fetch("/api/report/state", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year,
+          state: stateBody,
+          syncMode: useModuleTablesOnly ? "moduleTablesOnly" : undefined,
+          allowNarrativeOverwrite: options.narrativeFromPreviewEdit === true,
+        }),
+      });
+    } catch (err) {
+      console.warn("[REPORT-PREVIEW] save report state:", err);
+      return null;
+    }
+  }, [
+    year,
+    appendices,
+    executiveSummaryHtml,
+    auditObjectivesScopeHtml,
+    auditApproachMethodologyHtml,
+    conclusionValues,
+    findingSections,
+    publishStatusByDept,
+  ]);
+
+  persistReportStateRef.current = persistReportStateNow;
+
+  // Persist module tables (debounced) — keep OnlyOffice narrative from DB.
+  useEffect(() => {
+    if (!reportStateHydrated || !findingsLoadCompleted || !Number.isFinite(year)) return;
+    if (skipPersistOnceRef.current) {
+      skipPersistOnceRef.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      persistReportStateRef.current?.({
+        syncMode:
+          onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
+        protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
+      });
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    reportStateHydrated,
+    findingsLoadCompleted,
+    year,
+    findingSections,
+    auditVisibleByDept,
+    publishStatusByDept,
+  ]);
+
+  // Persist narrative edited in HTML preview — skip when OnlyOffice owns narrative (DB sync).
+  useEffect(() => {
+    if (!reportStateHydrated || !findingsLoadCompleted || !Number.isFinite(year)) return;
+    if (onlyOfficeSyncRevisionRef.current > 0) return;
+
+    const timer = window.setTimeout(() => {
+      persistReportStateRef.current?.({ narrativeFromPreviewEdit: true });
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    reportStateHydrated,
+    findingsLoadCompleted,
+    year,
+    appendices,
+    executiveSummaryHtml,
+    auditObjectivesScopeHtml,
+    auditApproachMethodologyHtml,
+    conclusionValues,
+  ]);
+
+  const onlyOfficeSyncRevisionRef = useRef(0);
+  const hubRevisionRef = useRef(0);
+  const skipPersistOnceRef = useRef(false);
+  const narrativeSnapshotRef = useRef(null);
+  const lastDbNarrativeRef = useRef(null);
+
+  useEffect(() => {
+    const init = hubRevisionInitRef.current;
+    if (!init || !reportStateHydrated) return;
+    onlyOfficeSyncRevisionRef.current = init.onlyOffice;
+    hubRevisionRef.current = Math.max(init.moduleTables, init.onlyOffice, init.hub || 0);
+    hubRevisionInitRef.current = null;
+  }, [reportStateHydrated]);
+
+  /** OnlyOffice / DB narrative — kept when module tables reload. */
+  const applyNarrativeFromReportState = useCallback(
+    (saved) => {
+      const narrative = pickNarrativeFromReportState(saved);
+      if (!narrative) return;
+
+      if (narrative.auditVisibleByDept && typeof narrative.auditVisibleByDept === "object") {
+        setAuditVisibleByDept(narrative.auditVisibleByDept);
+        auditVisibleByDeptRef.current = narrative.auditVisibleByDept;
+      }
+      if (Array.isArray(narrative.appendices) && narrative.appendices.length > 0) {
+        setAppendices(mergeWithDefaultAppendices(narrative.appendices));
+      }
+      if (narrative.executiveSummaryHtml != null) {
+        const html = normalizeExecutiveSummaryHtml(narrative.executiveSummaryHtml, year);
+        setExecutiveSummaryHtml(html);
+        setDraftRichTextHtml(html);
+      }
+      if (narrative.auditObjectivesScopeHtml != null) {
+        setAuditObjectivesScopeHtml(
+          normalizeHtmlWithFallback(
+            narrative.auditObjectivesScopeHtml,
+            createDefaultAuditObjectivesScopeHtml(),
+          ),
+        );
+      }
+      if (narrative.auditApproachMethodologyHtml != null) {
+        setAuditApproachMethodologyHtml(
+          ensureAuditApproachMethodologyCompleteness(
+            normalizeHtmlWithFallback(
+              narrative.auditApproachMethodologyHtml,
+              createDefaultAuditApproachMethodologyHtml(),
+            ),
+          ),
+        );
+      }
+      if (narrative.conclusionValues && typeof narrative.conclusionValues === "object") {
+        setConclusionValues(narrative.conclusionValues);
+      }
+      if (Number(narrative.onlyOfficeSyncRevision) > 0) {
+        onlyOfficeSyncRevisionRef.current = Number(narrative.onlyOfficeSyncRevision);
+      }
+      narrativeSnapshotRef.current = narrative;
+      if (saved && typeof saved === "object") {
+        lastDbNarrativeRef.current = saved;
+      }
+    },
+    [year],
+  );
+
+  /** Terapkan snapshot hub (narasi OnlyOffice + tabel modul) ke UI preview. */
+  const applyHubSnapshot = useCallback(
+    (snap, options = {}) => {
+      if (!snap || snap.success === false) return;
+      const freshModuleReload = options.freshModuleReload !== false;
+
+      skipPersistOnceRef.current = true;
+      if (Number(snap.hubRevision) > 0) hubRevisionRef.current = Number(snap.hubRevision);
+      if (Number(snap.onlyOfficeSyncRevision) > 0) {
+        onlyOfficeSyncRevisionRef.current = Number(snap.onlyOfficeSyncRevision);
+      }
+
+      const narrativeSource = snap.state || {
+        ...snap.narrative,
+        auditVisibleByDept: snap.auditVisibleByDept,
+      };
+      if (narrativeSource && typeof narrativeSource === "object") {
+        lastDbNarrativeRef.current = snap.state || narrativeSource;
+        applyNarrativeFromReportState(narrativeSource);
+      }
+
+      if (snap.auditVisibleByDept && typeof snap.auditVisibleByDept === "object") {
+        setAuditVisibleByDept(snap.auditVisibleByDept);
+        auditVisibleByDeptRef.current = snap.auditVisibleByDept;
+      }
+      if (snap.hiddenAuditFindingEdits && typeof snap.hiddenAuditFindingEdits === "object") {
+        hiddenAuditEditsRef.current = {
+          ...hiddenAuditEditsRef.current,
+          ...snap.hiddenAuditFindingEdits,
+        };
+      }
+
+      const sections = Array.isArray(snap.sections) ? snap.sections : [];
+      const lockedByDept = snap.lockedByDept || {};
+      const preservedSource = freshModuleReload
+        ? []
+        : savedFindingSectionsRef.current.length > 0
+          ? savedFindingSectionsRef.current
+          : findingSectionsRef.current;
+      const merged = mergePreservedFindingSections(
+        sections,
+        preservedSource,
+        lockedByDept,
+        hiddenAuditEditsRef.current,
+        { freshModuleReload },
+      );
+      hiddenAuditEditsRef.current = {
+        ...hiddenAuditEditsRef.current,
+        ...collectHiddenAuditEdits(merged),
+      };
+      const effectiveLocked = buildEffectivePublishMap(
+        lockedByDept,
+        auditVisibleByDeptRef.current,
+      );
+      const normalized = applyPublishStateToFindingSections(merged, effectiveLocked);
+      const clientSections = stripFindingSectionsForClient(normalized);
+      setFindingSections(clientSections);
+      savedFindingSectionsRef.current = clientSections;
+      findingSectionsRef.current = clientSections;
+      setMeasuredChunks(null);
+    },
+    [applyNarrativeFromReportState],
+  );
+
+  const onHubSnapshotAutoRefresh = useCallback(
+    async (snap) => {
+      applyHubSnapshot(snap, { freshModuleReload: true });
+    },
+    [applyHubSnapshot],
+  );
+
+  const { forceRefreshHub } = usePreviewHubAutoRefresh(year, onHubSnapshotAutoRefresh);
+
+  /** Pull latest SOP/Audit rows from module APIs (not stale DB snapshot). */
+  const reloadModulesIntoPreview = useCallback(() => {
+    sopModuleRefreshRef.current = true;
+    void forceRefreshHub();
+  }, [forceRefreshHub]);
+
+  const onSopReviewDataChanged = useCallback(() => {
+    reloadModulesIntoPreview();
+  }, [reloadModulesIntoPreview]);
+
+  useSopReviewRealtime(year, onSopReviewDataChanged);
+
+  // Lock/unlock from Audit Review → reload audit data into HTML preview (hub for OnlyOffice).
+  useEffect(() => {
+    const syncFromServer = async (detail) => {
+      const eventReportYear =
+        detail?.reportYear != null
+          ? Number(detail.reportYear)
+          : detail?.year != null
+            ? Number(detail.year)
+            : null;
+      if (eventReportYear != null && Number.isFinite(eventReportYear) && eventReportYear !== year) {
+        return;
+      }
+      if (detail?.deptKey) {
+        const visible = detail.isLocked === true;
+        pendingPublishByDeptRef.current[detail.deptKey] = visible;
+        setAuditVisibleByDept((prev) => {
+          const next = { ...prev, [detail.deptKey]: visible };
+          auditVisibleByDeptRef.current = next;
+          return next;
+        });
+      }
+      flushPendingFieldUpdates();
+      await refreshPublishStatus();
+      try {
+        await fetch("/api/report/hub/sync-modules", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ year }),
+        });
+      } catch (err) {
+        console.warn("[REPORT-PREVIEW] hub sync-modules:", err);
+      }
+      await forceRefreshHub();
+    };
+    const onStorage = (e) => {
+      if (e.key !== AUDIT_REVIEW_PUBLISH_CHANGED_KEY) return;
+      try {
+        const detail = JSON.parse(e.newValue || "{}");
+        syncFromServer(detail);
+      } catch {
+        syncFromServer({});
+      }
+    };
+    const onPublishChanged = (e) => syncFromServer(e.detail || {});
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(AUDIT_REVIEW_PUBLISH_CHANGED_KEY, onPublishChanged);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(AUDIT_REVIEW_PUBLISH_CHANGED_KEY, onPublishChanged);
+    };
+  }, [year, refreshPublishStatus, forceRefreshHub]);
+
+  useEffect(() => {
+    let focusDebounce = null;
+    const scheduleModuleReload = () => {
+      window.clearTimeout(focusDebounce);
+      focusDebounce = window.setTimeout(() => reloadModulesIntoPreview(), 120);
+    };
+    const onFocus = () => scheduleModuleReload();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") scheduleModuleReload();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(focusDebounce);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [reloadModulesIntoPreview]);
+
   useEffect(() => {
     try {
       localStorage.setItem(appendicesStorageKey, JSON.stringify(appendices));
@@ -1512,6 +2056,9 @@ function ReportPreviewPageContent() {
   }, [appendices, appendicesStorageKey]);
 
   useEffect(() => {
+    if (!reportStateHydrated) return;
+    if (onlyOfficeSyncRevisionRef.current > 0) return;
+
     try {
       const raw = localStorage.getItem(executiveSummaryStorageKey);
       if (!raw) {
@@ -1528,7 +2075,7 @@ function ReportPreviewPageContent() {
       setExecutiveSummaryHtml(defaultHtml);
       setDraftRichTextHtml(defaultHtml);
     }
-  }, [executiveSummaryStorageKey, year]);
+  }, [executiveSummaryStorageKey, year, reportStateHydrated]);
 
   useEffect(() => {
     try {
@@ -1931,169 +2478,72 @@ function ReportPreviewPageContent() {
     let cancelled = false;
 
     async function loadFindings() {
+      const loadSeq = ++moduleLoadSeqRef.current;
       setLoadingFindings(true);
       setFindingsLoadCompleted(false);
+      findingsLoadInProgressRef.current = true;
+      const freshModuleReload = sopModuleRefreshRef.current;
+      sopModuleRefreshRef.current = false;
       try {
-        const sections = [];
-
-        for (const dept of REPORT_DEPARTMENTS) {
-          // Load SOP Review published data (same source as SOP Review Report)
-          let sopRows = [];
-          try {
-            const sopRes = await fetch(
-              `/api/SopReview/${dept.apiPath}/published?all=1`,
-            );
-            if (sopRes.ok) {
-              const sopJson = await sopRes.json().catch(() => ({}));
-              let publishes = Array.isArray(sopJson.publishes) ? sopJson.publishes : [];
-
-              if (year && Number.isFinite(year)) {
-                const yearFiltered = publishes.filter((pub) => {
-                  const meta = pub.meta || {};
-                  const aps = meta.audit_fieldwork_start_date;
-                  const pubAt = meta.published_at;
-                  if (aps) {
-                    const d = new Date(aps);
-                    if (!Number.isNaN(d.getTime()) && d.getFullYear() === year) return true;
-                  }
-                  if (pubAt) {
-                    const d = new Date(pubAt);
-                    return !Number.isNaN(d.getTime()) && d.getFullYear() === year;
-                  }
-                  return false;
-                });
-                publishes = yearFiltered.length > 0 ? yearFiltered : publishes;
-              }
-
-              publishes.forEach((pub) => {
-                (pub.rows || []).forEach((row, idx) => {
-                  const sopRelated = (row.sop_related || "").toString().trim();
-                  if (!sopRelated) return;
-                  sopRows.push({
-                    sourceIndex: sopRows.length,
-                    no: row.no ?? idx + 1,
-                    sopRelated,
-                    status: (row.status || "").toString().toUpperCase(),
-                    reviewComment: (row.comment || "").toString(),
-                    auditeeComment: (row.auditee_comment || "").toString(),
-                    followUpDetail: (row.follow_up_detail || "").toString(),
-                  });
-                });
-              });
-
-              console.log("[REPORT-PREVIEW] SOP publishes", {
-                dept: dept.label,
-                apiPath: dept.apiPath,
-                year,
-                publishesCount: publishes.length,
-                sopRowsCount: sopRows.length,
-              });
-            }
-          } catch (err) {
-            console.warn("[REPORT-PREVIEW] SOP load failed", dept.apiPath, err);
-          }
-
-          // Load Audit Review findings from the audit review module only.
-          let auditRows = [];
-          let executiveSummary = null;
-          try {
-            const loadAuditReviewRows = async (withYear = true) => {
-              const reviewUrl = withYear
-                ? `/api/audit-review/${dept.apiPath}/findings?year=${encodeURIComponent(String(year))}`
-                : `/api/audit-review/${dept.apiPath}/findings`;
-              const reviewRes = await fetch(reviewUrl);
-              if (!reviewRes.ok) return [];
-              const reviewJson = await reviewRes.json().catch(() => ({}));
-              return Array.isArray(reviewJson.rows) ? reviewJson.rows : [];
-            };
-
-            let rows = await loadAuditReviewRows(true);
-            if (rows.length === 0 && year) {
-              rows = await loadAuditReviewRows(false);
-            }
-
-            const auditYearFromRows = deriveAuditYearFromReviewRows(rows);
-            executiveSummary = await fetchExecutiveSummaryForDept(dept.apiPath, [
-              year,
-              auditYearFromRows,
-            ]);
-
-            if (rows.length > 0) {
-              auditRows = sortByRiskId(rows).map((r, idx) => ({
-                sourceIndex: idx,
-                no: idx + 1,
-                riskId: r.riskId ?? r.risk_id ?? "",
-                risk: r.risk ?? "",
-                riskDetails: r.riskDetails ?? r.risk_details ?? "",
-                effectIfNotMitigate: r.effectIfNotMitigate ?? r.impact_description ?? "",
-                riskLevel: r.riskLevel ?? r.risk ?? "",
-                apCode: r.apNo ?? r.apCode ?? r.ap_code ?? "",
-                substantiveTest: r.substantiveTest ?? r.substantive_test ?? "",
-                methodology: r.method ?? "",
-                findingResult: r.findingResult ?? r.finding_result ?? "",
-                findingDescription: r.findingDescription ?? r.finding_description ?? "",
-                recommendation: r.recommendation ?? "",
-                auditeeComment: r.auditeeComment ?? r.auditee_comment ?? "",
-                followUpDetail: r.followUpDetail ?? r.follow_up_detail ?? "",
-              }));
-            }
-
-            console.log("[REPORT-PREVIEW] Audit review data", {
-              dept: dept.label,
-              apiPath: dept.apiPath,
-              year,
-              auditYearFromRows,
-              isLocked: isAuditReviewLocked(executiveSummary),
-              hasExecSummary: executiveSummaryRowHasContent(executiveSummary),
-              totalBackendRows: auditRows.length,
-              mappedRows: auditRows.length,
-            });
-          } catch {
-            // ignore audit-review errors for consolidated report
-          }
-
-          // Area Audit dari worksheet report (per dept)
-          let areaAudit = dept.label;
-          try {
-            const wsRes = await fetch(
-              `/api/worksheet/${dept.apiPath}${year ? `?year=${encodeURIComponent(String(year))}` : ""}`,
-            );
-            if (wsRes.ok) {
-              const wsJson = await wsRes.json().catch(() => ({}));
-              const wsRows = Array.isArray(wsJson.rows) ? wsJson.rows : [];
-              const first = wsRows[0];
-              if (first && (first.audit_area || first.auditArea)) {
-                areaAudit = first.audit_area || first.auditArea;
-              }
-            }
-          } catch {
-            // fallback ke department label
-          }
-
-          const visibleAuditRows = auditRows.length > 0 ? auditRows : [];
-          const deptExecutiveSummary = buildDeptExecutiveSummaryFromRow(executiveSummary);
-
-          if (sopRows.length > 0 || visibleAuditRows.length > 0) {
-            const normalizedSopRows = sopRows.map((row, idx) => ({
-              ...row,
-              no: idx + 1,
-            }));
-            sections.push({
-              deptKey: dept.key,
-              deptLabel: dept.label,
-              areaAudit,
-              executiveSummary: deptExecutiveSummary,
-              sopRows: normalizedSopRows,
-              auditRows: visibleAuditRows,
-            });
-          }
+        let snap = null;
+        try {
+          const snapRes = await fetch(
+            `/api/report/hub/snapshot?year=${encodeURIComponent(String(year))}&_=${Date.now()}`,
+            { cache: "no-store", credentials: "include" },
+          );
+          snap = await snapRes.json().catch(() => ({}));
+        } catch (err) {
+          console.warn("[REPORT-PREVIEW] hub snapshot failed:", err);
         }
 
-        if (!cancelled) {
-          setFindingSections(sections);
+        if (!snap?.success) {
+          const loaded = await loadFindingSectionsFromModules(year, {
+            pendingPublishByDept: pendingPublishByDeptRef.current,
+          });
+          snap = {
+            success: true,
+            sections: loaded.sections,
+            lockedByDept: loaded.lockedByDept,
+            state: lastDbNarrativeRef.current,
+          };
+        }
+
+        if (!cancelled && loadSeq === moduleLoadSeqRef.current && snap?.success) {
+          applyHubSnapshot(snap, { freshModuleReload });
+          refreshPublishStatus();
+          if (Object.keys(pendingPublishByDeptRef.current).length > 0) {
+            pendingPublishByDeptRef.current = {};
+          }
+          const persistSeq = loadSeq;
+          const clientSections = savedFindingSectionsRef.current;
+          skipPersistOnceRef.current = true;
+          void (async () => {
+            if (persistSeq !== moduleLoadSeqRef.current) return;
+            await persistReportStateRef.current?.({
+              syncMode:
+                onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
+              protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
+            });
+            if (persistSeq !== moduleLoadSeqRef.current) return;
+            try {
+              window.dispatchEvent(
+                new CustomEvent("kias-report-modules-synced", {
+                  detail: {
+                    year,
+                    reportYear: year,
+                    moduleTablesHash: computeModuleTablesHash(clientSections),
+                    onlyOfficeSyncRevision: onlyOfficeSyncRevisionRef.current,
+                  },
+                }),
+              );
+            } catch {
+              /* ignore */
+            }
+          })();
         }
       } finally {
         if (!cancelled) {
+          findingsLoadInProgressRef.current = false;
           setLoadingFindings(false);
           setFindingsLoadCompleted(true);
         }
@@ -2105,7 +2555,11 @@ function ReportPreviewPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [year]);
+  }, [year, findingsReloadToken, applyHubSnapshot]);
+
+  useEffect(() => {
+    findingSectionsRef.current = findingSections;
+  }, [findingSections]);
 
   // Tinggi area konten per halaman A4 (px), untuk pengukuran otomatis seperti Word.
   // Dibuat lebih konservatif agar baris terakhir tidak menyentuh footer; jika tinggi konten
@@ -2121,12 +2575,12 @@ function ReportPreviewPageContent() {
   const FINDING_AUDIT_SECTION_CHROME_PX = 40;
   const paginatedFindingSections = useMemo(
     () =>
-      findingSections.map((section) => ({
+      displayFindingSections.map((section) => ({
         ...section,
         sopRows: expandSopRowsForPagination(section.sopRows || []),
         auditRows: expandAuditRowsForPagination(section.auditRows || []),
       })),
-    [findingSections],
+    [displayFindingSections],
   );
 
   /**
@@ -2199,14 +2653,18 @@ function ReportPreviewPageContent() {
             FINDING_SOP_TABLE_HEIGHT_PX,
           );
         }
-        const auditTable = container.querySelector(`[data-measure-audit="${section.deptKey}"]`);
-        if (auditTable && section.auditRows.length > 0) {
-          auditChunksByDept[section.deptKey] = measureTableChunks(
-            auditTable,
-            section.auditRows,
-            FINDING_AUDIT_TABLE_HEIGHT_PX - firstPageBuffer,
-            FINDING_AUDIT_TABLE_HEIGHT_PX,
+        if (section.auditRows.length > 0) {
+          const auditTable = container.querySelector(
+            `[data-measure-audit="${section.deptKey}"]`,
           );
+          if (auditTable) {
+            auditChunksByDept[section.deptKey] = measureTableChunks(
+              auditTable,
+              section.auditRows,
+              FINDING_AUDIT_TABLE_HEIGHT_PX - firstPageBuffer,
+              FINDING_AUDIT_TABLE_HEIGHT_PX,
+            );
+          }
         }
       });
       if (!cancelled) {
@@ -2247,8 +2705,8 @@ function ReportPreviewPageContent() {
    * Hanya Conclusion: ukur blok teks per department-chunk agar teks panjang bisa lanjut ke page berikutnya.
    */
   useEffect(() => {
-    if (!findingSections.length || !conclusionMeasureRef.current) return;
-    const conclusionSegments = findingSections.flatMap((section, index) =>
+    if (!displayFindingSections.length || !conclusionMeasureRef.current) return;
+    const conclusionSegments = displayFindingSections.flatMap((section, index) =>
       splitConclusionTextIntoChunks(conclusionValues[section.deptKey] ?? "").map((text, chunkIndex) => ({
         deptKey: section.deptKey,
         deptLabel: section.deptLabel,
@@ -2291,7 +2749,7 @@ function ReportPreviewPageContent() {
     const ro = new ResizeObserver(() => requestAnimationFrame(runMeasure));
     ro.observe(container);
     return () => { cancelled = true; ro.disconnect(); };
-  }, [findingSections, conclusionValues]);
+  }, [displayFindingSections, conclusionValues]);
 
   const conclusionChunksLength = conclusionChunks?.length ?? 0;
   useEffect(() => {
@@ -2309,7 +2767,7 @@ function ReportPreviewPageContent() {
   /** Save conclusion: hanya department yang berisi data; hitung pagination (page 1 penuh dulu) lalu tutup form. */
   const handleSaveConclusion = () => {
     requestAnimationFrame(() => {
-      const conclusionSegments = findingSections.flatMap((section, index) =>
+      const conclusionSegments = displayFindingSections.flatMap((section, index) =>
         splitConclusionTextIntoChunks(conclusionValues[section.deptKey] ?? "").map((text, chunkIndex) => ({
           deptKey: section.deptKey,
           deptLabel: section.deptLabel,
@@ -2506,6 +2964,8 @@ function ReportPreviewPageContent() {
   const findingPages = (() => {
     const pages = [];
     paginatedFindingSections.forEach((section) => {
+      const showAudit = isDeptPublishedToReport(section.deptKey, effectivePublishByDept);
+      const auditRowsForSection = showAudit ? section.auditRows || [] : [];
       const sopChunkMetas =
         measuredChunks?.sop?.[section.deptKey]?.length > 0
           ? measuredChunks.sop[section.deptKey].map((chunk) => ({
@@ -2520,18 +2980,20 @@ function ReportPreviewPageContent() {
               SOP_PAGE_CAPACITY_UNITS
             ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
       const auditChunkMetas =
-        measuredChunks?.audit?.[section.deptKey]?.length > 0
-          ? measuredChunks.audit[section.deptKey].map((chunk) => ({
-              rows: [...(chunk.rows || [])],
-              height: chunk.height ?? 0,
-              limit: chunk.limit ?? FINDING_AUDIT_TABLE_HEIGHT_PX,
-            }))
-          : chunkRowsByContent(
-              section.auditRows,
-              getAuditRowWeight,
-              AUDIT_ROWS_PER_PAGE,
-              AUDIT_PAGE_CAPACITY_UNITS
-            ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
+        !showAudit || auditRowsForSection.length === 0
+          ? []
+          : measuredChunks?.audit?.[section.deptKey]?.length > 0
+            ? measuredChunks.audit[section.deptKey].map((chunk) => ({
+                rows: [...(chunk.rows || [])],
+                height: chunk.height ?? 0,
+                limit: chunk.limit ?? FINDING_AUDIT_TABLE_HEIGHT_PX,
+              }))
+            : chunkRowsByContent(
+                auditRowsForSection,
+                getAuditRowWeight,
+                AUDIT_ROWS_PER_PAGE,
+                AUDIT_PAGE_CAPACITY_UNITS
+              ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
 
       if (sopChunkMetas.length === 0 && auditChunkMetas.length === 0) return;
 
@@ -2698,7 +3160,7 @@ function ReportPreviewPageContent() {
 
   /** Conclusion: pakai chunk dari Save (page 1 penuh dulu, sisanya next page); hanya ada setelah user klik Save. */
   const conclusionPages = (() => {
-    if (!findingSections.length) return [];
+    if (!displayFindingSections.length) return [];
     if (conclusionChunks && conclusionChunks.length > 0) return conclusionChunks;
     return [];
   })();
@@ -2708,7 +3170,7 @@ function ReportPreviewPageContent() {
     findingPages.length +
     1 +
     findingDetailPages.length +
-    (findingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
+    (displayFindingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
     1;
   const appendixPages = buildAppendixPages(appendices);
 
@@ -2716,7 +3178,14 @@ function ReportPreviewPageContent() {
     window.print();
   };
 
-  const buildReportExportPayload = useCallback(() => {
+  const refreshModulesIntoPreview = useCallback(async () => {
+    sopModuleRefreshRef.current = true;
+    await forceRefreshHub();
+    return savedFindingSectionsRef.current;
+  }, [forceRefreshHub]);
+
+  const buildReportExportPayload = useCallback((findingSectionsOverride) => {
+    const exportFindingSections = findingSectionsOverride ?? findingSections;
     const periodStartVal = `JANUARY ${year}`;
     const periodEndVal = `DECEMBER ${year}`;
     const issuedDateVal = new Date().toLocaleDateString("en-US", {
@@ -2748,7 +3217,7 @@ function ReportPreviewPageContent() {
             : String(auditApproachStartPage),
       },
       ...REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
-        findingSections.some((section) => section.deptKey === row.deptKey),
+        displayFindingSections.some((section) => section.deptKey === row.deptKey),
       )
         .sort((a, b) => {
           const ra = deptFindingPageRanges[a.deptKey];
@@ -2770,9 +3239,9 @@ function ReportPreviewPageContent() {
     const exportConclusionPages =
       conclusionPages.length > 0
         ? conclusionPages
-        : findingSections.length > 0
+        : exportFindingSections.length > 0
           ? (() => {
-              const segments = findingSections
+              const segments = exportFindingSections
                 .map((section, i) => ({
                   sectionNumber: i + 1,
                   deptLabel: section.deptLabel,
@@ -2785,7 +3254,7 @@ function ReportPreviewPageContent() {
           : [];
 
     const conclusionPageCount =
-      findingSections.length > 0
+      displayFindingSections.length > 0
         ? exportConclusionPages.length || 1
         : 0;
 
@@ -2804,11 +3273,11 @@ function ReportPreviewPageContent() {
       findingPages.length +
       1 +
       findingDetailPages.length +
-      (findingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
+      (displayFindingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
       1;
 
     const departmentCompletionRows = REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
-      findingSections.some((section) => section.deptKey === row.deptKey),
+      displayFindingSections.some((section) => section.deptKey === row.deptKey),
     )
       .sort((a, b) => {
         const ra = deptFindingPageRanges[a.deptKey];
@@ -2841,7 +3310,7 @@ function ReportPreviewPageContent() {
         });
       });
     } else {
-      findingSections.forEach((section, idx) => {
+      exportFindingSections.forEach((section, idx) => {
         const text = (conclusionValues[section.deptKey] || "").trim();
         if (text) {
           conclusionTexts.push(`6.${idx + 1} ${section.deptLabel}: ${text}`);
@@ -2874,10 +3343,27 @@ function ReportPreviewPageContent() {
       deptIndexMap,
       conclusionChunks: conclusionTexts,
       conclusionPages: exportConclusionPages,
-      findingSections: findingSections.map((section) => ({
+      source: "html-preview",
+      previewSnapshotHash: computePreviewSnapshotHash(
+        auditVisibleByDept,
+        exportFindingSections,
+        {
+          executiveSummaryHtml,
+          auditObjectivesScopeHtml,
+          auditApproachMethodologyHtml,
+          conclusionValues,
+        },
+      ),
+      moduleTablesHash: computeModuleTablesHash(exportFindingSections),
+      auditVisibleByDept,
+      findingSections: filterFindingSectionsForDisplay(
+        exportFindingSections,
+        effectivePublishByDept,
+      ).map((section) => ({
         deptKey: section.deptKey,
         deptLabel: section.deptLabel,
         areaAudit: section.areaAudit,
+        isPublishedToReport: section.isPublishedToReport === true,
         executiveSummary: section.executiveSummary,
         sopRows: section.sopRows || [],
         auditRows: section.auditRows || [],
@@ -2936,6 +3422,9 @@ function ReportPreviewPageContent() {
     presidentDirectorName,
     formattedPresidentDirectorDate,
     findingSections,
+    auditVisibleByDept,
+    effectivePublishByDept,
+    displayFindingSections,
     deptIndexMap,
     deptFindingPageRanges,
     findingDetailPages,
@@ -2961,7 +3450,7 @@ function ReportPreviewPageContent() {
 
   const runReportExport = async (format) => {
     if (loadingFindings) return;
-    if (findingSections.length === 0) {
+    if (displayFindingSections.length === 0) {
       window.alert("No report data loaded yet. Please wait for data or publish SOP/Audit data first.");
       return;
     }
@@ -2985,7 +3474,7 @@ function ReportPreviewPageContent() {
 
   const openDocumentEditor = async () => {
     if (loadingFindings) return;
-    if (findingSections.length === 0) {
+    if (displayFindingSections.length === 0) {
       const msg =
         "Belum ada data laporan. Publikasikan data SOP / Audit Review terlebih dahulu.";
       if (onlyOfficeCreate) {
@@ -3004,12 +3493,22 @@ function ReportPreviewPageContent() {
       setCreateStatus("Building report snapshot...");
     }
     try {
-      const payload = buildReportExportPayload();
+      if (onlyOfficeCreate) {
+        setCreateProgress(55);
+        setCreateStatus("Loading latest SOP & Audit Review data...");
+      }
+      const freshSections = await refreshModulesIntoPreview();
+      const payload = buildReportExportPayload(freshSections);
       if (onlyOfficeCreate) {
         setCreateProgress(75);
         setCreateStatus("Generating DOCX file...");
       }
-      const result = await createReportEditorSession(payload);
+      await persistReportStateRef.current?.({
+        syncMode:
+          onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
+        protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
+      });
+      const result = await openSharedReportEditor(payload);
       if (!result.ok) {
         window.alert(result.error || "Could not open editor.");
         if (onlyOfficeCreate) {
@@ -3061,7 +3560,7 @@ function ReportPreviewPageContent() {
   useEffect(() => {
     if (!shouldAutoDownloadWord || hasAutoDownloadedWordRef.current) return;
     if (loadingFindings) return;
-    if (findingSections.length === 0) return;
+    if (displayFindingSections.length === 0) return;
 
     const timer = window.setTimeout(() => {
       if (hasAutoDownloadedWordRef.current) return;
@@ -3070,13 +3569,13 @@ function ReportPreviewPageContent() {
     }, 600);
 
     return () => window.clearTimeout(timer);
-  }, [shouldAutoDownloadWord, loadingFindings, findingSections.length]);
+  }, [shouldAutoDownloadWord, loadingFindings, displayFindingSections.length]);
 
   useEffect(() => {
     if (!shouldOpenEditor || hasAutoOpenedEditorRef.current) return;
     if (loadingFindings || !findingsLoadCompleted) return;
 
-    if (findingSections.length === 0) {
+    if (displayFindingSections.length === 0) {
       if (onlyOfficeCreate && !emptyCreateAbortRef.current) {
         emptyCreateAbortRef.current = true;
         hasAutoOpenedEditorRef.current = true;
@@ -3100,7 +3599,7 @@ function ReportPreviewPageContent() {
     shouldOpenEditor,
     loadingFindings,
     findingsLoadCompleted,
-    findingSections.length,
+    displayFindingSections.length,
     onlyOfficeCreate,
     year,
     router,
@@ -3206,6 +3705,17 @@ function ReportPreviewPageContent() {
           text-decoration: underline;
         }
       `}</style>
+      {!onlyOfficeCreate ? (
+        <div
+          className="fixed top-3 right-3 z-[90] print:hidden flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[10px] text-slate-600 shadow-sm"
+          title="Sinkron lock/unlock Audit Review ke report (realtime)"
+        >
+          <span
+            className={`inline-block h-2 w-2 rounded-full ${streamConnected ? "bg-emerald-500" : "bg-amber-400"}`}
+          />
+          {streamConnected ? "Report sync realtime" : "Report sync connecting…"}
+        </div>
+      ) : null}
       {loadingFindings && !onlyOfficeCreate ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 backdrop-blur-[1px] print:hidden">
           <div className="bg-white rounded-xl shadow-xl px-6 py-5 flex items-center gap-3 min-w-[260px]">
@@ -3558,7 +4068,7 @@ function ReportPreviewPageContent() {
                   <td className="py-1 text-right align-bottom whitespace-nowrap">PAGE</td>
                 </tr>
                 {REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
-                  findingSections.some((section) => section.deptKey === row.deptKey),
+                  displayFindingSections.some((section) => section.deptKey === row.deptKey),
                 )
                   .sort((a, b) => {
                     const ra = deptFindingPageRanges[a.deptKey];
@@ -3828,7 +4338,7 @@ function ReportPreviewPageContent() {
             // Dinamis: table of contents untuk Findings & Recommendations per department
             ...REPORT_DEPARTMENT_COMPLETION_ROWS
               .filter((row) =>
-                findingSections.some((section) => section.deptKey === row.deptKey),
+                displayFindingSections.some((section) => section.deptKey === row.deptKey),
               )
               .sort((a, b) => {
                 const ra = deptFindingPageRanges[a.deptKey];
@@ -4401,7 +4911,9 @@ function ReportPreviewPageContent() {
               </div>
             )}
 
-            {page.isFirstPageForDept && page.dept.executiveSummary && (
+            {page.isFirstPageForDept &&
+              isDeptPublishedToReport(page.dept.deptKey, effectivePublishByDept) &&
+              page.dept.executiveSummary && (
               <div className="border border-gray-300 rounded px-3 py-2 text-[10px] bg-gray-50/70 space-y-2">
                 <p className="font-semibold">Executive Summary</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -4557,7 +5069,8 @@ function ReportPreviewPageContent() {
 
             {/* Audit Review / Audit Finding table */}
             {/* Audit Review table: subjudul hanya saat chunk pertama; halaman lanjutan tanpa subjudul */}
-            {page.auditRows.length > 0 && (
+            {isDeptPublishedToReport(page.dept.deptKey, effectivePublishByDept) &&
+              page.auditRows.length > 0 && (
               <div>
                 {page.isFirstAuditChunk && (
                   <p className="font-semibold mb-1 text-[10px]">
@@ -4682,14 +5195,14 @@ function ReportPreviewPageContent() {
       ))}
 
       {/* Satu blok per department: 5.x Department, 5.x.1 Finding : -, Select Finding — hanya untuk layar, tidak ikut print */}
-      {findingSections.length > 0 && (
+      {displayFindingSections.length > 0 && (
         <div className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] min-h-[297mm] overflow-hidden flex flex-col px-16 pt-20 pb-16 break-after-page print:hidden">
           <div className="text-center mb-6 flex-shrink-0">
             <h1 className="text-2xl font-bold">Findings &amp; Recommendations</h1>
           </div>
           <div className="flex-1 text-[11px] leading-relaxed space-y-8">
             <p className="font-bold">5&nbsp;&nbsp;&nbsp;Finding &amp; Recommendation</p>
-            {findingSections.map((section) => {
+            {displayFindingSections.map((section) => {
               const deptNum = deptIndexMap[section.deptKey] ?? 1;
               const selectedCount = (selectedFindingByDept[section.deptKey] ?? []).length;
               return (
@@ -4731,7 +5244,7 @@ function ReportPreviewPageContent() {
 
       {/* Modal pilih finding (checkbox, multi) — hanya finding dari audit review yang masuk report */}
       {findingModalDeptKey != null && (() => {
-        const section = findingSections.find((s) => s.deptKey === findingModalDeptKey);
+        const section = displayFindingSections.find((s) => s.deptKey === findingModalDeptKey);
         const rows = section?.auditRows ?? [];
         const handleConfirm = () => {
           setSelectedFindingByDept((prev) => ({ ...prev, [findingModalDeptKey]: [...modalCheckedIndices].sort((a, b) => a - b) }));
@@ -4857,7 +5370,7 @@ function ReportPreviewPageContent() {
       })}
 
       {/* 6 Conclusion — hanya tampil jika ada data SOP/Audit. Add Conclusion → isi form → Save → system hitung (page 1 penuh dulu, sisanya next page). */}
-      {findingSections.length > 0 && (
+      {displayFindingSections.length > 0 && (
         <>
           {showConclusionForm ? (
             /* Form: title + input per department + Save */
@@ -4869,7 +5382,7 @@ function ReportPreviewPageContent() {
                 <p className="font-bold">6&nbsp;&nbsp;&nbsp;Conclusion</p>
               </div>
               <div className="flex-1 text-[11px] leading-relaxed space-y-6">
-                {findingSections.map((section, i) => (
+                {displayFindingSections.map((section, i) => (
                   <div key={section.deptKey} className="space-y-2">
                     <p className="font-semibold">
                       6.{i + 1}&nbsp;&nbsp;Department&nbsp;&nbsp;{section.deptLabel}
@@ -4986,7 +5499,7 @@ function ReportPreviewPageContent() {
       )}
 
       {/* Hanya Conclusion: pengukuran hanya untuk department yang berisi data (untuk Save). */}
-      {findingSections.length > 0 && (
+      {displayFindingSections.length > 0 && (
         <div
           ref={conclusionMeasureRef}
           className="absolute left-[-9999px] top-0 w-[210mm] overflow-visible"
@@ -4994,7 +5507,7 @@ function ReportPreviewPageContent() {
           aria-hidden="true"
         >
           <div className="px-16 text-[11px] leading-relaxed space-y-6">
-            {findingSections.flatMap((section, i) =>
+            {displayFindingSections.flatMap((section, i) =>
               splitConclusionTextIntoChunks(conclusionValues[section.deptKey] ?? "").map((text, chunkIndex) => (
                 <div
                   key={`${section.deptKey}-measure-${chunkIndex}`}
@@ -5013,7 +5526,7 @@ function ReportPreviewPageContent() {
       )}
 
       {/* Pengukuran tinggi riil (seperti Word): isi halaman sampai penuh lalu next page. Tabel tersembunyi, sama lebar & style dengan report. */}
-      {findingSections.length > 0 && (
+      {displayFindingSections.length > 0 && (
         <div
           ref={measureContainerRef}
           className="absolute left-[-9999px] top-0 w-[210mm] overflow-visible"

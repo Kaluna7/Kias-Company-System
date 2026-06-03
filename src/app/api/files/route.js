@@ -3,7 +3,6 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { saveUploadFile } from "@/app/lib/saveUploadFile";
 import {
   addFileRecord,
   createFileId,
@@ -13,7 +12,6 @@ import {
   removeFileRecord,
   sanitizeStoredName,
 } from "@/app/lib/files/fileStore";
-import fs from "fs";
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB
 
@@ -155,10 +153,7 @@ export async function POST(req) {
       createdAt: new Date().toISOString(),
     };
 
-    const tempPath = `${process.cwd()}/data/files/.tmp-${id}`;
-    await saveUploadFile(file, tempPath);
-    const buffer = await fs.promises.readFile(tempPath);
-    await fs.promises.unlink(tempPath).catch(() => {});
+    const buffer = Buffer.from(await file.arrayBuffer());
 
     const saved = await addFileRecord(year, folderId, record, buffer);
 

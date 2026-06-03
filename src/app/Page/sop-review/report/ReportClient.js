@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { jsPDF } from "jspdf";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { useToast } from "@/app/contexts/ToastContext";
+import {
+  notifySopReviewDataChanged,
+  yearFromPublishedAt,
+} from "@/app/lib/sop-review/sopReviewNotifyClient";
 
 const STEP_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED"];
 
@@ -449,6 +453,13 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
         return;
       }
       viewBaselineRef.current = deepClone(selectedDetail);
+      const publishedAt =
+        selectedDetail?.items?.[0]?.published_at || selectedDetail?.published_at;
+      notifySopReviewDataChanged({
+        apiPath,
+        reportYear: yearFromPublishedAt(publishedAt) || selectedYear,
+        action: "update",
+      });
       toast.show("Auditee comment & follow-up detail saved.", "success");
       router.refresh();
     } catch (e) {
@@ -546,6 +557,11 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
         toast.show("Delete failed: " + (data.error || res.status), "error");
         return;
       }
+      notifySopReviewDataChanged({
+        apiPath,
+        reportYear: selectedYear || new Date().getFullYear(),
+        action: "delete",
+      });
       toast.show("Published record deleted.", "success");
       setViewOpen(false);
       setSelectedDetail(null);
@@ -591,6 +607,13 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
         return;
       }
 
+      const publishedAt =
+        editSnapshot?.items?.[0]?.published_at || editSnapshot?.published_at;
+      notifySopReviewDataChanged({
+        apiPath,
+        reportYear: yearFromPublishedAt(publishedAt) || selectedYear,
+        action: "update",
+      });
       toast.show("Changes saved.", "success");
       viewBaselineRef.current = deepClone(editSnapshot);
       setSelectedDetail(deepClone(editSnapshot));

@@ -10,6 +10,7 @@ import {
   applyCommentsToSopRows,
   normalizeSopDescriptionKey,
 } from "@/app/utils/mergeSopReviewComments";
+import { notifySopReviewDataChanged } from "@/app/lib/sop-review/sopReviewNotifyClient";
 
 
 // Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
@@ -875,6 +876,12 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       }
 
       setSaveMessage({ type: "success", text: `✅ Published ${pubJson.published ?? sopData.length} SOP to Report. Department data has been cleared.` });
+
+      notifySopReviewDataChanged({
+        apiPath,
+        reportYear: auditYear,
+        action: "publish",
+      });
 
       // 3) Clear local state + refresh
       setSopData([]);

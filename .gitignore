@@ -23,7 +23,7 @@
 # generated report documents (OnlyOffice sessions)
 /data/reports/
 
-# dashboard file uploads (grouped by year)
+# legacy dashboard files (migrated to PostgreSQL on first run; not shipped in Docker image)
 /data/files/
 
 # misc

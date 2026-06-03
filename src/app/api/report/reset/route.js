@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { deleteReportSession } from "@/app/lib/report/documentStore";
+import { deleteReportState } from "@/app/lib/report/reportStateStore";
 import { getSharedReportSessionId } from "@/app/lib/report/reportProgressStorage";
 
 function parseYear(value) {
@@ -27,12 +28,14 @@ export async function POST(req) {
 
     const sessionId = getSharedReportSessionId(year);
     const removed = await deleteReportSession(sessionId);
+    await deleteReportState(year);
 
     return NextResponse.json({
       success: true,
       year,
       sessionId,
       serverSessionCleared: removed,
+      reportStateCleared: true,
       message:
         "Report progress reset. Draft text in this browser will clear after you confirm reset on the page.",
     });
