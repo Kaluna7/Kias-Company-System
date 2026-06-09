@@ -1561,8 +1561,10 @@ function auditFollowsSopOnPriorPreviewPage(pages, payload, pageIndex, page) {
 }
 
 /**
- * HTML Preview chunk list → portrait (SOP/exec) + landscape (audit table) per chunk.
- * Audit grid uses landscape column widths like the original OnlyOffice layout.
+ * HTML Preview chunks → Word sections.
+ * SOP rows for the same department are merged into one table so Word/OnlyOffice
+ * can pack continuation rows on the same page (no forced blank space per preview chunk).
+ * A new page/section starts only at the first page of each department.
  */
 function buildFindingPartsFromPreviewPages(payload) {
   const pages = payload.findingPages || [];
@@ -1570,6 +1572,10 @@ function buildFindingPartsFromPreviewPages(payload) {
 
   const ordered = [];
   let addedFindingsTitle = false;
+  /** @type {{ deptKey: string, blocks: unknown[], sopRows: object[] } | null} */
+  let portraitBuf = null;
+  /** @type {{ deptKey: string, prefixBlocks: unknown[], auditRows: object[], showTitle: boolean, wrapAudit: boolean } | null} */
+  let landscapeBuf = null;
 
   const findingsTitleBlocks = () => {
     if (addedFindingsTitle) return [];
@@ -1584,6 +1590,54 @@ function buildFindingPartsFromPreviewPages(payload) {
     ];
   };
 
+  const flushPortraitBuf = () => {
+    if (!portraitBuf) return;
+    const blocks = [...portraitBuf.blocks];
+    if (portraitBuf.sopRows.length > 0) {
+      blocks.push(
+        ...wrapWithBlockMarkers(
+          systemFindingSopBlockId(portraitBuf.deptKey),
+          buildSopTableRows(portraitBuf.sopRows, true),
+        ),
+      );
+    }
+    if (blocks.length > 0) {
+      ordered.push({ orientation: "portrait", blocks });
+    }
+    portraitBuf = null;
+  };
+
+  const flushLandscapeBuf = () => {
+    if (!landscapeBuf) return;
+    const blocks = [...landscapeBuf.prefixBlocks];
+    if (landscapeBuf.auditRows.length > 0) {
+      const auditTable = buildAuditTableRows(
+        landscapeBuf.auditRows,
+        landscapeBuf.showTitle,
+      );
+      blocks.push(
+        ...(landscapeBuf.wrapAudit
+          ? wrapWithBlockMarkers(systemFindingAuditBlockId(landscapeBuf.deptKey), auditTable)
+          : auditTable),
+      );
+    }
+    if (blocks.length > 0) {
+      ordered.push({ orientation: "landscape", blocks });
+    }
+    landscapeBuf = null;
+  };
+
+  const ensurePortraitBuf = (page) => {
+    if (portraitBuf && portraitBuf.deptKey === page.deptKey) return;
+    flushPortraitBuf();
+    flushLandscapeBuf();
+    portraitBuf = {
+      deptKey: page.deptKey,
+      blocks: [pageBreakParagraph(), ...findingsTitleBlocks()],
+      sopRows: [],
+    };
+  };
+
   pages.forEach((raw, pageIndex) => {
     const page = normalizePreviewFindingPage(raw, payload);
     const published = isDeptPublishedInPayload(payload, page.deptKey);
@@ -1595,70 +1649,75 @@ function buildFindingPartsFromPreviewPages(payload) {
     const auditFollowsSop =
       hasAudit && (hasSop || auditFollowsSopOnPriorPreviewPage(pages, payload, pageIndex, page));
 
-    const portraitBody = [];
-
-    if (page.isFirstPageForDept || (page.showDeptHeader && !hasAudit)) {
-      portraitBody.push(...deptSectionHeader(page));
-    }
-
-    if (hasExec) {
-      portraitBody.push(...wrapDeptExecSummary(page.deptKey, page.executiveSummary));
+    if (page.isFirstPageForDept) {
+      if (portraitBuf && portraitBuf.deptKey !== page.deptKey) {
+        flushPortraitBuf();
+      }
+      if (landscapeBuf && landscapeBuf.deptKey !== page.deptKey) {
+        flushLandscapeBuf();
+      }
+      ensurePortraitBuf(page);
+      portraitBuf.blocks.push(...deptSectionHeader(page));
+      if (hasExec) {
+        portraitBuf.blocks.push(...wrapDeptExecSummary(page.deptKey, page.executiveSummary));
+      }
     }
 
     if (hasSop) {
-      portraitBody.push(
-        ...wrapWithBlockMarkers(
-          systemFindingSopBlockId(page.deptKey),
-          buildSopTableRows(page.sopRows, page.isFirstSopChunk),
-        ),
-      );
-    }
-
-    let pushedPortrait = false;
-    if (portraitBody.length > 0) {
-      ordered.push({
-        orientation: "portrait",
-        blocks: [
-          pageBreakParagraph(),
-          ...findingsTitleBlocks(),
-          ...portraitBody,
-        ],
-      });
-      pushedPortrait = true;
+      if (!portraitBuf || portraitBuf.deptKey !== page.deptKey) {
+        if (landscapeBuf) flushLandscapeBuf();
+        if (!page.isFirstPageForDept) {
+          portraitBuf = {
+            deptKey: page.deptKey,
+            blocks: [],
+            sopRows: [],
+          };
+        } else {
+          ensurePortraitBuf(page);
+        }
+      }
+      portraitBuf.sopRows.push(...page.sopRows);
     }
 
     if (!hasAudit) return;
 
-    const landscapeBody = [];
+    flushPortraitBuf();
 
-    if (!pushedPortrait) {
-      if (ordered.length === 0) {
-        landscapeBody.push(pageBreakParagraph());
+    const needsNewLandscape =
+      !landscapeBuf ||
+      landscapeBuf.deptKey !== page.deptKey ||
+      (page.isFirstAuditChunk && landscapeBuf.auditRows.length > 0);
+
+    if (needsNewLandscape) {
+      flushLandscapeBuf();
+      const prefixBlocks = [];
+      if (ordered.length === 0 && !portraitBuf) {
+        prefixBlocks.push(pageBreakParagraph());
       }
       if (page.isFirstPageForDept && !auditFollowsSop) {
-        landscapeBody.push(...findingsTitleBlocks());
+        prefixBlocks.push(...findingsTitleBlocks());
       }
+      const needsLandscapeDeptHeader =
+        page.showDeptHeader ||
+        auditFollowsSop ||
+        (page.isFirstAuditChunk && !hasSop);
+      if (needsLandscapeDeptHeader) {
+        prefixBlocks.push(...deptSectionHeader(page, 100));
+      }
+      landscapeBuf = {
+        deptKey: page.deptKey,
+        prefixBlocks,
+        auditRows: [],
+        showTitle: page.isFirstAuditChunk,
+        wrapAudit: page.isFirstAuditChunk,
+      };
     }
 
-    const needsLandscapeDeptHeader =
-      page.showDeptHeader ||
-      auditFollowsSop ||
-      (page.isFirstAuditChunk && !hasSop);
-    if (needsLandscapeDeptHeader) {
-      landscapeBody.push(...deptSectionHeader(page, 100));
-    }
-
-    const auditTableBlocks = buildAuditTableRows(page.auditRows, page.isFirstAuditChunk);
-    landscapeBody.push(
-      ...(page.isFirstAuditChunk
-        ? wrapWithBlockMarkers(systemFindingAuditBlockId(page.deptKey), auditTableBlocks)
-        : auditTableBlocks),
-    );
-
-    if (landscapeBody.length > 0) {
-      ordered.push({ orientation: "landscape", blocks: landscapeBody });
-    }
+    landscapeBuf.auditRows.push(...page.auditRows);
   });
+
+  flushPortraitBuf();
+  flushLandscapeBuf();
 
   return ordered;
 }
