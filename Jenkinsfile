@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         OPENAI_API_KEY = credentials('openai-key')
+        COMPOSE_PROJECT_NAME = 'kias'
     }
 
     stages {
@@ -10,14 +11,21 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                    echo "DEPLOY START"
+                    set -e
+                    echo "DEPLOY START (compose project: ${COMPOSE_PROJECT_NAME})"
 
-                    # pastikan container lama berhenti
-                    docker compose down
+                    # Fixed container_name in compose — stop orphans from older Jenkins workspaces
+                    for c in kias-app kias-onlyoffice minio_storage; do
+                      docker rm -f "$c" 2>/dev/null || true
+                    done
 
-                    # build & run dengan env dari Jenkins
+                    docker compose down --remove-orphans || true
+
                     OPENAI_API_KEY=$OPENAI_API_KEY \
                     docker compose up -d --build
+
+                    docker compose ps
+                    echo "DEPLOY DONE"
                 '''
             }
         }

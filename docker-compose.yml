@@ -1,3 +1,6 @@
+# Fixed Compose project — Jenkins workspace folder must not change volume/container grouping.
+name: kias
+
 services:
   app:
     build:
@@ -116,6 +119,10 @@ networks:
 
 volumes:
   minio_data:
+    name: kias_minio_data
   kias_report_docs:
+    name: kias_report_docs
   onlyoffice_data:
+    name: kias_onlyoffice_data
   onlyoffice_logs:
+    name: kias_onlyoffice_logs
