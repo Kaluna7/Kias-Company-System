@@ -3,23 +3,15 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { readReportState, writeReportState } from "@/app/lib/report/reportStateStore";
-import { loadFindingSectionsForPreviewServer } from "@/app/lib/report/loadFindingSectionsServer";
-import {
-  applyAuditVisibilityToSections,
-  buildEffectivePublishMap,
-  computePreviewSnapshotHash,
-} from "@/app/lib/report/previewAuditVisibility";
-import {
-  mergeModuleTablesIntoHub,
-  getHubRevision,
-  HUB_CHANGE_SOURCE,
-} from "@/app/lib/report/reportPreviewHub";
-import { broadcastReportStateChange } from "@/app/lib/report/reportStateHub";
 import { readMeta, writeMeta } from "@/app/lib/report/documentStore";
 import { savePreviewPayload } from "@/app/lib/report/previewPayloadStore";
 import { computeModuleTablesHash } from "@/app/lib/report/moduleTablesHash";
 import { pickNarrativeFromReportState } from "@/app/lib/report/reportStateNarrative";
+import { computePreviewSnapshotHash } from "@/app/lib/report/previewAuditVisibility";
+import { getHubRevision, HUB_CHANGE_SOURCE } from "@/app/lib/report/reportPreviewHub";
+import { broadcastReportStateChange } from "@/app/lib/report/reportStateHub";
+import { refreshHubModulesForRegen } from "@/app/lib/report/refreshHubModulesForRegen";
+import { sharedReportSessionId } from "@/app/lib/report/onlyOfficeDocxGuard";
 
 function parseYear(value) {
   const y = parseInt(String(value ?? ""), 10);
@@ -28,7 +20,7 @@ function parseYear(value) {
 }
 
 /**
- * Pull latest SOP/Audit rows into hub DB (module lane only; narrative unchanged).
+ * Pull latest SOP/Audit rows into hub DB + bootstrap lock/unlock sync.
  * POST /api/report/hub/sync-modules  { year: 2025 }
  */
 export async function POST(req) {
@@ -45,32 +37,20 @@ export async function POST(req) {
     }
 
     const cookieHeader = req.headers.get("cookie") || "";
-    const { sections, lockedByDept } = await loadFindingSectionsForPreviewServer(
-      year,
-      cookieHeader,
-    );
+    const userLabel = session.user.email || session.user.name || session.user.id || "hub-sync-modules";
 
-    const existing = (await readReportState(year)) || {};
-    const effectivePublish = buildEffectivePublishMap(
-      lockedByDept,
-      existing.auditVisibleByDept || {},
-    );
-    const visibleSections = applyAuditVisibilityToSections(sections, effectivePublish);
+    const refreshed = await refreshHubModulesForRegen(year, cookieHeader, userLabel);
+    if (!refreshed.ok) {
+      return NextResponse.json(
+        { success: false, error: refreshed.error || "Hub sync failed" },
+        { status: 500 },
+      );
+    }
 
-    const state = mergeModuleTablesIntoHub(existing, {
-      findingSections: visibleSections,
-      auditVisibleByDept: existing.auditVisibleByDept,
-      hiddenAuditFindingEdits: existing.hiddenAuditFindingEdits,
-    });
+    const state = refreshed.saved;
+    const visibleSections = refreshed.findingSections || [];
 
-    const user = session.user;
-    await writeReportState(
-      year,
-      state,
-      user.email || user.name || user.id || "hub-sync-modules",
-    );
-
-    const sharedSessionId = `shared-report-${year}`;
+    const sharedSessionId = sharedReportSessionId(year);
     try {
       const meta = await readMeta(sharedSessionId);
       if (meta) {
@@ -80,18 +60,20 @@ export async function POST(req) {
           updatedAt: new Date().toISOString(),
         });
         const narrative = pickNarrativeFromReportState(state);
-        await savePreviewPayload(sharedSessionId, {
-          year,
-          source: HUB_CHANGE_SOURCE.MODULE_TABLES,
-          previewSnapshotHash: computePreviewSnapshotHash(
-            state.auditVisibleByDept,
-            visibleSections,
-            narrative,
-          ),
-          auditVisibleByDept: state.auditVisibleByDept,
-          ...narrative,
-          findingSections: visibleSections,
-        });
+        await savePreviewPayload(
+          sharedSessionId,
+          {
+            year,
+            previewSnapshotHash: computePreviewSnapshotHash(
+              state.auditVisibleByDept,
+              visibleSections,
+              narrative,
+            ),
+            auditVisibleByDept: state.auditVisibleByDept,
+            ...narrative,
+          },
+          { narrativeOnly: true },
+        );
       }
     } catch (err) {
       console.warn("[hub/sync-modules] preview payload:", err?.message || err);
@@ -113,7 +95,11 @@ export async function POST(req) {
         moduleTablesRevision: state.moduleTablesRevision,
         onlyOfficeSyncRevision: state.onlyOfficeSyncRevision,
         sections: visibleSections,
-        lockedByDept,
+        lockedByDept: refreshed.lockedByDept,
+        bootstrapped: refreshed.bootstrapped === true,
+        docxPatchMode: "hub-only",
+        docxSkipped: true,
+        docxBootstrapped: refreshed.bootstrapped === true,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

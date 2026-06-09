@@ -7,6 +7,12 @@ import { broadcastAuditPublishChange } from "@/app/lib/audit-review/auditPublish
 import { reportDeptKeyFromRouteOrApi } from "@/app/lib/audit-review/auditDeptKeys";
 import { getAuditReviewPublishStateForReport } from "@/app/lib/audit-review/reportPublishLock";
 import { DEPT_KEY_TO_API_PATH } from "@/app/lib/audit-review/auditDeptKeys";
+import { readReportState, writeReportState } from "@/app/lib/report/reportStateStore";
+import { mergeModuleTablesIntoHub } from "@/app/lib/report/reportPreviewHub";
+import { broadcastReportStateChange } from "@/app/lib/report/reportStateHub";
+import { loadFindingSectionsForPreviewServer } from "@/app/lib/report/loadFindingSectionsServer";
+import { sharedReportSessionId } from "@/app/lib/report/onlyOfficeDocxGuard";
+import { mergeModuleSectionsForHub } from "@/app/lib/report/previewAuditVisibility";
 
 export async function POST(req) {
   try {
@@ -39,7 +45,68 @@ export async function POST(req) {
 
     broadcastAuditPublishChange(payload);
 
-    return NextResponse.json({ success: true, ...payload });
+    const cookieHeader = req.headers.get("cookie") || "";
+    const userLabel = session.user?.email || session.user?.name || "publish-notify";
+    const existing = (await readReportState(year)) || {};
+
+    /** Source of truth: Module API — bukan preview yang sudah di-strip. */
+    const { sections, lockedByDept } = await loadFindingSectionsForPreviewServer(
+      year,
+      cookieHeader,
+      { pendingPublishByDept: { [deptKey]: isLocked } },
+    );
+
+    /** Selalu muat ulang dari modul — jangan simpan shell kosong auditRows/sopRows. */
+    const fullSections = mergeModuleSectionsForHub(existing.findingSections || [], sections || []);
+
+    const auditVisibleByDept = {
+      ...(existing.auditVisibleByDept || {}),
+      [deptKey]: isLocked,
+    };
+
+    let nextState = mergeModuleTablesIntoHub(existing, {
+      findingSections: fullSections,
+      auditVisibleByDept,
+      hiddenAuditFindingEdits: existing.hiddenAuditFindingEdits,
+    });
+    await writeReportState(year, nextState, userLabel);
+
+    broadcastReportStateChange({
+      year,
+      revision: Number(nextState?.onlyOfficeSyncRevision) || 0,
+      hubRevision: nextState?.hubRevision || 0,
+      moduleTablesRevision: nextState?.moduleTablesRevision || 0,
+      source: "audit-publish",
+    });
+
+    const lockedSection = (fullSections || []).find((s) => s.deptKey === deptKey);
+    const storedAuditRows = lockedSection?.auditRows?.length ?? 0;
+
+    /** Lock/unlock → hub DB + HTML preview. Word: gunakan Refresh Report (full regen dari DB). */
+    const docxSync = {
+      ok: true,
+      skipped: true,
+      patched: false,
+      patchMode: "db-only",
+      wordUnchanged: true,
+      reason:
+        "Narasi & tabel disinkronkan ke DB. Klik Refresh Report di Preview untuk memperbarui Word.",
+    };
+
+    return NextResponse.json({
+      success: true,
+      ...payload,
+      hubSynced: true,
+      moduleAuditRowsStored: storedAuditRows,
+      lockedByDept,
+      docxSync,
+      docxPatched: docxSync?.patched === true,
+      sessionId: sharedReportSessionId(year),
+      /** Baris audit yang tampil di preview saat lock (bukan yang tersimpan). */
+      lockedDeptAuditRows: isLocked ? storedAuditRows : 0,
+      lockedDeptSopRows: lockedSection?.sopRows?.length ?? 0,
+      lockedDeptHasExecSummary: Boolean(lockedSection?.executiveSummary),
+    });
   } catch (err) {
     console.error("POST /api/audit-review/publish-notify:", err);
     return NextResponse.json(

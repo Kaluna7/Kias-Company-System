@@ -3,6 +3,8 @@
  * Works with a single Node process (pnpm dev / next start in Docker).
  */
 
+import { broadcastPreviewRealtime } from "@/app/lib/report/previewRealtimeHub";
+
 const CHANNEL = "audit-review-publish";
 
 if (!global._auditPublishHub) {
@@ -47,6 +49,8 @@ export function broadcastAuditPublishChange(payload) {
       yearSet.delete(sub);
     }
   }
+
+  broadcastPreviewRealtime(event);
 }
 
 /**

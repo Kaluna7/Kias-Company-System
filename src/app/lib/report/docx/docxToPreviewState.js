@@ -221,7 +221,18 @@ export async function extractPreviewStateFromDocx(docxBuffer, hints = {}) {
     return { ok: false, reason: "empty-html" };
   }
 
-  const sections = extractSectionsFromHtml(html);
+  const blocks = collectBlocks(html);
+  const sectionMap = extractSectionsFromHtml(html);
+  const execStart = blocks.findIndex((b) => /^executive\s+summary$/i.test(b.norm));
+  const frontMatterHtml =
+    execStart > 0
+      ? blocks
+          .slice(0, execStart)
+          .map((b) => b.html)
+          .join("\n")
+          .trim()
+      : "";
+  const sections = sectionMap;
   const hintSections = hints.findingSections || [];
 
   const conclusionFromWord = extractConclusionValues(sections.conclusion, hintSections);
@@ -229,6 +240,7 @@ export async function extractPreviewStateFromDocx(docxBuffer, hints = {}) {
 
   return {
     ok: true,
+    wordFrontMatterHtml: frontMatterHtml ? `<div class="onlyoffice-front-matter">${frontMatterHtml}</div>` : "",
     executiveSummaryHtml: sections.executiveSummary || "",
     auditObjectivesScopeHtml: sections.auditObjectives || "",
     auditApproachMethodologyHtml: sections.auditApproach || "",

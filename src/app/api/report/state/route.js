@@ -14,7 +14,9 @@ import {
   applyAuditVisibilityToSections,
   buildEffectivePublishMap,
   computePreviewSnapshotHash,
+  mergeModuleSectionsForHub,
 } from "@/app/lib/report/previewAuditVisibility";
+import { loadFindingSectionsForPreviewServer } from "@/app/lib/report/loadFindingSectionsServer";
 import { readMeta, writeMeta } from "@/app/lib/report/documentStore";
 import { savePreviewPayload } from "@/app/lib/report/previewPayloadStore";
 import { mergeReportStateForPersist } from "@/app/lib/report/mergeReportStateForPersist";
@@ -26,6 +28,7 @@ import {
   HUB_SYNC_MODE_MODULE_TABLES_ONLY,
 } from "@/app/lib/report/reportPreviewHub";
 import { broadcastReportStateChange } from "@/app/lib/report/reportStateHub";
+import { getReportResetGeneration } from "@/app/lib/report/reportResetGeneration";
 
 async function filterSavedStateForPublish(state, reportYear) {
   if (!state || typeof state !== "object") return state;
@@ -72,8 +75,8 @@ export async function GET(req) {
     }
 
     const state = await readReportState(year);
-    const filtered = state ? await filterSavedStateForPublish(state, year) : null;
-    return NextResponse.json({ success: true, year, state: filtered });
+    const resetGeneration = await getReportResetGeneration(year);
+    return NextResponse.json({ success: true, year, state, resetGeneration });
   } catch (err) {
     console.error("GET /api/report/state:", err);
     return NextResponse.json({ success: false, error: err?.message ?? String(err) }, { status: 500 });
@@ -98,11 +101,20 @@ export async function POST(req) {
     const user = session.user;
 
     if (body.syncMode === "moduleTablesOnly") {
+      const cookieHeader = req.headers.get("cookie") || "";
+      let moduleSections = [];
+      try {
+        const loaded = await loadFindingSectionsForPreviewServer(year, cookieHeader);
+        moduleSections = loaded.sections || [];
+      } catch (err) {
+        console.warn("[report/state] module reload:", err?.message || err);
+      }
       const state = {
         ...existing,
-        findingSections: Array.isArray(incoming.findingSections)
-          ? incoming.findingSections
-          : existing.findingSections,
+        findingSections: mergeModuleSectionsForHub(
+          existing.findingSections || [],
+          moduleSections.length ? moduleSections : incoming.findingSections || [],
+        ),
         hiddenAuditFindingEdits:
           incoming.hiddenAuditFindingEdits &&
           typeof incoming.hiddenAuditFindingEdits === "object"
@@ -112,6 +124,20 @@ export async function POST(req) {
           ...(existing.auditVisibleByDept || {}),
           ...(incoming.auditVisibleByDept || {}),
         },
+        ...(Array.isArray(incoming.auditTeam) ? { auditTeam: incoming.auditTeam } : {}),
+        ...(Array.isArray(incoming.preparedBy) ? { preparedBy: incoming.preparedBy } : {}),
+        ...(typeof incoming.auditCommitteeName === "string"
+          ? { auditCommitteeName: incoming.auditCommitteeName }
+          : {}),
+        ...(typeof incoming.auditCommitteeDate === "string"
+          ? { auditCommitteeDate: incoming.auditCommitteeDate }
+          : {}),
+        ...(typeof incoming.presidentDirectorName === "string"
+          ? { presidentDirectorName: incoming.presidentDirectorName }
+          : {}),
+        ...(typeof incoming.presidentDirectorDate === "string"
+          ? { presidentDirectorDate: incoming.presidentDirectorDate }
+          : {}),
       };
       await writeReportState(year, state, user.email || user.name || user.id || "user");
     } else {
@@ -143,18 +169,25 @@ export async function POST(req) {
           moduleTablesHash,
           updatedAt: new Date().toISOString(),
         });
-        await savePreviewPayload(sharedSessionId, {
-          year,
-          source: "html-preview",
-          previewSnapshotHash,
-          auditVisibleByDept: state.auditVisibleByDept,
-          executiveSummaryHtml: state.executiveSummaryHtml,
-          auditObjectivesScopeHtml: state.auditObjectivesScopeHtml,
-          auditApproachMethodologyHtml: state.auditApproachMethodologyHtml,
-          conclusionValues: state.conclusionValues,
-          appendices: state.appendices,
-          findingSections: state.findingSections,
-        });
+        await savePreviewPayload(
+          sharedSessionId,
+          {
+            year,
+            previewSnapshotHash,
+            periodStart: state.periodStart,
+            periodEnd: state.periodEnd,
+            auditCoverage: state.auditCoverage,
+            departmentCoverage: state.departmentCoverage,
+            area: state.area,
+            auditVisibleByDept: state.auditVisibleByDept,
+            executiveSummaryHtml: state.executiveSummaryHtml,
+            auditObjectivesScopeHtml: state.auditObjectivesScopeHtml,
+            auditApproachMethodologyHtml: state.auditApproachMethodologyHtml,
+            conclusionValues: state.conclusionValues,
+            appendices: state.appendices,
+          },
+          { narrativeOnly: true },
+        );
       }
     } catch (err) {
       console.warn("[report/state] sync preview payload:", err?.message || err);

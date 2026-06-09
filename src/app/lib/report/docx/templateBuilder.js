@@ -21,7 +21,6 @@ import {
   TabStopType,
   TabStopPosition,
   SectionType,
-  Footer,
   FrameAnchorType,
   FrameWrap,
   TextWrappingType,
@@ -30,6 +29,14 @@ import {
   VerticalPositionRelativeFrom,
   createWrapNone,
 } from "docx";
+import {
+  wrapWithBlockMarkers,
+} from "./blockBookmarks";
+import {
+  systemFindingSopBlockId,
+  systemFindingAuditBlockId,
+  systemFindingExecBlockId,
+} from "../reportBlocks";
 import {
   PAGE_SIZE_PORTRAIT,
   PAGE_SIZE_LANDSCAPE,
@@ -49,6 +56,7 @@ import {
   AUDIT_TABLE_CELL_SIZES,
 } from "./templateStyles";
 import {
+  PAGE_BREAK_ONLY,
   pageBreakParagraph,
   stripLeadingPageBreakOnlyParagraphs,
   stripTrailingPageBreakOnlyParagraphs,
@@ -60,6 +68,7 @@ import {
   makeHeaderRowBlue,
   imageParagraph,
   createReportDocumentFooter,
+  createInfoPageFooter,
   tocEntry,
   labelValueRow,
   borderedBoxTable,
@@ -70,6 +79,8 @@ import { htmlToDocxParagraphs } from "./htmlToDocx";
 import { resolveHtmlPageList } from "./htmlPageUtils";
 import { formatDeptTocTitle } from "./templateTitles";
 import { resolveAuditTeamRows } from "../auditTeamDefaults";
+import { resolveConclusionPagesFromPayload } from "../conclusionSegments";
+import { resolveAppendixPagesFromPayload } from "../appendixPages";
 import {
   COVER_FONT,
   COVER_REPORT_LINE_SIZE,
@@ -81,7 +92,7 @@ import {
   COVER_YEAR_SIZE,
   COVER_YEAR_WHITE_HEX,
 } from "../coverLayout";
-import { resolvePreparedByRow } from "../preparedByDefaults";
+import { resolvePreparedByRows } from "../preparedByDefaults";
 
 function readPublicImage(filename) {
   try {
@@ -100,6 +111,22 @@ function ensureTableCenterAlignment(xml) {
   });
 }
 
+async function ensureUpdateFieldsOnOpen(zip) {
+  const settingsPath = "word/settings.xml";
+  const file = zip.file(settingsPath);
+  if (!file) return false;
+
+  let xml = await file.async("string");
+  if (/<w:updateFields\b/.test(xml)) return false;
+
+  const patched = xml.includes("</w:settings>")
+    ? xml.replace("</w:settings>", '<w:updateFields w:val="true"/></w:settings>')
+    : xml;
+  if (patched === xml) return false;
+  zip.file(settingsPath, patched);
+  return true;
+}
+
 async function normalizeReportDocx(buffer) {
   const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(buffer);
@@ -113,9 +140,15 @@ async function normalizeReportDocx(buffer) {
     '<w:pgSz$1w:w="16838"$2w:h="11906"$3w:orient="landscape"$4/>',
   );
   patched = ensureTableCenterAlignment(patched);
+  const { injectBookmarksFromMarkers } = await import("./blockBookmarks");
+  const withBookmarks = injectBookmarksFromMarkers(patched);
+  if (withBookmarks !== patched) patched = withBookmarks;
 
-  if (patched === xml) return buffer;
-  zip.file(docPath, patched);
+  const settingsPatched = await ensureUpdateFieldsOnOpen(zip);
+  const docPatched = patched !== xml;
+
+  if (!docPatched && !settingsPatched) return buffer;
+  if (docPatched) zip.file(docPath, patched);
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
@@ -375,7 +408,8 @@ function buildCoverPage(payload) {
   return children;
 }
 
-const INFO_FONT = 20; // 10pt — HTML text-[10px]
+const INFO_FONT = 20; // 10pt — appendix tables
+const NARRATIVE_SECTION_FONT = 22; // 11pt — Conclusion & Appendices body text
 const PREPARED_BY_FONT = 18; // 9pt — prepared by block
 const PREPARED_BY_UNDERLINE_FONT = 14; // 7pt — signature line beside MEMBER
 /** HTML max-w-[650px], label w-[230px] */
@@ -920,9 +954,9 @@ function preparedByUnderlineCell(colIdx, colW) {
   });
 }
 
-/** Borderless table: Name | MEMBER | underline | DATE | date. */
+/** Borderless table: Name | MEMBER | underline | DATE | date — one row per member. */
 function buildPreparedByBlock(prepared) {
-  const row = resolvePreparedByRow(prepared);
+  const rows = resolvePreparedByRows(prepared);
   const tableW = PORTRAIT_CONTENT_WIDTH;
   const colW = widthsPctToDxa([28, 12, 14, 10, 36], tableW);
 
@@ -939,15 +973,31 @@ function buildPreparedByBlock(prepared) {
     ],
   });
 
-  const dataRow = new TableRow({
-    children: [
-      preparedByPlainCell(row.name, 0, colW, { bold: true }),
-      preparedByRoleCell(row.role, 1, colW),
-      preparedByUnderlineCell(2, colW),
-      preparedByPlainCell("DATE", 3, colW, { bold: true }),
-      preparedByPlainCell(row.date, 4, colW, { bold: true }),
-    ],
-  });
+  const memberRows =
+    rows.length > 0
+      ? rows.map(
+          (row) =>
+            new TableRow({
+              children: [
+                preparedByPlainCell(row.name, 0, colW, { bold: true }),
+                preparedByRoleCell(row.role, 1, colW),
+                preparedByUnderlineCell(2, colW),
+                preparedByPlainCell("DATE", 3, colW, { bold: true }),
+                preparedByPlainCell(row.date, 4, colW, { bold: true }),
+              ],
+            }),
+        )
+      : [
+          new TableRow({
+            children: [
+              preparedByPlainCell("", 0, colW, { bold: true }),
+              preparedByRoleCell("", 1, colW),
+              preparedByUnderlineCell(2, colW),
+              preparedByPlainCell("DATE", 3, colW, { bold: true }),
+              preparedByPlainCell("", 4, colW, { bold: true }),
+            ],
+          }),
+        ];
 
   return [
     new Table({
@@ -956,7 +1006,7 @@ function buildPreparedByBlock(prepared) {
       alignment: AlignmentType.LEFT,
       columnWidths: colW,
       borders: COVER_BORDER_NONE,
-      rows: [new TableRow({ children: [titleCell] }), dataRow],
+      rows: [new TableRow({ children: [titleCell] }), ...memberRows],
     }),
   ];
 }
@@ -1045,28 +1095,80 @@ function buildTocPage(payload) {
   ];
 }
 
-/** One continuous flow per section — Word paginates; preview chunk page breaks are not inserted. */
+/** One HTML preview narrative page → one portrait part (matches preview A4 pages). */
+function buildNarrativePartsFromPreview(payload) {
+  const parts = [];
+
+  const addSeries = (title, pagesHtml, fallbackHtml) => {
+    const pages = resolveHtmlPageList(pagesHtml, fallbackHtml);
+    if (!pages.length) return;
+
+    pages.forEach((pageHtml, idx) => {
+      const blocks = [pageBreakParagraph()];
+      if (idx === 0) {
+        blocks.push(
+          textParagraph(title, {
+            bold: true,
+            size: 32,
+            alignment: AlignmentType.CENTER,
+            after: 240,
+          }),
+        );
+      }
+      const body = htmlToDocxParagraphs(pageHtml, { bodyAlignment: AlignmentType.JUSTIFY });
+      blocks.push(...(body.length > 0 ? body : [textParagraph(" ", { size: BODY_SIZE })]));
+      parts.push({ orientation: "portrait", blocks });
+    });
+  };
+
+  if (payload?.source === "html-preview") {
+    addSeries(
+      "Executive Summary",
+      payload.executiveSummaryPages,
+      payload.executiveSummaryHtml,
+    );
+    addSeries(
+      "Audit Objectives and Scope",
+      payload.auditObjectivesScopePages,
+      payload.auditObjectivesScopeHtml,
+    );
+    addSeries(
+      "Audit Approach and Methodology",
+      payload.auditApproachMethodologyPages,
+      payload.auditApproachMethodologyHtml,
+    );
+  }
+
+  return parts;
+}
+
+/** One HTML preview page per Word page break — matches preview pagination. */
 function buildHtmlContentPages(title, pagesHtml, fallbackHtml, editHint, options = {}) {
   const { pageBreakBeforeTitle = false } = options;
   const pages = resolveHtmlPageList(pagesHtml, fallbackHtml);
   if (!pages.length) return [];
 
-  const blocks = [
-    textParagraph(title, {
-      bold: true,
-      size: 32,
-      alignment: AlignmentType.CENTER,
-      after: 240,
-      pageBreakBefore: pageBreakBeforeTitle,
-    }),
-  ];
-  if (editHint) {
-    blocks.push(textParagraph(editHint, { size: 18, after: 120 }));
-  }
-
-  const mergedHtml = pages.join("");
-  const body = htmlToDocxParagraphs(mergedHtml, { bodyAlignment: AlignmentType.JUSTIFY });
-  blocks.push(...(body.length > 0 ? body : [textParagraph(" ", { size: BODY_SIZE })]));
+  const blocks = [];
+  pages.forEach((pageHtml, idx) => {
+    if (idx === 0) {
+      blocks.push(
+        textParagraph(title, {
+          bold: true,
+          size: 32,
+          alignment: AlignmentType.CENTER,
+          after: 240,
+          pageBreakBefore: pageBreakBeforeTitle,
+        }),
+      );
+      if (editHint) {
+        blocks.push(textParagraph(editHint, { size: 18, after: 120 }));
+      }
+    } else {
+      blocks.push(pageBreakParagraph());
+    }
+    const body = htmlToDocxParagraphs(pageHtml, { bodyAlignment: AlignmentType.JUSTIFY });
+    blocks.push(...(body.length > 0 ? body : [textParagraph(" ", { size: BODY_SIZE })]));
+  });
   return blocks;
 }
 
@@ -1140,6 +1242,10 @@ function buildDeptExecutiveSummaryBlock(exec) {
 
 const SOP_COL_DXA = findingTableColumnWidths(SOP_TABLE_WIDTHS_PCT, PORTRAIT_CONTENT_WIDTH);
 const AUDIT_COL_DXA = findingTableColumnWidths(AUDIT_TABLE_WIDTHS_PCT, LANDSCAPE_CONTENT_WIDTH);
+const AUDIT_COL_DXA_PORTRAIT = findingTableColumnWidths(
+  AUDIT_TABLE_WIDTHS_PCT,
+  PORTRAIT_CONTENT_WIDTH,
+);
 
 const AUDIT_HEADERS = [
   "No",
@@ -1243,8 +1349,11 @@ function buildSopTableRows(sopRows, showTitle = true) {
   ];
 }
 
-function buildAuditTableRows(auditRows, showTitle = true) {
+function buildAuditTableRows(auditRows, showTitle = true, options = {}) {
   if (!auditRows?.length) return [];
+  const portrait = options.portrait === true;
+  const columnWidthsDxa = portrait ? AUDIT_COL_DXA_PORTRAIT : AUDIT_COL_DXA;
+  const contentWidthDxa = portrait ? PORTRAIT_CONTENT_WIDTH : LANDSCAPE_CONTENT_WIDTH;
   const titlePara = showTitle
     ? [
         new Paragraph({
@@ -1267,7 +1376,7 @@ function buildAuditTableRows(auditRows, showTitle = true) {
     makeTable(
       [
         makeHeaderRowBlue(AUDIT_HEADERS, null, {
-          columnWidthsDxa: AUDIT_COL_DXA,
+          columnWidthsDxa,
           cellSizes: AUDIT_TABLE_CELL_SIZES,
           nowrapCells: [0],
         }),
@@ -1287,7 +1396,7 @@ function buildAuditTableRows(auditRows, showTitle = true) {
               row.followUpDetail || (row.__continuedRow ? "" : "-"),
             ],
             {
-              columnWidthsDxa: AUDIT_COL_DXA,
+              columnWidthsDxa,
               cellSizes: AUDIT_TABLE_CELL_SIZES,
               compact: true,
               nowrapCells: [0],
@@ -1297,8 +1406,8 @@ function buildAuditTableRows(auditRows, showTitle = true) {
         ),
       ],
       {
-        columnWidthsDxa: AUDIT_COL_DXA,
-        contentWidthDxa: LANDSCAPE_CONTENT_WIDTH,
+        columnWidthsDxa,
+        contentWidthDxa,
         borderColor: "1E3A8A",
       },
     ),
@@ -1397,11 +1506,175 @@ function aggregateFindingPagesToSections(pages) {
   return order.map((key) => byDept.get(key));
 }
 
+/** Executive summary dept — system block (hilang saat unlock Audit Review). */
+function wrapDeptExecSummary(deptKey, executiveSummary) {
+  if (!executiveSummary) return [];
+  return wrapWithBlockMarkers(
+    systemFindingExecBlockId(deptKey),
+    buildDeptExecutiveSummaryBlock(executiveSummary),
+  );
+}
+
+function isDeptPublishedInPayload(payload, deptKey) {
+  const map = payload?.effectivePublishByDept || {};
+  if (map[deptKey] === true) return true;
+  if (map[deptKey] === false) return false;
+  if (payload?.auditVisibleByDept?.[deptKey] === false) return false;
+  if (payload?.auditVisibleByDept?.[deptKey] === true) return true;
+  return false;
+}
+
+function normalizePreviewFindingPage(raw, payload) {
+  const deptKey = raw.deptKey || raw.dept?.deptKey || "";
+  const published = isDeptPublishedInPayload(payload, deptKey);
+  const hasAudit = published && (raw.auditRows || []).length > 0;
+  const hasSop = (raw.sopRows || []).length > 0;
+  const executiveSummary =
+    published && raw.isFirstPageForDept && raw.executiveSummary
+      ? raw.executiveSummary
+      : null;
+
+  return {
+    deptKey,
+    deptLabel: raw.deptLabel || raw.dept?.deptLabel || "",
+    deptNum: Number(raw.deptNum) || payload.deptIndexMap?.[deptKey] || 1,
+    executiveSummary,
+    sopRows: raw.sopRows || [],
+    auditRows: published ? raw.auditRows || [] : [],
+    isFirstPageForDept: raw.isFirstPageForDept === true,
+    isFirstSopChunk: raw.isFirstSopChunk !== false,
+    isFirstAuditChunk: raw.isFirstAuditChunk !== false,
+    showDeptHeader:
+      raw.isFirstPageForDept === true ||
+      (hasAudit && raw.isFirstAuditChunk && !hasSop),
+  };
+}
+
+function auditFollowsSopOnPriorPreviewPage(pages, payload, pageIndex, page) {
+  if (page.sopRows.length > 0 || !page.auditRows.length) return false;
+  for (let i = pageIndex - 1; i >= 0; i -= 1) {
+    const prev = normalizePreviewFindingPage(pages[i], payload);
+    if (prev.deptKey !== page.deptKey) break;
+    if (prev.sopRows.length > 0) return true;
+  }
+  return false;
+}
+
 /**
- * One table per dept (full sopRows / auditRows); Word paginates rows across pages.
- * Page breaks only before a new department, not between HTML preview chunks.
+ * HTML Preview chunk list → portrait (SOP/exec) + landscape (audit table) per chunk.
+ * Audit grid uses landscape column widths like the original OnlyOffice layout.
+ */
+function buildFindingPartsFromPreviewPages(payload) {
+  const pages = payload.findingPages || [];
+  if (!pages.length) return [];
+
+  const ordered = [];
+  let addedFindingsTitle = false;
+
+  const findingsTitleBlocks = () => {
+    if (addedFindingsTitle) return [];
+    addedFindingsTitle = true;
+    return [
+      textParagraph("Findings & Recommendations", {
+        bold: true,
+        size: TITLE_SIZE,
+        alignment: AlignmentType.CENTER,
+        after: 200,
+      }),
+    ];
+  };
+
+  pages.forEach((raw, pageIndex) => {
+    const page = normalizePreviewFindingPage(raw, payload);
+    const published = isDeptPublishedInPayload(payload, page.deptKey);
+    const hasSop = page.sopRows.length > 0;
+    const hasAudit = page.auditRows.length > 0;
+    const hasExec = published && page.isFirstPageForDept && page.executiveSummary;
+    if (!hasSop && !hasAudit && !hasExec) return;
+
+    const auditFollowsSop =
+      hasAudit && (hasSop || auditFollowsSopOnPriorPreviewPage(pages, payload, pageIndex, page));
+
+    const portraitBody = [];
+
+    if (page.isFirstPageForDept || (page.showDeptHeader && !hasAudit)) {
+      portraitBody.push(...deptSectionHeader(page));
+    }
+
+    if (hasExec) {
+      portraitBody.push(...wrapDeptExecSummary(page.deptKey, page.executiveSummary));
+    }
+
+    if (hasSop) {
+      portraitBody.push(
+        ...wrapWithBlockMarkers(
+          systemFindingSopBlockId(page.deptKey),
+          buildSopTableRows(page.sopRows, page.isFirstSopChunk),
+        ),
+      );
+    }
+
+    let pushedPortrait = false;
+    if (portraitBody.length > 0) {
+      ordered.push({
+        orientation: "portrait",
+        blocks: [
+          pageBreakParagraph(),
+          ...findingsTitleBlocks(),
+          ...portraitBody,
+        ],
+      });
+      pushedPortrait = true;
+    }
+
+    if (!hasAudit) return;
+
+    const landscapeBody = [];
+
+    if (!pushedPortrait) {
+      if (ordered.length === 0) {
+        landscapeBody.push(pageBreakParagraph());
+      }
+      if (page.isFirstPageForDept && !auditFollowsSop) {
+        landscapeBody.push(...findingsTitleBlocks());
+      }
+    }
+
+    const needsLandscapeDeptHeader =
+      page.showDeptHeader ||
+      auditFollowsSop ||
+      (page.isFirstAuditChunk && !hasSop);
+    if (needsLandscapeDeptHeader) {
+      landscapeBody.push(...deptSectionHeader(page, 100));
+    }
+
+    const auditTableBlocks = buildAuditTableRows(page.auditRows, page.isFirstAuditChunk);
+    landscapeBody.push(
+      ...(page.isFirstAuditChunk
+        ? wrapWithBlockMarkers(systemFindingAuditBlockId(page.deptKey), auditTableBlocks)
+        : auditTableBlocks),
+    );
+
+    if (landscapeBody.length > 0) {
+      ordered.push({ orientation: "landscape", blocks: landscapeBody });
+    }
+  });
+
+  return ordered;
+}
+
+/**
+ * Fallback: one table per dept when preview chunks are unavailable.
  */
 function buildFindingPagesOrdered(payload) {
+  if (payload?.source === "html-preview") {
+    return buildFindingPartsFromPreviewPages(payload);
+  }
+
+  if (Array.isArray(payload.findingPages) && payload.findingPages.length > 0) {
+    return buildFindingPartsFromPreviewPages(payload);
+  }
+
   let sections = payload.findingSections || [];
   if (!sections.length && payload.findingPages?.length) {
     sections = aggregateFindingPagesToSections(payload.findingPages);
@@ -1453,10 +1726,11 @@ function buildFindingPagesOrdered(payload) {
       const portraitBlocks = [
         ...prefixBreak(false),
         ...deptSectionHeader(page),
-        ...(section.executiveSummary
-          ? buildDeptExecutiveSummaryBlock(section.executiveSummary)
-          : []),
-        ...buildSopTableRows(sopRows, true),
+        ...wrapDeptExecSummary(section.deptKey, section.executiveSummary),
+        ...wrapWithBlockMarkers(
+          systemFindingSopBlockId(section.deptKey),
+          buildSopTableRows(sopRows, true),
+        ),
       ];
       ordered.push({ orientation: "portrait", blocks: portraitBlocks });
 
@@ -1464,7 +1738,10 @@ function buildFindingPagesOrdered(payload) {
         orientation: "landscape",
         blocks: [
           ...deptSectionHeader(page, 100),
-          ...buildAuditTableRows(auditRows, true),
+          ...wrapWithBlockMarkers(
+            systemFindingAuditBlockId(section.deptKey),
+            buildAuditTableRows(auditRows, true),
+          ),
         ],
       });
       return;
@@ -1475,7 +1752,7 @@ function buildFindingPagesOrdered(payload) {
         const portraitBlocks = [
           ...prefixBreak(false),
           ...deptSectionHeader(page),
-          ...buildDeptExecutiveSummaryBlock(section.executiveSummary),
+          ...wrapDeptExecSummary(section.deptKey, section.executiveSummary),
         ];
         ordered.push({ orientation: "portrait", blocks: portraitBlocks });
       }
@@ -1483,7 +1760,10 @@ function buildFindingPagesOrdered(payload) {
       const landscapeBlocks = [
         ...(section.executiveSummary ? [] : prefixBreak(true)),
         ...deptSectionHeader(page, 100),
-        ...buildAuditTableRows(auditRows, true),
+        ...wrapWithBlockMarkers(
+          systemFindingAuditBlockId(section.deptKey),
+          buildAuditTableRows(auditRows, true),
+        ),
       ];
       ordered.push({ orientation: "landscape", blocks: landscapeBlocks });
       return;
@@ -1492,10 +1772,11 @@ function buildFindingPagesOrdered(payload) {
     const portraitBlocks = [
       ...prefixBreak(false),
       ...deptSectionHeader(page),
-      ...(section.executiveSummary
-        ? buildDeptExecutiveSummaryBlock(section.executiveSummary)
-        : []),
-      ...buildSopTableRows(sopRows, true),
+      ...wrapDeptExecSummary(section.deptKey, section.executiveSummary),
+      ...wrapWithBlockMarkers(
+        systemFindingSopBlockId(section.deptKey),
+        buildSopTableRows(sopRows, true),
+      ),
     ];
     ordered.push({ orientation: "portrait", blocks: portraitBlocks });
   });
@@ -1505,6 +1786,53 @@ function buildFindingPagesOrdered(payload) {
 
 function resolveFindingDetailPages(payload) {
   return payload.findingDetailPages?.length ? payload.findingDetailPages : [];
+}
+
+/** Narasi Finding & Recommendation per department — dari DB (bukan modul / Word). */
+function buildDeptFindingNarrativePages(payload) {
+  const items = Array.isArray(payload.deptFindingNarratives) ? payload.deptFindingNarratives : [];
+  if (!items.length) return [];
+
+  const blocks = [];
+  const deptIndexMap = payload.deptIndexMap || {};
+
+  items.forEach((item, idx) => {
+    const deptNum = deptIndexMap[item.deptKey] ?? idx + 1;
+    const findingHtml = String(item.findingHtml || "").trim();
+    const recommendationHtml = String(item.recommendationHtml || "").trim();
+    if (!findingHtml && !recommendationHtml) return;
+
+    const pageChildren = [
+      pageBreakParagraph(),
+      textParagraph("Findings & Recommendations", {
+        bold: true,
+        size: TITLE_SIZE,
+        alignment: AlignmentType.CENTER,
+        after: 200,
+      }),
+      textParagraph("5   Finding & Recommendation", { bold: true, size: BODY_SIZE }),
+      textParagraph(`5.${deptNum}   Department   ${item.deptLabel || item.deptKey}`, {
+        size: BODY_SIZE,
+      }),
+    ];
+
+    if (findingHtml) {
+      pageChildren.push(
+        textParagraph(`5.${deptNum}.1   Finding`, { bold: true, after: 80, size: BODY_SIZE }),
+        ...htmlToDocxParagraphs(findingHtml, { size: BODY_SIZE }),
+      );
+    }
+    if (recommendationHtml) {
+      pageChildren.push(
+        textParagraph("Recommendation", { bold: true, after: 80, size: BODY_SIZE }),
+        ...htmlToDocxParagraphs(recommendationHtml, { size: BODY_SIZE }),
+      );
+    }
+
+    blocks.push(...pageChildren);
+  });
+
+  return blocks;
 }
 
 function buildFindingDetailPages(payload) {
@@ -1565,20 +1893,25 @@ function buildFindingDetailPages(payload) {
 }
 
 function resolveConclusionPages(payload) {
-  const saved = payload.conclusionPages || [];
-  if (saved.length > 0) return saved;
-  const sections = payload.findingSections || [];
-  if (!sections.length) return [];
-  const segments = sections
-    .map((section, i) => ({
-      sectionNumber: i + 1,
-      deptLabel: section.deptLabel,
-      deptKey: section.deptKey,
-      text: String(section.conclusionText ?? "").trim(),
-    }))
-    .filter((seg) => seg.text);
-  if (segments.length > 0) return [segments];
-  return [[]];
+  return resolveConclusionPagesFromPayload(payload);
+}
+
+function buildConclusionBodyParagraphs(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [textParagraph("-", { size: NARRATIVE_SECTION_FONT })];
+  const paragraphs = raw
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) {
+    return [textParagraph(raw, { size: NARRATIVE_SECTION_FONT })];
+  }
+  return paragraphs.map((p, idx) =>
+    textParagraph(p, {
+      size: NARRATIVE_SECTION_FONT,
+      after: idx < paragraphs.length - 1 ? 80 : 0,
+    }),
+  );
 }
 
 function buildConclusionPages(payload) {
@@ -1589,20 +1922,24 @@ function buildConclusionPages(payload) {
     if (pageIdx === 0) {
       pageChildren.push(
         textParagraph("Conclusion", { bold: true, size: 32, alignment: AlignmentType.CENTER, after: 240 }),
-        textParagraph("6   Conclusion", { bold: true, after: 160 }),
+        textParagraph("6   Conclusion", { bold: true, after: 160, size: NARRATIVE_SECTION_FONT }),
       );
     }
     (pageSections || []).forEach((seg) => {
-      pageChildren.push(
-        textParagraph(`6.${seg.sectionNumber}   Department   ${seg.deptLabel || ""}`, {
-          bold: true,
-          size: BODY_SIZE,
-        }),
-        borderedBoxTable([
-          textParagraph(seg.text || "-", { size: BODY_SIZE }),
-        ]),
+      const conclusionBlock = [];
+      if (seg.showHeader !== false) {
+        conclusionBlock.push(
+          textParagraph(`6.${seg.sectionNumber}   Department   ${seg.deptLabel || ""}`, {
+            bold: true,
+            size: INFO_FONT,
+          }),
+        );
+      }
+      conclusionBlock.push(
+        ...buildConclusionBodyParagraphs(seg.text),
         textParagraph("", { after: 120 }),
       );
+      pageChildren.push(...conclusionBlock);
     });
     blocks.push(...pageChildren);
   });
@@ -1611,13 +1948,16 @@ function buildConclusionPages(payload) {
 
 function buildAppendixPages(payload) {
   const blocks = [];
-  const pages = payload.appendixPages || [];
+  const pages = resolveAppendixPagesFromPayload(payload);
   if (!pages.length) return blocks;
 
   blocks.push(pageBreakParagraph());
   let addedAppendicesHeading = false;
 
-  pages.forEach((page) => {
+  pages.forEach((page, pageIdx) => {
+    if (pageIdx > 0) {
+      blocks.push(pageBreakParagraph());
+    }
     if (page.showAppendicesHeading && !addedAppendicesHeading) {
       blocks.push(
         textParagraph("Appendices", { bold: true, size: 32, alignment: AlignmentType.CENTER, after: 240 }),
@@ -1626,17 +1966,22 @@ function buildAppendixPages(payload) {
     }
     (page.segments || []).forEach((seg) => {
       if (seg.title && !seg.isContinued) {
-        blocks.push(textParagraph(seg.title, { bold: true, size: 24, after: 80 }));
+        const sectionNum = Number(seg.appendixIndex) + 1;
+        blocks.push(
+          textParagraph(`7.${sectionNum}   ${seg.title}`, { bold: true, size: NARRATIVE_SECTION_FONT, after: 80 }),
+        );
       }
-      if (seg.subtitle) blocks.push(textParagraph(seg.subtitle, { after: 80 }));
       if (seg.type === "table") {
+        if (seg.subtitle && !seg.isContinued) {
+          blocks.push(textParagraph(seg.subtitle, { after: 80, size: NARRATIVE_SECTION_FONT }));
+        }
         const appendixColDxa = widthsPctToDxa([20, 12, 28, 28, 12], PORTRAIT_CONTENT_WIDTH);
         blocks.push(
           makeTable(
             [
               makeHeaderRow(
                 ["Department", "AP No", "Risk Factor", "Risk Indicator", "Risk Level"],
-                { columnWidthsDxa: appendixColDxa, headerFill: "8F8F8F" },
+                { columnWidthsDxa: appendixColDxa, headerFill: "8F8F8F", size: INFO_FONT },
               ),
               ...(seg.rows || []).map((row) =>
                 makeDataRow(
@@ -1647,17 +1992,18 @@ function buildAppendixPages(payload) {
                     row.riskIndicator || "",
                     row.riskLevel || "",
                   ],
-                  { columnWidthsDxa: appendixColDxa },
+                  { columnWidthsDxa: appendixColDxa, size: INFO_FONT },
                 ),
               ),
             ],
             { columnWidthsDxa: appendixColDxa, contentWidthDxa: PORTRAIT_CONTENT_WIDTH },
           ),
         );
-      } else if (seg.content) {
+      } else if (String(seg.content ?? "").trim()) {
         String(seg.content)
           .split(/\n/)
-          .forEach((line) => blocks.push(textParagraph(line)));
+          .filter((line) => line.length > 0)
+          .forEach((line) => blocks.push(textParagraph(line, { size: NARRATIVE_SECTION_FONT })));
       }
     });
   });
@@ -1682,31 +2028,7 @@ function sectionProps(landscape = false, margins = PAGE_MARGINS) {
 }
 
 const FOOTER = { default: createReportDocumentFooter() };
-const INFO_PAGE_FOOTER = {
-  default: new Footer({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        wordWrap: true,
-        spacing: { before: 0, after: 0 },
-        border: { top: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" } },
-        children: [
-          new TextRun({
-            text: "Head Office : ",
-            bold: true,
-            size: INFO_FONT,
-            font: FONT,
-          }),
-          new TextRun({
-            text: "Menara Sudirman 20th Floor. Jl. Jend. Sudirman Kav.60, Jakarta 12190 - Indonesia",
-            size: INFO_FONT,
-            font: FONT,
-          }),
-        ],
-      }),
-    ],
-  }),
-};
+const INFO_PAGE_FOOTER = { default: createInfoPageFooter(INFO_FONT) };
 
 function pushSection(sections, landscape, children, margins = PAGE_MARGINS) {
   let kids = stripLeadingPageBreakOnlyParagraphs(children);
@@ -1735,7 +2057,37 @@ function pushHtmlBodySection(sections, children) {
 /**
  * Interleave portrait + landscape sections in document order (OnlyOffice-friendly).
  */
-function assembleDocumentSections(frontMatter, findingParts, tailBlocks) {
+/** Teks bebas user di section Findings (mis. "TEST") — dipertahankan saat lock/unlock modul. */
+function buildUserFindingsFreeBlock(payload) {
+  const html = payload.userFindingsFreeHtml;
+  if (!String(html || "").trim()) return [];
+  const paras = htmlToDocxParagraphs(html, { bodyAlignment: AlignmentType.JUSTIFY });
+  if (!paras.length) return [];
+  return paras;
+}
+
+function splitPortraitBlocksToParts(blocks) {
+  if (!Array.isArray(blocks) || blocks.length === 0) return [];
+  const parts = [];
+  let buf = [];
+  for (const block of blocks) {
+    if (block?.[PAGE_BREAK_ONLY]) {
+      if (buf.length > 0) {
+        parts.push({ orientation: "portrait", blocks: buf });
+        buf = [];
+      }
+      continue;
+    }
+    buf.push(block);
+  }
+  if (buf.length > 0) {
+    parts.push({ orientation: "portrait", blocks: buf });
+  }
+  return parts;
+}
+
+function assembleDocumentSections(frontMatter, findingParts, tailBlocks, options = {}) {
+  const oneSectionPerPortraitPart = options.oneSectionPerPortraitPart === true;
   const sections = [];
   let portraitBuf = [...frontMatter];
   let stripPortraitLeadingBreak = false;
@@ -1751,18 +2103,41 @@ function assembleDocumentSections(frontMatter, findingParts, tailBlocks) {
     }
   };
 
+  const pushPortraitPart = (blocks) => {
+    if (oneSectionPerPortraitPart) {
+      flushPortrait();
+      let kids = blocks || [];
+      if (sections.length > 0) {
+        kids = stripLeadingPageBreakOnlyParagraphs(kids);
+      }
+      if (kids.length > 0) {
+        pushSection(sections, false, kids);
+      }
+      return;
+    }
+    portraitBuf.push(...(blocks || []));
+  };
+
   findingParts.forEach((part) => {
     if (part.orientation === "landscape") {
       flushPortrait();
-      pushSection(sections, true, part.blocks);
+      let kids = part.blocks || [];
+      if (sections.length > 0 || portraitBuf.length > 0) {
+        kids = stripLeadingPageBreakOnlyParagraphs(kids);
+      }
+      pushSection(sections, true, kids);
       stripPortraitLeadingBreak = true;
     } else {
-      portraitBuf.push(...part.blocks);
+      pushPortraitPart(part.blocks);
     }
   });
 
-  portraitBuf.push(...tailBlocks);
-  flushPortrait();
+  if (oneSectionPerPortraitPart) {
+    flushPortrait();
+  } else {
+    portraitBuf.push(...tailBlocks);
+    flushPortrait();
+  }
 
   if (sections.length === 0) {
     pushSection(sections, false, frontMatter);
@@ -1824,48 +2199,84 @@ export async function buildTemplateConsolidatedReportDocx(payload) {
     children: buildTocPage(payload),
   };
 
-  const htmlBodyBlocks = [
-    ...buildHtmlContentPages(
-      "Executive Summary",
-      payload.executiveSummaryPages,
-      payload.executiveSummaryHtml,
-      undefined,
-      { pageBreakBeforeTitle: false },
-    ),
-    ...buildHtmlContentPages(
-      "Audit Objectives and Scope",
-      payload.auditObjectivesScopePages,
-      payload.auditObjectivesScopeHtml,
-      undefined,
-      { pageBreakBeforeTitle: true },
-    ),
-    ...buildHtmlContentPages(
-      "Audit Approach and Methodology",
-      payload.auditApproachMethodologyPages,
-      payload.auditApproachMethodologyHtml,
-      undefined,
-      { pageBreakBeforeTitle: true },
-    ),
-  ];
+  const narrativeParts =
+    payload?.source === "html-preview"
+      ? buildNarrativePartsFromPreview(payload)
+      : (() => {
+          const htmlBodyBlocks = [
+            ...buildHtmlContentPages(
+              "Executive Summary",
+              payload.executiveSummaryPages,
+              payload.executiveSummaryHtml,
+              undefined,
+              { pageBreakBeforeTitle: false },
+            ),
+            ...buildHtmlContentPages(
+              "Audit Objectives and Scope",
+              payload.auditObjectivesScopePages,
+              payload.auditObjectivesScopeHtml,
+              undefined,
+              { pageBreakBeforeTitle: true },
+            ),
+            ...buildHtmlContentPages(
+              "Audit Approach and Methodology",
+              payload.auditApproachMethodologyPages,
+              payload.auditApproachMethodologyHtml,
+              undefined,
+              { pageBreakBeforeTitle: true },
+            ),
+          ];
+          if (!htmlBodyBlocks.length) return [];
+          const htmlBodySections = [];
+          pushHtmlBodySection(htmlBodySections, htmlBodyBlocks);
+          return htmlBodySections.map((section) => ({
+            orientation: "portrait",
+            blocks: section.children || [],
+          }));
+        })();
 
-  const htmlBodySections = [];
-  if (htmlBodyBlocks.length > 0) pushHtmlBodySection(htmlBodySections, htmlBodyBlocks);
+  const findingParts = buildFindingPagesOrdered(payload);
+  const userFindingsFree = buildUserFindingsFreeBlock(payload);
+  if (userFindingsFree.length > 0) {
+    findingParts.push({ orientation: "portrait", blocks: userFindingsFree });
+  }
 
+  const usePreviewFindingChunks =
+    Array.isArray(payload.findingPages) && payload.findingPages.length > 0;
   const tailBlocks = [
-    ...buildFindingDetailPages(payload),
+    ...buildDeptFindingNarrativePages(payload),
+    ...(usePreviewFindingChunks ? [] : buildFindingDetailPages(payload)),
     ...buildConclusionPages(payload),
     ...buildAppendixPages(payload),
   ];
+
+  const useHtmlPreviewPageSections = payload?.source === "html-preview";
+  const bodyParts = useHtmlPreviewPageSections
+    ? [
+        ...narrativeParts,
+        ...findingParts,
+        ...splitPortraitBlocksToParts(tailBlocks),
+      ]
+    : [...narrativeParts, ...findingParts];
 
   const sections = [
     coverSection,
     ...infoSections,
     tocSection,
-    ...htmlBodySections,
-    ...assembleDocumentSections([], buildFindingPagesOrdered(payload), tailBlocks),
+    ...assembleDocumentSections(
+      [],
+      bodyParts,
+      useHtmlPreviewPageSections ? [] : tailBlocks,
+      { oneSectionPerPortraitPart: useHtmlPreviewPageSections },
+    ),
   ];
 
-  const doc = new Document({ sections });
+  const doc = new Document({
+    sections,
+    features: {
+      updateFields: true,
+    },
+  });
 
   const buffer = await Packer.toBuffer(doc);
   return normalizeReportDocx(buffer);

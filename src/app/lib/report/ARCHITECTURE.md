@@ -1,157 +1,247 @@
-# KIAS Report Service — Arsitektur DOCX + ONLYOFFICE
+# KIAS Report — Database Source of Truth (2026-06)
 
-Laporan konsolidasi (50–200 halaman, banyak tabel, lampiran) **tidak** di-render sebagai HTML → PDF di browser. Format utama adalah **DOCX**; ONLYOFFICE Docs dipakai untuk preview, edit, dan export PDF.
+Laporan konsolidasi: **database** adalah satu-satunya sumber kebenaran untuk data bisnis.
+**OnlyOffice** = review, formatting minor, export DOCX/PDF — **bukan** penyimpan finding/recommendation/conclusion.
 
-## Alur yang dipakai di KIAS
+## Prinsip inti (keputusan arsitektur)
+
+| Data | Sumber | Editor | Saat modul lock/unlock |
+|------|--------|--------|------------------------|
+| Executive Summary, Conclusion, Appendix | `consolidated_report_state` | HTML Preview | Tidak hilang (DB) |
+| Finding & Recommendation (narasi) | `report_findings` | HTML Preview | Tidak hilang (DB) |
+| Tabel SOP / Audit | Modul API | — | Visibility + regenerate DOCX |
+
+**Alur generate (tidak ada patch/merge Word):**
 
 ```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  SOP Review │  │ Audit Review│  │ Worksheet / │
-│   Module    │  │   Module    │  │   lainnya   │
-└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-       │                │                │
-       └────────────────┼────────────────┘
-                        ▼
-              ┌─────────────────────┐
-              │ Report Service      │  ← `src/app/lib/report/reportService.js`
-              │ (Next.js API)       │
-              └──────────┬──────────┘
-                         ▼
-              ┌─────────────────────┐
-              │ Generate DOCX       │  ← `docxjs` (default) atau `docxtemplater`
-              └──────────┬──────────┘
-                         ▼
-              ┌─────────────────────┐
-              │ Store File          │  ← `data/reports/{sessionId}.docx`
-              └──────────┬──────────┘
-                         ▼
-              ┌─────────────────────┐
-              │ ONLYOFFICE          │  ← `/Page/report/editor`
-              │ Preview / Edit      │
-              └──────────┬──────────┘
-                         ▼
-         ┌───────────────┴───────────────┐
-         ▼                               ▼
-  Download DOCX                    Export PDF
-  `/api/report/documents/...`      (OnlyOffice convert, fallback LibreOffice)
+Module APIs + report_findings + consolidated_report_state
+        ↓
+buildPayloadFromDb()
+        ↓
+Generate DOCX penuh (templateBuilder)
+        ↓
+OnlyOffice (view / Refresh Word)
 ```
 
-## Dua opsi generate DOCX
+**API:** `POST /api/report/refresh-docx` · `GET|POST /api/report/findings`
 
-### Opsi 1 — Template DOCX + Docxtemplater (praktis untuk tim non-dev)
+Registry: `reportSections.js` · `reportPapers.js` · `reportFindingsStore.js`
 
-1. Desain layout di Word / ONLYOFFICE (header, footer, page number otomatis).
-2. Sisipkan placeholder, contoh:
+> Merge worker / KIASBLOCK patch **deprecated** — gunakan full regenerate dari DB.
 
-   ```
-   Company: {company_name}
-   Assessment Date: {assessment_date}
-   {#findings}
-   Title: {title}
-   Severity: {severity}
-   {/findings}
-   ```
+---
 
-3. Simpan sebagai `templates/report/consolidated/template.docx`.
-4. Set di `.env`: `REPORT_DOCX_ENGINE=docxtemplater`
+## Peta section (KIAS)
 
-Library: [Docxtemplater](https://docxtemplater.com/) + PizZip.
+```
+Cover / front matter     → SYSTEM (template awal) + USER setelah diedit & disimpan
+Executive Summary        → USER
+Objectives & Scope       → USER
+Approach & Methodology   → USER
 
-**Keuntungan:** layout diatur auditor/template owner; tabel panjang pecah halaman sendiri di Word.
+Findings — teks bebas    → USER   (finding / recommendation narasi)
+Findings — tabel SOP     → SYSTEM (modul SOP Review)
+Findings — exec summary  → SYSTEM (modul Audit Review, lock/unlock)
+Findings — tabel audit   → SYSTEM (modul Audit Review, lock/unlock)
 
-### Opsi 2 — Generate dari kode dengan docx.js (default KIAS hari ini)
+Conclusion               → USER
+Appendices               → USER (tabel evidence/asset terpisah → SYSTEM jika ditambah nanti)
+```
 
-- Implementasi: `src/app/lib/report/docx/templateBuilder.js`
-- Cocok untuk struktur sangat dinamis (pagination per dept, chunk SOP/audit, executive summary HTML).
+Hanya **`findings_module_tables`** yang di-reset / di-patch saat Create Report, lock/unlock, atau SOP berubah.
+Semua paper lain (`executive-summary`, `conclusion`, dll.) disimpan per bagian dari OnlyOffice.
 
-Set di `.env`: `REPORT_DOCX_ENGINE=docxjs` (default).
+---
 
-### Layout OnlyOffice (docxjs)
+## Marker di Word
 
-- Tabel **SOP** → halaman portrait, kolom fixed (DXA).
-- Tabel **Audit Review** (11 kolom) → **landscape** per chunk, header baris diulang, font 6pt.
-- SOP + audit di halaman preview yang sama → DOCX memecah: portrait (SOP) lalu landscape (audit) supaya tidak “hancur” di Word.
-- Footer Word asli (`PAGE X of Y`), bukan teks di tengah halaman.
+Setiap block punya marker tersembunyi (sudah dipakai di generator):
 
-## Preview HTML = auto-generate dari hub
+```
+KIASBLOCK_START_kias_sys_finding_finance_sop
+... tabel SOP ...
+KIASBLOCK_END_kias_sys_finding_finance_sop
 
-Setiap perubahan **OnlyOffice (Ctrl+S)** atau **modul (SOP / Audit lock)** menaikkan `hubRevision` di DB. Tab HTML preview memanggil `GET /api/report/hub/snapshot` (poll 2s + SSE) dan menerapkan ulang seluruh tampilan (narasi + tabel).
+KIASBLOCK_START_kias_user_narrative_executive_summary
+... teks user ...
+KIASBLOCK_END_kias_user_narrative_executive_summary
+```
 
-## Preview HTML = hub (seperti container GitHub)
+| Block ID | Jenis |
+|----------|-------|
+| `sys:finding:{dept}:sop` | SYSTEM |
+| `sys:finding:{dept}:audit` | SYSTEM (lock) |
+| `sys:finding:{dept}:exec-summary` | SYSTEM (lock) |
+| `user:narrative:*` | USER |
+| `user:conclusion:{dept}` | USER |
+| `user:appendix:{id}` | USER |
+| `user:note:{id}` | USER |
 
-| | HTML preview + `consolidated_report_state` | DOCX + ONLYOFFICE |
-|---|---------------------------------------------|-------------------|
-| Peran | **Container / source of truth** | View + edit Word + export PDF |
-| Jalur `narrative` | ES, objectives, approach, conclusions, appendices | Ctrl+S → ekstrak ke hub (`onlyOfficeSyncRevision`) |
-| Jalur `moduleTables` | Tabel SOP + Audit, lock/unlock (`moduleTablesRevision`) | Regenerate DOCX dari hub (narasi DB tidak ditimpa) |
-| Realtime | SSE `/api/report/state-stream` + poll | `refreshFile` setelah `kias-report-modules-synced` |
+Engine: `docx/docxBlockEngine.js` · hapus/sisip hanya range marker SYSTEM.
+
+DOCX lama tanpa marker → fallback `patchLegacyDeptVisibilityDocx.js` (anchor teks per dept).
+
+---
+
+## Alur data
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph modules [Modul]
     SOP[SOP Review]
-    AUD[Audit Review]
+    AUD[Audit Review lock/unlock]
   end
-  subgraph hub [Hub]
-    PRE[HTML Preview UI]
-    DB[(consolidated_report_state)]
+
+  subgraph hub [Hub DB]
+    USER_DB[(User Sections / reportPapers)]
+    SYS_DB[(System Sections / reportBlocks)]
+    STATE[(consolidated_report_state)]
   end
-  OO[OnlyOffice]
-  SOP --> PRE
-  AUD --> PRE
-  PRE --> DB
-  OO -->|narasi Ctrl+S| DB
-  DB --> PRE
-  DB -->|regenerate| OO
+
+  OO[OnlyOffice Ctrl+S]
+  PRE[HTML Preview]
+
+  OO -->|ekstrak USER papers| USER_DB
+  USER_DB --> STATE
+  PRE -->|narasi + visibility| STATE
+
+  SOP -->|tabel SOP| SYS_DB
+  AUD -->|audit + exec summary| SYS_DB
+  SYS_DB --> STATE
+
+  STATE -->|patch SYSTEM only| DOCX[DOCX di disk]
+  OO <-->|edit USER| DOCX
 ```
 
-Alur KIAS:
+### Kasus 1 — User menulis finding, modul asset/SOP berubah
 
-1. **Simpan ke hub** — Preview POST `/api/report/state` dengan `syncMode: moduleTablesOnly` bila narasi sudah dari OnlyOffice (`onlyOfficeSyncRevision > 0`). Server: `mergeReportStateForPersist` / `mergeModuleTablesIntoHub` di `reportPreviewHub.js`.
-2. **OnlyOffice → hub** — Callback → `syncReportStateFromOnlyOffice` → naikkan `onlyOfficeSyncRevision` → broadcast SSE; tab preview hanya mengubah **jalur narasi** (bukan tabel modul).
-3. **Modul → hub** — `loadFindings` / POST `/api/report/hub/sync-modules` (lock/unlock) → naikkan `moduleTablesRevision` → broadcast SSE; tab lain reload tabel dari API **tanpa** menimpa narasi.
-4. **Hub → Word** — `regenerateReportDocxFromModules` memakai payload DB; narasi kosong diisi dari DOCX, yang sudah ada di DB tetap (`enrichRegeneratePayload`).
+- Finding / recommendation **tetap** (USER section)
+- Tabel SOP / audit **ter-update** (SYSTEM section saja)
 
-**Jangan** mengandalkan React → HTML → Puppeteer untuk laporan 50–200 halaman.
+### Kasus 2 — User menulis 5 halaman analisis, modul lock/unlock
 
-## API endpoints
+- 5 halaman analisis **tetap**
+- Hanya tabel audit / exec summary dept yang tampil atau hilang
 
-| Method | Path | Fungsi |
-|--------|------|--------|
-| POST | `/api/report/session` | Generate DOCX + simpan + kembalikan `sessionId` + URL editor |
-| GET | `/api/report/documents/[id]/file` | File DOCX untuk ONLYOFFICE |
-| POST | `/api/report/onlyoffice/callback` | Simpan revisi dari editor |
-| GET | `/api/report/documents/[id]/download?format=docx\|pdf` | Unduh setelah review |
-| POST | `/api/report/export?format=docx\|pdf` | Unduh langsung tanpa session (fallback) |
+---
 
-## Environment (ONLYOFFICE)
+## Merge worker (Opsi 3 — arsitektur utama)
+
+**Jangan** generate DOCX penuh saat modul berubah. **Ambil DOCX terakhir** yang diedit user di OnlyOffice, ganti **SYSTEM blocks saja**.
+
+```
+Module berubah / lock-unlock
+        ↓
+HTML Preview (hub DB — visibility + data modul utuh)
+        ↓
+OnlyOffice DOCX terakhir (shared-report-{year}.docx)
+        ↓
+reportMergeWorker.js
+  1. readDocx(sessionId)
+  2. collectUserTextOutsideSystemBlocks (fingerprint)
+  3. buildReportDocxBuffer → fragmen SYSTEM baru
+  4. deleteDocxBlocks + insertSystemBlockFromSource
+  5. verifyUserTextPreserved
+  6. saveDocx + bumpDocumentKeyAfterServerPatch
+        ↓
+OnlyOffice refresh (key / ?v=saveCount)
+```
+
+Implementasi: `src/app/lib/report/reportMergeWorker.js`
+
+| Trigger | Source constant | Entry |
+|---------|-----------------|-------|
+| Lock/unlock | `MERGE_JOB_SOURCE.VISIBILITY` | `syncPublishVisibilityToDocx` → `runReportMergeJob` |
+| SOP/audit data | `MERGE_JOB_SOURCE.MODULE_TABLES` | `regenerateFindingsPaperInDocx` → `runReportMergeJob` |
+| Manual / API | `MERGE_JOB_SOURCE.MANUAL` | `POST /api/report/merge-system-blocks` |
+
+**Marker** (lebih aman dari `[[TEXT]]` biasa — user bisa hapus teks):
+
+```
+KIASBLOCK_START_kias_sys_finding_finance_audit
+… tabel audit (OOXML) …
+KIASBLOCK_END_kias_sys_finding_finance_audit
+```
+
++ bookmark Word `kias_sys_finding_finance_audit` (di-inject saat Create Report).
+
+DOCX **legacy tanpa marker** → `patchMode: "hub-only"` (HTML preview saja; Word tidak diubah).
+
+**Antrian (opsional nanti):** BullMQ `report-merge-worker` — job payload sama dengan `runReportMergeJob`.
+
+---
+
+## Lock / unlock (Audit Review)
+
+1. Update hub: `auditVisibleByDept` saja — **jangan hapus** `auditRows` di DB
+2. HTML preview: filter tampilan (`effectivePublishByDept`)
+3. Word: merge worker — hapus/sisip **hanya** block SYSTEM dept tersebut (jika ada marker)
+4. **Tidak** regenerate narasi, conclusion, appendices
+
+---
+
+## Penyimpanan (hari ini vs target DB)
+
+Hari ini semua di `consolidated_report_state` + `reportPapers` (JSON).
+
+Target relasional (opsional):
+
+```sql
+report_sections
+---------------
+id
+report_year
+section_key      -- executive_summary, findings_module_tables, ...
+source_type      -- user | system
+content          -- JSON / HTML
+revision
+updated_at
+```
+
+Mapping field lama → `section_key` ada di `reportSections.js` (`legacyField`, `paperId`).
+
+---
+
+## API & file penting
+
+| File | Peran |
+|------|--------|
+| `reportSections.js` | Registry USER vs SYSTEM |
+| `reportPapers.js` | Save per paper (user only) |
+| `reportBlocks.js` | Manifest block SYSTEM findings |
+| `syncPublishVisibilityToDocx.js` | Lock/unlock → patch Word |
+| `reportMergeWorker.js` | **Merge worker** — patch SYSTEM di DOCX user |
+| `patchVisibilityOnlyDocx.js` | Wrapper visibility → merge worker |
+| `patchLegacyDeptVisibilityDocx.js` | Patch DOCX tanpa marker (tidak aktif) |
+| `regenerateFindingsPaper.js` | Wrapper module tables → merge worker |
+| `syncPreviewFromOnlyOffice.js` | OnlyOffice → USER papers |
+| `buildPayloadFromPapers.js` | Render: USER dari DB + SYSTEM dari modul |
+
+| Endpoint | Peran |
+|----------|-------|
+| POST `/api/audit-review/publish-notify` | Lock/unlock → hub + Word visibility |
+| POST `/api/report/hub/sync-modules` | SOP berubah → hub (tanpa replace narasi) |
+| POST `/api/report/merge-system-blocks` | Merge worker manual (patch SYSTEM di Word) |
+| POST `/api/report/session` | Create report (`resetFindingsOnly`) |
+| OnlyOffice callback | Ctrl+S → USER papers |
+
+---
+
+## Environment
 
 ```env
 ONLYOFFICE_URL=http://localhost:8082
-NEXT_PUBLIC_ONLYOFFICE_URL=http://localhost:8082
 REPORT_DOCUMENT_HOST_URL=http://kias-doc-proxy:8888
 REPORT_DOCX_ENGINE=docxjs
 ```
 
-Lokal: `pnpm onlyoffice:up` lalu `pnpm dev`.
+Lokal: `pnpm onlyoffice:up` · `pnpm dev`
 
-## Menambah modul baru ke pipeline
+---
 
-1. Modul mengirim data ke snapshot (seperti `buildReportExportPayload()` di preview).
-2. Perluas `templateBuilder.js` atau field template Docxtemplater.
-3. Tidak perlu mengubah alur ONLYOFFICE — hanya isi DOCX awal.
+## Yang dihindari
 
-## File penting
-
-| File | Peran |
-|------|--------|
-| `reportService.js` | Orkestrasi generate → store → session |
-| `docx/generateReportDocx.js` | Pilih engine docxjs / docxtemplater |
-| `docx/templateBuilder.js` | Opsi 2 — consolidated report |
-| `docx/docxtemplaterEngine.js` | Opsi 1 — template Word |
-| `documentStore.js` | Penyimpanan `data/reports/` |
-| `onlyoffice/*` | Config editor, JWT, PDF convert |
-| `exportReportClient.js` | Helper client |
-| `reportPreviewHub.js` | Kontrak hub: jalur narasi vs moduleTables |
-| `syncPreviewFromOnlyOffice.js` | OnlyOffice save → hub narasi |
-| `useReportStateRealtime.js` | SSE/poll: narasi + moduleTables revision |
+1. Full rebuild DOCX pada lock/unlock (hanya patch SYSTEM)
+2. `fetchBatchStatus` menimpa unlock optimistic sebelum DB selesai
+3. Merge preserved findings yang mengembalikan audit rows setelah unlock
+4. Event `kias-report-modules-synced` memicu regen Word saat lock/unlock (hanya saat SOP berubah)

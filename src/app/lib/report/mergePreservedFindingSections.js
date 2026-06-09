@@ -68,13 +68,15 @@ export function mergePreservedFindingSections(
   if (!Array.isArray(preserved) || preserved.length === 0) {
     return incoming.map((section) => {
       const isLocked = lockedByDept[section.deptKey] === true;
-      if (!isLocked) {
-        return { ...section, auditRows: [], executiveSummary: null };
-      }
       const hidden = hiddenAuditByDept[section.deptKey];
-      return hidden?.length
-        ? { ...section, auditRows: mergeRows(section.auditRows, hidden) }
-        : section;
+      const auditRows = hidden?.length
+        ? mergeRows(section.auditRows, hidden)
+        : section.auditRows || [];
+      return {
+        ...section,
+        isPublishedToReport: isLocked,
+        auditRows,
+      };
     });
   }
 
@@ -86,35 +88,27 @@ export function mergePreservedFindingSections(
     const hiddenAudit = hiddenAuditByDept[section.deptKey];
 
     if (!prev) {
-      if (!isLocked) {
-        return { ...section, auditRows: [], executiveSummary: null };
-      }
-      return hiddenAudit?.length
-        ? { ...section, auditRows: mergeRows(section.auditRows, hiddenAudit) }
-        : section;
+      const auditRows = hiddenAudit?.length
+        ? mergeRows(section.auditRows, hiddenAudit)
+        : section.auditRows || [];
+      return {
+        ...section,
+        isPublishedToReport: isLocked,
+        auditRows,
+      };
     }
 
     const preservedAudit =
       (prev.auditRows?.length ? prev.auditRows : null) ||
       (hiddenAudit?.length ? hiddenAudit : null);
 
-    if (!isLocked) {
-      return {
-        ...section,
-        areaAudit: freshModuleReload
-          ? section.areaAudit
-          : String(prev.areaAudit || "").trim() && prev.areaAudit !== section.areaAudit
-            ? prev.areaAudit
-            : section.areaAudit,
-        executiveSummary: null,
-        sopRows: mergeSopRowsFromModule(section.sopRows, prev.sopRows),
-        auditRows: [],
-        _preservedAuditRows: preservedAudit || [],
-      };
-    }
+    const auditRows = freshModuleReload
+      ? section.auditRows || []
+      : mergeRows(section.auditRows, preservedAudit || []);
 
     return {
       ...section,
+      isPublishedToReport: isLocked,
       areaAudit: freshModuleReload
         ? section.areaAudit
         : String(prev.areaAudit || "").trim() && prev.areaAudit !== section.areaAudit
@@ -124,9 +118,7 @@ export function mergePreservedFindingSections(
         ? section.executiveSummary
         : mergeExecutiveSummary(section.executiveSummary, prev.executiveSummary),
       sopRows: mergeSopRowsFromModule(section.sopRows, prev.sopRows),
-      auditRows: freshModuleReload
-        ? section.auditRows || []
-        : mergeRows(section.auditRows, preservedAudit || []),
+      auditRows,
     };
   });
 }

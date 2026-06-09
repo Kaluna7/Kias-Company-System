@@ -84,12 +84,49 @@ function summarizeAuditRow(row, index) {
   };
 }
 
+function summarizeSopRow(row, index) {
+  return {
+    no: row.no ?? index + 1,
+    sopRelated: (row.sopRelated || "").toString().slice(0, 600),
+    reviewComment: (row.reviewComment || "").toString().slice(0, 500),
+    auditeeComment: (row.auditeeComment || "").toString().slice(0, 400),
+    followUpDetail: (row.followUpDetail || "").toString().slice(0, 400),
+  };
+}
+
+function sectionRowsFromSavedOrClient(savedSection, clientSection) {
+  const section = clientSection && typeof clientSection === "object" ? clientSection : savedSection;
+  if (!section || typeof section !== "object") {
+    return { sopRows: [], auditRows: [], executiveSummary: null };
+  }
+  return {
+    sopRows: (section.sopRows || []).slice(0, 50).map(summarizeSopRow),
+    auditRows: (section.auditRows || []).slice(0, 40).map(summarizeAuditRow),
+    executiveSummary: section.executiveSummary
+      ? buildDeptExecutiveSummaryFromRow(section.executiveSummary)
+      : null,
+  };
+}
+
 /**
  * Build structured context for report AI from DB + session (server-only).
+ * @param {{ sessionId?: string, year?: number }} options
  */
-export async function buildReportAiContext(sessionId) {
-  const meta = (await readMeta(sessionId)) || {};
-  const year = Number(meta.year) || new Date().getFullYear();
+export async function buildReportAiContext(options = {}) {
+  let sessionId = String(options.sessionId || "").trim();
+  let year = Number(options.year);
+
+  let meta = {};
+  if (sessionId) {
+    meta = (await readMeta(sessionId)) || {};
+    if (!Number.isFinite(year)) {
+      year = Number(meta.year) || new Date().getFullYear();
+    }
+  } else if (Number.isFinite(year)) {
+    sessionId = `shared-report-${year}`;
+  } else {
+    throw new Error("year or sessionId required");
+  }
   const savedState = (await readReportState(year)) || {};
 
   const departments = [];
@@ -137,4 +174,69 @@ export async function buildReportAiContext(sessionId) {
 
 export function formatReportAiContextForPrompt(context) {
   return JSON.stringify(context, null, 2).slice(0, 120000);
+}
+
+/**
+ * Focused context for one department conclusion (SOP review + audit findings).
+ * @param {{ sessionId?: string, year?: number, deptKey: string, deptSection?: object }} options
+ */
+export async function buildDeptConclusionAiContext(options = {}) {
+  const deptKey = String(options.deptKey || "").trim();
+  const dept = REPORT_AI_DEPARTMENTS.find((d) => d.key === deptKey);
+  if (!dept) {
+    throw new Error(`Unknown department: ${deptKey || "(empty)"}`);
+  }
+
+  let sessionId = String(options.sessionId || "").trim();
+  let year = Number(options.year);
+
+  let meta = {};
+  if (sessionId) {
+    meta = (await readMeta(sessionId)) || {};
+    if (!Number.isFinite(year)) {
+      year = Number(meta.year) || new Date().getFullYear();
+    }
+  } else if (Number.isFinite(year)) {
+    sessionId = `shared-report-${year}`;
+  } else {
+    throw new Error("year or sessionId required");
+  }
+
+  const savedState = (await readReportState(year)) || {};
+  const savedSection = (savedState.findingSections || []).find((s) => s.deptKey === deptKey);
+  let { sopRows, auditRows, executiveSummary } = sectionRowsFromSavedOrClient(
+    savedSection,
+    options.deptSection,
+  );
+
+  const publish = await getAuditReviewPublishStateForReport(dept.apiPath, year);
+  const isPublished = publish.isPublished === true;
+
+  if (!executiveSummary && isPublished) {
+    executiveSummary = buildDeptExecutiveSummaryFromRow(publish.row);
+  }
+
+  if (auditRows.length === 0 && isPublished) {
+    const rows = await loadAuditFindingsRows(dept.apiPath, year);
+    auditRows = rows.slice(0, 40).map(summarizeAuditRow);
+  }
+
+  const savedConclusion = (savedState.conclusionValues || {})[dept.key] || "";
+
+  return {
+    sessionId,
+    year,
+    reportTitle: meta.title || `KIAS Consolidated Report ${year}`,
+    department: {
+      deptKey: dept.key,
+      deptLabel: dept.label,
+      isPublishedToReport: isPublished,
+      executiveSummary,
+      sopReviewCount: sopRows.length,
+      sopReview: sopRows,
+      auditFindingsCount: auditRows.length,
+      auditFindings: auditRows,
+      savedConclusion: String(savedConclusion).trim().slice(0, 4000),
+    },
+  };
 }

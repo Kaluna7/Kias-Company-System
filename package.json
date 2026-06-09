@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack --hostname 0.0.0.0",
-    "dev:ngrok": "next dev --turbopack --hostname 0.0.0.0",
+    "dev": "node server.mjs",
+    "dev:next": "node -e \"console.error('\\nUse: pnpm dev\\n(WebSocket collaboration requires server.mjs, not next dev alone.)\\n');process.exit(1)\"",
+    "dev:ngrok": "node server.mjs",
     "build": "next build --turbopack",
     "postinstall": "",
-    "start": "next start",
+    "start": "node server.mjs",
     "start:fresh": "pnpm build && pnpm start",
     "restart:fresh": "powershell -ExecutionPolicy Bypass -File scripts/restart-fresh.ps1",
     "lint": "eslint",
@@ -46,6 +47,7 @@
     "react-calendar": "^6.0.0",
     "react-dom": "19.2.4",
     "react-icons": "^5.5.0",
+    "ws": "^8.21.0",
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0",
     "zustand": "^5.0.8"

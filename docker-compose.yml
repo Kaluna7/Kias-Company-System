@@ -51,6 +51,9 @@ services:
       # Legacy local evidence/worksheet files (before MinIO); keep until all files migrated
       - /var/www/kias-uploads:/app/public/uploads
       - kias_report_docs:/app/data/reports
+      # Dashboard Files module: binary + folders live in PostgreSQL (file_uploads / file_folders).
+      # Do NOT add a bind mount or named volume for /app/data/files — redeploy would show an empty dir
+      # and risks wiping imported folder metadata on the host.
 
     ulimits:
       nofile:

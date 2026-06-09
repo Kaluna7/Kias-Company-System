@@ -53,6 +53,7 @@ function DashboardPageContent() {
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
   const [isHelpSupportOpen, setIsHelpSupportOpen] = useState(false);
   const [isSamplingOpen, setIsSamplingOpen] = useState(false);
@@ -66,6 +67,9 @@ function DashboardPageContent() {
   const [editAvatarFile, setEditAvatarFile] = useState(null);
   const [editAvatarPreview, setEditAvatarPreview] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountEmail, setNewAccountEmail] = useState("");
@@ -128,7 +132,8 @@ function DashboardPageContent() {
   useEffect(() => {
     // route protection
     if (status === "unauthenticated") {
-      router.replace("/Page/auth");
+      const callback = encodeURIComponent("/Page/dashboard");
+      router.replace(`/?callbackUrl=${callback}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -420,6 +425,20 @@ function DashboardPageContent() {
     setIsEditProfileOpen(false);
   }, [isSavingProfile]);
 
+  const openChangePassword = useCallback(() => {
+    setIsProfileOpen(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setIsChangePasswordOpen(true);
+  }, []);
+
+  const closeChangePassword = useCallback(() => {
+    if (isChangingPassword) return;
+    setIsChangePasswordOpen(false);
+    setNewPassword("");
+    setConfirmPassword("");
+  }, [isChangingPassword]);
+
   const openCreateAccount = useCallback(() => {
     setIsProfileOpen(false);
     setNewAccountName("");
@@ -492,6 +511,47 @@ function DashboardPageContent() {
       setIsSavingProfile(false);
     }
   }, [editName, editAvatarFile, toast]);
+
+  const handleChangePassword = useCallback(async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.show("Please fill in new password and confirmation.", "warning");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.show("New password must be at least 6 characters.", "warning");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.show("New password and confirmation do not match.", "warning");
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      const res = await fetch("/api/profile/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newPassword,
+          confirmPassword,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        toast.show(json?.error || `Failed to change password (HTTP ${res.status})`, "error");
+        return;
+      }
+      setIsChangePasswordOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.show("Password changed successfully.", "success");
+    } catch (e) {
+      toast.show(e?.message || "Failed to change password.", "error");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }, [newPassword, confirmPassword, toast]);
+
   const helpSupportText = "Halo, system kias ada error.";
   const helpSupportLink = `https://wa.me/qr/K5GKCLOXIZ3CE1?text=${encodeURIComponent(helpSupportText)}`;
 
@@ -653,6 +713,13 @@ function DashboardPageContent() {
                     >
                       <span className="font-medium">Edit Profile</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={openChangePassword}
+                      className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
+                    >
+                      <span className="font-medium">Change Password</span>
+                    </button>
                     {canCreateEmployeeAccount && (
                       <button
                         type="button"
@@ -671,7 +738,7 @@ function DashboardPageContent() {
                     </button>
                   </div>
                   <div className="border-t border-gray-200/30 mt-1 pt-1 px-2">
-                    <button onClick={() => signOut({ callbackUrl: "/Page/auth" })} className="w-full flex items-center px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors text-sm"><span className="font-medium">Sign Out</span></button>
+                    <button onClick={() => signOut({ callbackUrl: "/" })} className="w-full flex items-center px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors text-sm"><span className="font-medium">Sign Out</span></button>
                   </div>
                 </div>
               </div>
@@ -966,6 +1033,74 @@ function DashboardPageContent() {
                 disabled={isSavingProfile}
               >
                 {isSavingProfile ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-3 p-6 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Change Password</h2>
+                <p className="text-xs text-slate-500 mt-1">Set a new password for your account.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeChangePassword}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                disabled={isChangingPassword}
+              >
+                <span className="sr-only">Close</span>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="Minimum 6 characters"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="Re-enter new password"
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeChangePassword}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+                disabled={isChangingPassword}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleChangePassword}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#141D38] to-[#2D3A5A] hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={isChangingPassword}
+              >
+                {isChangingPassword ? "Saving..." : "Change Password"}
               </button>
             </div>
           </div>

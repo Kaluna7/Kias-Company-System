@@ -4,12 +4,11 @@ export const dynamic = "force-dynamic";
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
-import { preloadLoadingAnimation } from "@/app/components/shared/LoadingProgressOverlay";
-import { clearClientReportProgress } from "@/app/lib/report/reportProgressStorage";
-
-if (typeof window !== "undefined") {
-  preloadLoadingAnimation();
-}
+import { markClientReportReset } from "@/app/lib/report/reportProgressStorage";
+import {
+  getReportCollaborationStatus,
+  syncReportDocxFromPreview,
+} from "@/app/lib/report/exportReportClient";
 
 function ReportPageContent() {
   const searchParams = useSearchParams();
@@ -20,14 +19,27 @@ function ReportPageContent() {
   const [resetModal, setResetModal] = useState(null); // null | "confirm" | "success" | "error"
   const [resetErrorMessage, setResetErrorMessage] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [openingReport, setOpeningReport] = useState(false);
 
-  const handleCreateReport = () => {
+  const handleOpenReport = async () => {
     const params = new URLSearchParams();
     if (Number.isFinite(year)) {
       params.set("year", String(year));
     }
-    params.set("onlyOfficeCreate", "1");
-    router.push(`/Page/report/preview?${params.toString()}`);
+
+    setOpeningReport(true);
+    try {
+      const collab = await getReportCollaborationStatus(year);
+      // Join OnlyOffice only when someone is actively in the editor — not just because DOCX exists.
+      if (collab.ok && collab.onlyOfficeOpen && collab.editorPath) {
+        await syncReportDocxFromPreview(year);
+        router.replace(collab.editorPath);
+        return;
+      }
+      router.push(`/Page/report/preview?${params.toString()}`);
+    } finally {
+      setOpeningReport(false);
+    }
   };
 
   const handleConfirmReset = async () => {
@@ -45,7 +57,7 @@ function ReportPageContent() {
         setResetModal("error");
         return;
       }
-      clearClientReportProgress(year);
+      markClientReportReset(year, json.resetGeneration ?? 0);
       setResetModal("success");
     } catch (err) {
       setResetErrorMessage(err?.message || "Reset failed. Please try again.");
@@ -62,12 +74,12 @@ function ReportPageContent() {
           <button
             type="button"
             onClick={() => {
-              if (typeof window === "undefined") return;
-              if (window.history.length > 1) {
-                window.history.back();
-                return;
+              const params = new URLSearchParams();
+              if (Number.isFinite(year)) {
+                params.set("year", String(year));
               }
-              window.location.href = "/Page/dashboard";
+              const query = params.toString();
+              router.push(query ? `/Page/dashboard?${query}` : "/Page/dashboard");
             }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
           >
@@ -86,8 +98,9 @@ function ReportPageContent() {
                   KIAS Consolidated Report
                 </h1>
                 <p className="text-blue-200 mt-1 text-sm md:text-base">
-                  Create overall report for year{" "}
-                  <span className="font-semibold">{year}</span>.
+                  Open the shared report for year{" "}
+                  <span className="font-semibold">{year}</span> — starts in HTML Preview; joins
+                  OnlyOffice only when a teammate is already editing Word.
                 </p>
               </div>
               <button
@@ -106,8 +119,9 @@ function ReportPageContent() {
           <div className="flex items-center justify-center py-6">
             <button
               type="button"
-              onClick={handleCreateReport}
-              className="inline-flex items-center px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-sm font-semibold shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+              onClick={handleOpenReport}
+              disabled={openingReport}
+              className="inline-flex items-center px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-sm font-semibold shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <svg
                 className="w-5 h-5 mr-2"
@@ -119,10 +133,10 @@ function ReportPageContent() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 4v16m8-8H4"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 />
               </svg>
-              Create &amp; edit report (OnlyOffice)
+              {openingReport ? "Opening…" : "Open Report"}
             </button>
           </div>
         </main>

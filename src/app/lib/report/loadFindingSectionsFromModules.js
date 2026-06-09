@@ -123,7 +123,6 @@ export async function loadFindingSectionsFromModules(year, options = {}, fetchIm
         isDeptLockedForReport = publishState.isLocked === true;
       }
       lockedByDept[dept.key] = isDeptLockedForReport;
-      executiveSummary = isDeptLockedForReport ? publishState.row : null;
       const findingsAuditYear = publishState.auditYear ?? year;
 
       const loadAuditReviewRows = async (auditYear, forReport) => {
@@ -135,27 +134,30 @@ export async function loadFindingSectionsFromModules(year, options = {}, fetchIm
         return Array.isArray(reviewJson.rows) ? reviewJson.rows : [];
       };
 
-      let rows = [];
-      if (isDeptLockedForReport) {
-        rows = await loadAuditReviewRows(findingsAuditYear, true);
-        if (rows.length === 0 && pendingLock === true) {
-          rows = await loadAuditReviewRows(findingsAuditYear, false);
+      /** Selalu muat dari modul — lock/unlock hanya visibility, bukan hapus source data. */
+      let rows = await loadAuditReviewRows(findingsAuditYear, true);
+      if (rows.length === 0) {
+        rows = await loadAuditReviewRows(findingsAuditYear, false);
+      }
+
+      try {
+        const execRes = await doFetch(
+          `/api/audit-review/${dept.apiPath}/executive-summary?year=${encodeURIComponent(String(findingsAuditYear))}&_=${Date.now()}`,
+          { cache: "no-store" },
+        );
+        if (execRes.ok) {
+          const execJson = await execRes.json().catch(() => ({}));
+          executiveSummary = execJson.data ?? publishState.row ?? null;
+        } else if (publishState.row) {
+          executiveSummary = publishState.row;
         }
-        if (!executiveSummary && pendingLock === true) {
-          const execRes = await doFetch(
-            `/api/audit-review/${dept.apiPath}/executive-summary?year=${encodeURIComponent(String(findingsAuditYear))}&_=${Date.now()}`,
-            { cache: "no-store" },
-          );
-          if (execRes.ok) {
-            const execJson = await execRes.json().catch(() => ({}));
-            executiveSummary = execJson.data ?? null;
-          }
-        }
+      } catch {
+        executiveSummary = publishState.row ?? null;
       }
 
       deriveAuditYearFromReviewRows(rows);
 
-      if (isDeptLockedForReport && rows.length > 0) {
+      if (rows.length > 0) {
         auditRows = sortByRiskId(rows).map((r, idx) => ({
           sourceIndex: idx,
           no: idx + 1,
@@ -196,12 +198,9 @@ export async function loadFindingSectionsFromModules(year, options = {}, fetchIm
       /* fallback label */
     }
 
-    const visibleAuditRows = isDeptLockedForReport && auditRows.length > 0 ? auditRows : [];
-    const deptExecutiveSummary = isDeptLockedForReport
-      ? buildDeptExecutiveSummaryFromRow(executiveSummary)
-      : null;
-    const hasExecForReport =
-      isDeptLockedForReport && executiveSummaryRowHasContent(deptExecutiveSummary);
+    const visibleAuditRows = auditRows;
+    const deptExecutiveSummary = buildDeptExecutiveSummaryFromRow(executiveSummary);
+    const hasExecForReport = executiveSummaryRowHasContent(deptExecutiveSummary);
 
     if (sopRows.length > 0 || visibleAuditRows.length > 0 || hasExecForReport) {
       const normalizedSopRows = sopRows.map((row, idx) => ({

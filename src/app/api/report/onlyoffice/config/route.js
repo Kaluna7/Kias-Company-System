@@ -4,7 +4,13 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { readMeta, docxExists, syncDocumentKeyForFileChange } from "@/app/lib/report/documentStore";
+import {
+  readMeta,
+  docxExists,
+  syncDocumentKeyForFileChange,
+  deleteReportSession,
+} from "@/app/lib/report/documentStore";
+import { getReportResetGeneration } from "@/app/lib/report/reportResetGeneration";
 import {
   buildOnlyOfficeEditorConfig,
   buildDocumentFileUrl,
@@ -15,6 +21,7 @@ import {
   checkOnlyOfficeDocumentServer,
   getOnlyOfficeLocalStartHint,
 } from "@/app/lib/report/onlyoffice/health";
+import { broadcastOnlyOfficeSessionOpened } from "@/app/lib/report/previewRealtimeHub";
 
 export async function GET(req) {
   try {
@@ -64,7 +71,23 @@ export async function GET(req) {
       return NextResponse.json({ success: false, error: "Document not found" }, { status: 404 });
     }
 
-    const meta = await syncDocumentKeyForFileChange(sessionId);
+    let meta = await readMeta(sessionId);
+    if (meta?.year != null) {
+      const currentResetGen = await getReportResetGeneration(meta.year);
+      if (Number(meta.resetGeneration || 0) !== currentResetGen) {
+        await deleteReportSession(sessionId);
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This Word document is from before the last reset. Go to HTML Preview and click Create Word & Open OnlyOffice again.",
+            staleAfterReset: true,
+          },
+          { status: 409 },
+        );
+      }
+    }
+    meta = await syncDocumentKeyForFileChange(sessionId);
     const editorConfig = buildOnlyOfficeEditorConfig({
       sessionId,
       meta,
@@ -75,6 +98,22 @@ export async function GET(req) {
     const usesJwtToken = Boolean(editorConfig?.token);
     const resolvedUserDebug = editorConfig?.editorConfig?.user || null;
     const documentKeyDebug = editorConfig?.document?.key || null;
+
+    if (meta?.year != null) {
+      try {
+        broadcastOnlyOfficeSessionOpened(meta.year, {
+          sessionId,
+          editorPath: `/Page/report/editor?session=${encodeURIComponent(sessionId)}`,
+          openedBy: {
+            id: session.user.id || session.user.email,
+            name: session.user.name || session.user.email,
+            email: session.user.email,
+          },
+        });
+      } catch {
+        /* ignore */
+      }
+    }
 
     return NextResponse.json(
       {

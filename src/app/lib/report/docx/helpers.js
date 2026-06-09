@@ -391,6 +391,16 @@ export function borderedBoxTable(blocks) {
   });
 }
 
+/** PAGE field runs — Word/OnlyOffice calculate on open when updateFields is enabled. */
+export function createPageNumberRuns(size = 12) {
+  return [
+    new TextRun({ text: "PAGE ", size, font: DEFAULT_FONT }),
+    PageNumber.CURRENT,
+    new TextRun({ text: " of ", size, font: DEFAULT_FONT }),
+    PageNumber.TOTAL_PAGES,
+  ];
+}
+
 /** Word footer (PAGE X of Y) — must not be inline in body or it floats mid-page. */
 export function createReportDocumentFooter() {
   return new Footer({
@@ -407,15 +417,44 @@ export function createReportDocumentFooter() {
           new TextRun({ text: "\t", size: 12 }),
           new TextRun({ text: "INTERNAL AUDIT REPORT", bold: true, size: 12, font: DEFAULT_FONT }),
           new TextRun({ text: "\t", size: 12 }),
-          new TextRun({ text: "PAGE ", size: 12, font: DEFAULT_FONT }),
-          PageNumber.CURRENT,
-          new TextRun({ text: " of ", size: 12, font: DEFAULT_FONT }),
-          PageNumber.TOTAL_PAGES,
+          ...createPageNumberRuns(12),
         ],
         tabStops: [
           { type: TabStopType.CENTER, position: 4680 },
           { type: TabStopType.RIGHT, position: 9360 },
         ],
+      }),
+    ],
+  });
+}
+
+/** Info page (page 2): head office line + page numbers. */
+export function createInfoPageFooter(fontSize = 20) {
+  return new Footer({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        wordWrap: true,
+        spacing: { before: 0, after: 0 },
+        border: { top: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" } },
+        children: [
+          new TextRun({
+            text: "Head Office : ",
+            bold: true,
+            size: fontSize,
+            font: FONT,
+          }),
+          new TextRun({
+            text: "Menara Sudirman 20th Floor. Jl. Jend. Sudirman Kav.60, Jakarta 12190 - Indonesia",
+            size: fontSize,
+            font: FONT,
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        spacing: { before: 40, after: 0 },
+        children: createPageNumberRuns(12),
       }),
     ],
   });

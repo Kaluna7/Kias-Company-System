@@ -11,6 +11,13 @@ function mergeHtmlFieldPreferDb(existing, fromWord) {
   return word || existing || "";
 }
 
+/** Saat user sudah edit OnlyOffice — Word adalah sumber narasi, bukan HTML preview lama. */
+function mergeHtmlFieldPreferWord(existing, fromWord) {
+  const word = String(fromWord ?? "").trim();
+  if (word) return fromWord;
+  return existing ?? "";
+}
+
 /**
  * When rebuilding DOCX (module refresh / lock-unlock), keep OnlyOffice narrative
  * from DB + existing shared DOCX — not empty HTML preview defaults.
@@ -21,13 +28,15 @@ export async function enrichRegeneratePayloadWithOnlyOffice(year, payload) {
 
   const saved = (await readReportState(y)) || {};
   const rev = Number(saved.onlyOfficeSyncRevision) || 0;
-  if (rev <= 0) return payload;
 
-  let next = buildPersistPayloadWithProtectedNarrative({
-    dbState: saved,
-    tablesPayload: payload,
-    onlyOfficeSyncRevision: rev,
-  });
+  let next =
+    rev > 0
+      ? buildPersistPayloadWithProtectedNarrative({
+          dbState: saved,
+          tablesPayload: payload,
+          onlyOfficeSyncRevision: rev,
+        })
+      : { ...payload, ...saved, findingSections: payload.findingSections || saved.findingSections };
 
   const sessionId = `shared-report-${y}`;
   if (await docxExists(sessionId)) {
@@ -38,28 +47,36 @@ export async function enrichRegeneratePayloadWithOnlyOffice(year, payload) {
         conclusionValues: next.conclusionValues || saved.conclusionValues,
       });
       if (extracted.ok) {
+        const preferWord = rev > 0;
+        const mergeHtml = preferWord ? mergeHtmlFieldPreferWord : mergeHtmlFieldPreferDb;
+        const hasWordNarrative =
+          String(extracted.executiveSummaryHtml || "").trim() ||
+          String(extracted.wordFindingsHtml || "").trim() ||
+          String(extracted.wordFrontMatterHtml || "").trim();
+        const mergeHtmlResolved =
+          !preferWord && hasWordNarrative ? mergeHtmlFieldPreferWord : mergeHtml;
         next = {
           ...next,
-          executiveSummaryHtml: mergeHtmlFieldPreferDb(
+          executiveSummaryHtml: mergeHtmlResolved(
             next.executiveSummaryHtml,
             extracted.executiveSummaryHtml,
           ),
-          auditObjectivesScopeHtml: mergeHtmlFieldPreferDb(
+          auditObjectivesScopeHtml: mergeHtmlResolved(
             next.auditObjectivesScopeHtml,
             extracted.auditObjectivesScopeHtml,
           ),
-          auditApproachMethodologyHtml: mergeHtmlFieldPreferDb(
+          auditApproachMethodologyHtml: mergeHtmlResolved(
             next.auditApproachMethodologyHtml,
             extracted.auditApproachMethodologyHtml,
           ),
-          conclusionValues: {
-            ...(next.conclusionValues || {}),
-            ...(extracted.conclusionValues || {}),
-          },
-          wordFindingsHtml: mergeHtmlFieldPreferDb(next.wordFindingsHtml, extracted.wordFindingsHtml),
-          wordAppendicesHtml: mergeHtmlFieldPreferDb(
-            next.wordAppendicesHtml,
-            extracted.wordAppendicesHtml,
+          conclusionValues: preferWord || hasWordNarrative
+            ? { ...(extracted.conclusionValues || {}), ...(next.conclusionValues || {}) }
+            : { ...(next.conclusionValues || {}), ...(extracted.conclusionValues || {}) },
+          wordFindingsHtml: mergeHtmlResolved(next.wordFindingsHtml, extracted.wordFindingsHtml),
+          wordAppendicesHtml: mergeHtmlResolved(next.wordAppendicesHtml, extracted.wordAppendicesHtml),
+          wordFrontMatterHtml: mergeHtmlResolved(
+            next.wordFrontMatterHtml,
+            extracted.wordFrontMatterHtml,
           ),
           onlyOfficeSyncRevision: rev,
           onlyOfficeSyncedAt: saved.onlyOfficeSyncedAt ?? next.onlyOfficeSyncedAt,

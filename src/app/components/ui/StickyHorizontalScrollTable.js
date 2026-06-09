@@ -106,8 +106,10 @@ export default function StickyHorizontalScrollTable({
       >
         <div
           ref={headerScrollRef}
-          className={`shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
-            stickyHeader ? `sticky z-30 ${stickyHeaderTopClass}` : ""
+          className={`shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-100 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+            stickyHeader
+              ? `sticky z-40 ${stickyHeaderTopClass} shadow-[0_2px_6px_rgba(15,23,42,0.08)] [&_th]:bg-gray-100`
+              : ""
           }`}
           onScroll={() => syncHorizontalScroll("header")}
         >

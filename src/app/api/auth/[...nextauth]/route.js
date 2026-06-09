@@ -89,7 +89,7 @@ export const authOptions = {
   },
 
   pages: {
-    signIn: "/Page/auth", // your app-router login path (adjust if needed)
+    signIn: "/",
   },
 
   secret: process.env.NEXTAUTH_SECRET,

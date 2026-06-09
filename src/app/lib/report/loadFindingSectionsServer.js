@@ -6,7 +6,11 @@ import { loadFindingSectionsFromModules } from "./loadFindingSectionsFromModules
  * @param {number} year
  * @param {string} [cookieHeader]
  */
-export async function loadFindingSectionsForPreviewServer(year, cookieHeader = "") {
+export async function loadFindingSectionsForPreviewServer(
+  year,
+  cookieHeader = "",
+  options = {},
+) {
   const base = getInternalFetchBaseUrl();
   const headers = {
     cache: "no-store",
@@ -24,5 +28,5 @@ export async function loadFindingSectionsForPreviewServer(year, cookieHeader = "
     });
   };
 
-  return loadFindingSectionsFromModules(year, {}, fetchViaApp);
+  return loadFindingSectionsFromModules(year, options, fetchViaApp);
 }

@@ -5,7 +5,7 @@ import { ToastProvider } from "./contexts/ToastContext";
 
 export default function Providers({ children }) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchOnWindowFocus={false}>
       <ToastProvider>{children}</ToastProvider>
     </SessionProvider>
   );

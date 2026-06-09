@@ -57,7 +57,7 @@ export const CONTENT_BODY_HEIGHT = PAGE_BODY_HEIGHT - FOOTER_RESERVE_TWIPS;
 
 export const SOP_TABLE_WIDTHS_PCT = [4, 42, 18, 18, 18];
 /** Audit grid: narrow Risk ID / Details / AP Code; wide Finding Description */
-export const AUDIT_TABLE_WIDTHS_PCT = [4, 6, 5, 6, 7, 7, 8, 13, 25, 9.5, 9.5];
+export const AUDIT_TABLE_WIDTHS_PCT = [4, 5, 6, 5, 6, 7, 7, 9, 20, 15.5, 15.5];
 /** Minimum width for "No" column so row numbers stay on one line */
 export const FINDING_TABLE_NO_COL_MIN_TWIPS = 520;
 

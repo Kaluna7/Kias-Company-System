@@ -2,6 +2,8 @@
  * In-process pub/sub: OnlyOffice save → HTML preview DB updated → all preview tabs reload.
  */
 
+import { broadcastPreviewRealtime } from "./previewRealtimeHub";
+
 const CHANNEL = "report-state-changed";
 
 if (!global._reportStateHub) {
@@ -40,6 +42,8 @@ export function broadcastReportStateChange(payload) {
       yearSet.delete(sub);
     }
   }
+
+  broadcastPreviewRealtime(event);
 }
 
 /** @param {number} year @param {(chunk: string) => void} send */

@@ -11,6 +11,19 @@ Format for Word: plain text with numbered sections (e.g. 6.1 Finance: ...).`,
     userPrefix: `Using ALL department data below, draft the full "Conclusion" section (section 6) of the consolidated internal audit report.
 Include one subsection per department that has audit or conclusion data. Be concise but complete.`,
   },
+  conclusion_dept: {
+    id: "conclusion_dept",
+    label: "Generate Conclusion (dept)",
+    labelEn: "Generate Conclusion",
+    description: "Buat conclusion satu departemen dari temuan audit & SOP review.",
+    system: `You are an internal audit report writer for KIAS (Kaluna / WHSmith Indonesia).
+Write professional audit report prose in English unless the user asks for Indonesian.
+Use only facts from the provided JSON data — do not invent findings.
+Output plain text only: no headings, no department number prefix, no markdown.`,
+    userPrefix: `Using the single department data below (SOP Review + Audit Review findings), draft the Conclusion paragraph for this department only.
+Summarize key SOP review outcomes and audit findings, note overall control environment, and close with forward-looking management actions where supported by the data.
+Keep it concise (roughly 1–3 short paragraphs).`,
+  },
   executive_summary: {
     id: "executive_summary",
     label: "Perbaiki Executive Summary",
@@ -34,8 +47,8 @@ Use only provided data.`,
     label: "Instruksi bebas",
     labelEn: "Custom",
     description: "Tulis permintaan Anda sendiri.",
-    system: `You are an AI writing assistant embedded in KIAS consolidated audit report editor (OnlyOffice).
-Help edit the Word report using the provided audit/SOP data. Output text ready to paste into the document.`,
+    system: `You are an AI writing assistant for KIAS consolidated audit report HTML Preview.
+Help draft report narrative using the provided audit/SOP data. Output plain text ready to apply in preview.`,
     userPrefix: "",
   },
 };

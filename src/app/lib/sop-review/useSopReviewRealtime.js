@@ -5,6 +5,9 @@ import {
   SOP_REVIEW_DATA_CHANGED_KEY,
   SOP_REVIEW_DATA_BROADCAST_CHANNEL,
 } from "./sopReviewNotifyClient";
+import { subscribePreviewWebSocket } from "@/app/lib/report/previewWebSocketClient";
+
+const SOP_DATA_EVENT = "sop-review-data";
 
 /**
  * Reload HTML preview when SOP Review publish/edit changes published data.
@@ -33,23 +36,10 @@ export function useSopReviewRealtime(year, onDataChanged) {
   useEffect(() => {
     if (!Number.isFinite(year)) return undefined;
 
-    let es = null;
-    try {
-      es = new EventSource(
-        `/api/sop-review/data-stream?year=${encodeURIComponent(String(year))}`,
-      );
-      es.onmessage = (ev) => {
-        try {
-          const data = JSON.parse(ev.data);
-          if (data.type === "connected") return;
-          handleEvent(data);
-        } catch {
-          /* ignore */
-        }
-      };
-    } catch {
-      /* ignore */
-    }
+    const unsubWs = subscribePreviewWebSocket(year, (data) => {
+      if (data.type !== SOP_DATA_EVENT) return;
+      handleEvent(data);
+    });
 
     const onCustom = (e) => handleEvent(e.detail || {});
     const onStorage = (e) => {
@@ -73,7 +63,7 @@ export function useSopReviewRealtime(year, onDataChanged) {
     window.addEventListener("storage", onStorage);
 
     return () => {
-      es?.close();
+      unsubWs();
       bc?.close();
       window.removeEventListener(SOP_REVIEW_DATA_CHANGED_KEY, onCustom);
       window.removeEventListener("storage", onStorage);

@@ -1111,7 +1111,7 @@ export default function AuditFindingDeptClient({
   }, []);
 
   return (
-    <main className="min-h-screen w-full bg-[#E6F0FA]">
+    <main className="flex h-dvh min-h-screen w-full flex-col overflow-hidden bg-[#E6F0FA]">
       <div className="fixed z-40 top-3 left-4">
         <button
           onClick={handleBack}
@@ -1342,7 +1342,7 @@ export default function AuditFindingDeptClient({
 
       {/* Content */}
       <div
-        className={`flex min-h-screen flex-col px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
           isHeaderCollapsed ? "pt-16" : "pt-32"
         }`}
       >
@@ -1432,40 +1432,37 @@ export default function AuditFindingDeptClient({
           </div>
         )}
 
-        <div className="mb-4">
+        <div className="mb-4 flex min-h-0 flex-1 flex-col">
           <StickyHorizontalScrollTable
-            className="w-full"
+            className="min-h-0 w-full flex-1"
             colGroup={AUDIT_FINDING_COL_GROUP}
             tableClassName="border-collapse text-xs"
             tableStyle={{ tableLayout: "fixed", width: AUDIT_FINDING_TABLE_WIDTH, minWidth: AUDIT_FINDING_TABLE_WIDTH }}
             measureDeps={[displayTableData.length, isEditMode, loading]}
-            internalVerticalScroll={false}
-            stickyHeader
-            stickyHeaderTopClass={isHeaderCollapsed ? "top-12" : "top-28"}
             header={
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">NO</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK ID</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK DETAILS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">OWNER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AP CODE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">SUBSTANTIVE TEST</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">OBJECTIVE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PROCEDURES</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">METHOD</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">APPLICATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">CHECK (Y/N)</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PREPARER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING RESULT</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RECOMMENDATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AUDITEE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">COMPLETION STATUS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">COMPLETION DATE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">NO</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK ID</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK DESCRIPTION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK DETAILS</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">OWNER</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">AP CODE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">SUBSTANTIVE TEST</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">OBJECTIVE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">PROCEDURES</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">METHOD</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">DESCRIPTION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">APPLICATION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">CHECK (Y/N)</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">PREPARER</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">FINDING RESULT</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">FINDING DESCRIPTION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RECOMMENDATION</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">AUDITEE</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">COMPLETION STATUS</th>
+                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">COMPLETION DATE</th>
                 </tr>
               </thead>
             }

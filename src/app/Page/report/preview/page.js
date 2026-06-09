@@ -20,24 +20,51 @@ import {
 } from "@/app/lib/report/applyPublishStateToFindingSections";
 import {
   buildEffectivePublishMap,
+  computeCoverSnapshotHash,
   computePreviewSnapshotHash,
+  findingSectionsLookCorrupted,
+  mergeModuleSectionsForHub,
+  syncAuditVisibleFromLockedByDept,
 } from "@/app/lib/report/previewAuditVisibility";
 import { computeModuleTablesHash } from "@/app/lib/report/moduleTablesHash";
+import { filterFindingPagesForPreview } from "@/app/lib/report/filterPreviewPayloadForDocx";
+import { buildConclusionDeptSegments } from "@/app/lib/report/conclusionSegments";
+import { buildAppendixPages } from "@/app/lib/report/appendixPages";
 import {
   collectHiddenAuditEdits,
   mergePreservedFindingSections,
   stripFindingSectionsForClient,
 } from "@/app/lib/report/mergePreservedFindingSections";
 import {
-  openSharedReportEditor,
-  downloadConsolidatedReport,
-  downloadReportSession,
+  getReportCollaborationStatus,
+  notifyOnlyOfficeSessionOpened,
+  syncReportDocxFromPreview,
 } from "@/app/lib/report/exportReportClient";
+import {
+  getPreviewTabClientId,
+  pushOnlyOfficeRedirectToPeers,
+  pushPreviewStateToPeers,
+} from "@/app/lib/report/previewWebSocketClient";
+import {
+  clearClientReportProgress,
+  getClientReportResetGeneration,
+  getClientResetGenerationKey,
+  markClientReportReset,
+} from "@/app/lib/report/reportProgressStorage";
 import { usePreviewHubAutoRefresh } from "@/app/lib/report/usePreviewHubAutoRefresh";
+import { getHubRevision } from "@/app/lib/report/reportPreviewHub";
 import { useSopReviewRealtime } from "@/app/lib/sop-review/useSopReviewRealtime";
 import { loadFindingSectionsFromModules } from "@/app/lib/report/loadFindingSectionsFromModules";
 import { pickNarrativeFromReportState } from "@/app/lib/report/reportStateNarrative";
+import { usePreviewCollaboration } from "@/app/lib/report/usePreviewCollaboration";
+import PreviewCollaborationBar from "./PreviewCollaborationBar";
 import { buildPersistPayloadWithProtectedNarrative } from "@/app/lib/report/mergeReportStateForPersist";
+import {
+  BLOCK_KIND,
+  systemFindingSopBlockId,
+  systemFindingAuditBlockId,
+  reportBlockHtmlProps,
+} from "@/app/lib/report/reportBlocks";
 import { formatDeptTocTitle } from "@/app/lib/report/docx/templateTitles";
 import {
   filterMeaningfulHtmlPages,
@@ -53,11 +80,11 @@ import {
   COVER_YEAR_WHITE,
   COVER_YEAR_SIZE,
 } from "@/app/lib/report/coverLayout";
-import { resolvePreparedByRow } from "@/app/lib/report/preparedByDefaults";
+import {
+  parseDateForHtmlInput,
+  resolvePreparedByRows,
+} from "@/app/lib/report/preparedByDefaults";
 import { AUDIT_TABLE_WIDTHS_PCT } from "@/app/lib/report/docx/templateStyles";
-import LoadingProgressOverlay, {
-  preloadLoadingAnimation,
-} from "@/app/components/shared/LoadingProgressOverlay";
 
 const REPORT_DEPARTMENTS = [
   { key: "finance", label: "FINANCE", apiPath: "finance" },
@@ -77,6 +104,68 @@ function auditTableColgroup() {
   return AUDIT_TABLE_WIDTHS_PCT.map((w, i) => (
     <col key={`audit-col-${i}`} style={{ width: `${w}%` }} />
   ));
+}
+
+function computeReportTotalPages({
+  executiveSummaryEndPage,
+  auditObjectivesEndPage,
+  auditApproachEndPage,
+  findingsPageStartNumber,
+  findingPagesLength,
+  findingDetailPagesLength,
+  showConclusionPaper,
+  conclusionPagesLength,
+  showAppendixPaper,
+  appendixPageBase,
+  appendixPagesLength,
+}) {
+  let max = 4;
+  max = Math.max(max, executiveSummaryEndPage || 0);
+  max = Math.max(max, auditObjectivesEndPage || 0);
+  max = Math.max(max, auditApproachEndPage || 0);
+
+  if (findingPagesLength > 0) {
+    max = Math.max(max, findingsPageStartNumber + findingPagesLength - 1);
+  }
+  if (findingDetailPagesLength > 0) {
+    max = Math.max(
+      max,
+      findingsPageStartNumber + findingPagesLength + findingDetailPagesLength - 1,
+    );
+  }
+
+  const conclusionStartPage =
+    findingsPageStartNumber + findingPagesLength + findingDetailPagesLength;
+
+  if (showConclusionPaper) {
+    const conclusionCount = conclusionPagesLength > 0 ? conclusionPagesLength : 1;
+    max = Math.max(max, conclusionStartPage + conclusionCount);
+  }
+
+  if (showAppendixPaper) {
+    const appendixCount = Math.max(appendixPagesLength, 1);
+    max = Math.max(max, appendixPageBase + appendixCount - 1);
+  }
+
+  return max;
+}
+
+function ReportPageFooter({ pageNumber, totalPages, textSize = "text-[6px]", wrapperClass = "" }) {
+  return (
+    <div className={`w-full mt-auto ${wrapperClass}`}>
+      <div className="border-t border-gray-300 mb-2" />
+      <div className={`flex items-center ${textSize} text-gray-700`}>
+        <div className="flex-1 text-left">
+          SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
+        </div>
+        <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
+        <div className="flex-1 text-right">
+          PAGE <span className="mx-1">{pageNumber}</span> of{" "}
+          <span className="ml-1">{totalPages}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Konfigurasi untuk \"Department completion date\".
@@ -125,10 +214,14 @@ const DEFAULT_APPENDICES = [
   },
 ];
 
-const APPENDIX_FIRST_PAGE_CAPACITY = 24;
-const APPENDIX_PAGE_CAPACITY = 30;
-const APPENDIX_TEXT_CHARS_PER_UNIT = 210;
-const APPENDIX_TABLE_ROWS_PER_PAGE = 16;
+/** Conclusion & Appendices narrative text — 11pt; appendix tables stay 10pt. */
+const CONCLUSION_APPENDIX_TEXT_CLASS = "text-[11px]";
+
+/** Keep long/unbroken text inside table-fixed cells (no bleed into next column). */
+const APPENDIX_TABLE_CELL_WRAP =
+  "max-w-0 min-w-0 break-words [overflow-wrap:anywhere] [word-break:break-word]";
+const APPENDIX_TABLE_INPUT =
+  "w-full min-w-0 min-h-8 px-2 py-1 text-[10px] bg-transparent border-none focus:outline-none resize-none break-words [overflow-wrap:anywhere] [word-break:break-word]";
 const EXECUTIVE_SUMMARY_PAGE_SAFE_PX = 190;
 const EXECUTIVE_SUMMARY_FIRST_PAGE_EXTRA_PX = 72;
 const AUDIT_APPROACH_PAGE_SAFE_PX = 240;
@@ -138,15 +231,17 @@ const EXECUTIVE_SUMMARY_PARAGRAPH_SPLIT_CHARS = 320;
 const LIST_KEEP_TOGETHER_MAX_ITEMS = 12;
 const LIST_KEEP_TOGETHER_MAX_CHARS = 1400;
 const CONCLUSION_PARAGRAPH_SPLIT_CHARS = 280;
-const SOP_RELATED_ROW_SPLIT_CHARS = 260;
+/** Keep each SOP row as one <tr>; long text wraps inside cells (pagination splits whole rows). */
+const SOP_RELATED_ROW_SPLIT_CHARS = 0;
 const SOP_REVIEW_ROW_SPLIT_CHARS = 0;
-const AUDIT_RISK_DETAILS_SPLIT_CHARS = 90;
+/** Keep each audit row as one <tr>; long text wraps inside cells (pagination splits whole rows). */
+const AUDIT_RISK_DETAILS_SPLIT_CHARS = 0;
 const AUDIT_SUBSTANTIVE_TEST_SPLIT_CHARS = 0;
 const AUDIT_METHODOLOGY_SPLIT_CHARS = 0;
 const AUDIT_FINDING_RESULT_SPLIT_CHARS = 0;
-const AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS = 80;
-const AUDIT_AUDITEE_COMMENT_SPLIT_CHARS = 55;
-const AUDIT_FOLLOW_UP_DETAIL_SPLIT_CHARS = 55;
+const AUDIT_FINDING_DESCRIPTION_SPLIT_CHARS = 0;
+const AUDIT_AUDITEE_COMMENT_SPLIT_CHARS = 0;
+const AUDIT_FOLLOW_UP_DETAIL_SPLIT_CHARS = 0;
 
 function escapeHtml(text) {
   return String(text ?? "")
@@ -197,6 +292,62 @@ function splitConclusionTextIntoChunks(text) {
   );
 }
 
+function paginateConclusionSegments(segments, heights, options = {}) {
+  const spacing = options.spacing ?? 18;
+  const limitFirst = options.limitFirst ?? 700;
+  const limitPage = options.limitPage ?? 780;
+  const chunks = [];
+  let chunk = [];
+  let sum = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const h = heights[i] ?? 80;
+    const limit = chunks.length === 0 && chunk.length === 0 ? limitFirst : limitPage;
+
+    if (h > limit) {
+      if (chunk.length > 0) {
+        chunks.push(chunk);
+        chunk = [];
+        sum = 0;
+      }
+      const textParts = splitConclusionTextIntoChunks(segment.text);
+      if (textParts.length <= 1) {
+        chunks.push([segment]);
+        continue;
+      }
+      const approxPartH = h / textParts.length;
+      textParts.forEach((text, partIdx) => {
+        const part = {
+          ...segment,
+          text,
+          showHeader: partIdx === 0,
+          chunkIndex: partIdx,
+        };
+        if (sum + approxPartH + spacing > limit && chunk.length > 0) {
+          chunks.push(chunk);
+          chunk = [];
+          sum = 0;
+        }
+        chunk.push(part);
+        sum += approxPartH + spacing;
+      });
+      continue;
+    }
+
+    if (sum + h + spacing > limit && chunk.length > 0) {
+      chunks.push(chunk);
+      chunk = [];
+      sum = 0;
+    }
+    chunk.push(segment);
+    sum += h + spacing;
+  }
+
+  if (chunk.length > 0) chunks.push(chunk);
+  return chunks;
+}
+
 function splitTableCellText(text, maxChars) {
   const value = String(text ?? "").trim();
   if (!value) return [];
@@ -228,6 +379,17 @@ function expandSopRowsForPagination(rows = []) {
       __continuedRow: idx > 0,
     }));
   });
+}
+
+function getDefaultReportCoverInfo(year) {
+  const y = Number(year) || new Date().getFullYear();
+  return {
+    periodStart: `JANUARY ${y}`,
+    periodEnd: `DECEMBER ${y}`,
+    auditCoverage: "FINANCIAL PROCESSES AND COMPLIANCE",
+    departmentCoverage: "ALL DEPARTMENT",
+    area: "BALI, JAKARTA, MEDAN AND BATAM",
+  };
 }
 
 function expandAuditRowsForPagination(rows = []) {
@@ -841,149 +1003,6 @@ function splitExecutiveSummaryIntoBlocks(html, year) {
   return mergeExecutiveSummarySubsections13To15(blocks);
 }
 
-function estimateAppendixTextUnits(text) {
-  const normalized = String(text || "").replace(/\s+/g, " ").trim();
-  return Math.max(1, Math.ceil(normalized.length / APPENDIX_TEXT_CHARS_PER_UNIT));
-}
-
-function splitAppendixTextIntoChunks(content, maxUnitsPerChunk = 12) {
-  const paragraphs = String(content || "")
-    .split(/\n\s*\n/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (paragraphs.length === 0) return [""];
-
-  const chunks = [];
-  let current = [];
-  let usedUnits = 0;
-
-  const pushCurrent = () => {
-    if (current.length > 0) {
-      chunks.push(current.join("\n\n"));
-      current = [];
-      usedUnits = 0;
-    }
-  };
-
-  const splitOversizedParagraph = (paragraph) => {
-    const words = paragraph.split(/\s+/).filter(Boolean);
-    let part = "";
-    const parts = [];
-
-    words.forEach((word) => {
-      const next = part ? `${part} ${word}` : word;
-      if (estimateAppendixTextUnits(next) > maxUnitsPerChunk && part) {
-        parts.push(part);
-        part = word;
-      } else {
-        part = next;
-      }
-    });
-
-    if (part) parts.push(part);
-    return parts;
-  };
-
-  paragraphs.forEach((paragraph) => {
-    const paraUnits = estimateAppendixTextUnits(paragraph);
-
-    if (paraUnits > maxUnitsPerChunk) {
-      pushCurrent();
-      splitOversizedParagraph(paragraph).forEach((part) => {
-        chunks.push(part);
-      });
-      return;
-    }
-
-    if (usedUnits + paraUnits > maxUnitsPerChunk && current.length > 0) {
-      pushCurrent();
-    }
-
-    current.push(paragraph);
-    usedUnits += paraUnits;
-  });
-
-  pushCurrent();
-  return chunks.length > 0 ? chunks : [""];
-}
-
-function buildAppendixPages(appendices) {
-  const pages = [];
-
-  const pushPage = (page) => {
-    if (page.segments.length > 0 || page.showAppendicesHeading) {
-      pages.push(page);
-    }
-  };
-
-  let currentPage = {
-    showAppendicesHeading: true,
-    usedCapacity: 0,
-    segments: [],
-  };
-
-  const ensureCapacity = (required) => {
-    const maxCapacity = currentPage.showAppendicesHeading
-      ? APPENDIX_FIRST_PAGE_CAPACITY
-      : APPENDIX_PAGE_CAPACITY;
-
-    if (currentPage.segments.length > 0 && currentPage.usedCapacity + required > maxCapacity) {
-      pushPage(currentPage);
-      currentPage = {
-        showAppendicesHeading: false,
-        usedCapacity: 0,
-        segments: [],
-      };
-    }
-  };
-
-  appendices.forEach((appendix, appendixIndex) => {
-    if (appendix?.type === "table") {
-      const rows = Array.isArray(appendix.tableRows) ? appendix.tableRows : [];
-      const rowChunks = [];
-      for (let i = 0; i < Math.max(rows.length, 1); i += APPENDIX_TABLE_ROWS_PER_PAGE) {
-        rowChunks.push(rows.slice(i, i + APPENDIX_TABLE_ROWS_PER_PAGE));
-      }
-      if (rowChunks.length === 0) rowChunks.push([]);
-
-      rowChunks.forEach((rowsChunk, chunkIndex) => {
-        const requiredUnits = 10 + Math.max(1, Math.ceil(rowsChunk.length / 2));
-        ensureCapacity(requiredUnits);
-        currentPage.segments.push({
-          type: "table",
-          appendixId: appendix.id,
-          appendixIndex,
-          title: appendix.title,
-          subtitle: appendix.content || "Risk Matrix",
-          rows: rowsChunk,
-          isContinued: chunkIndex > 0,
-        });
-        currentPage.usedCapacity += requiredUnits;
-      });
-      return;
-    }
-
-    const textChunks = splitAppendixTextIntoChunks(appendix?.content || "", 10);
-    textChunks.forEach((textChunk, chunkIndex) => {
-      const requiredUnits = 4 + estimateAppendixTextUnits(textChunk || " ");
-      ensureCapacity(requiredUnits);
-      currentPage.segments.push({
-        type: "text",
-        appendixId: appendix.id,
-        appendixIndex,
-        title: appendix.title,
-        content: textChunk,
-        isContinued: chunkIndex > 0,
-      });
-      currentPage.usedCapacity += requiredUnits;
-    });
-  });
-
-  pushPage(currentPage);
-  return pages;
-}
-
 function parseJsonList(value) {
   return parseStoredJsonList(value);
 }
@@ -1046,26 +1065,25 @@ function formatExecutiveSummaryItem(item) {
 function ReportPreviewPageContent() {
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
-  const downloadMode = searchParams.get("download");
-  const shouldAutoDownloadWord = downloadMode === "word";
-  const onlyOfficeCreate = searchParams.get("onlyOfficeCreate") === "1";
-  const shouldOpenEditor =
-    onlyOfficeCreate ||
-    searchParams.get("editor") === "1" ||
-    searchParams.get("openEditor") === "1";
   const router = useRouter();
   const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
-  const [auditCoverage, setAuditCoverage] = useState(
-    "FINANCIAL PROCESSES AND COMPLIANCE",
+  const defaultCoverInfo = getDefaultReportCoverInfo(year);
+  const [periodStart, setPeriodStart] = useState(defaultCoverInfo.periodStart);
+  const [periodEnd, setPeriodEnd] = useState(defaultCoverInfo.periodEnd);
+  const [auditCoverage, setAuditCoverage] = useState(defaultCoverInfo.auditCoverage);
+  const [departmentCoverage, setDepartmentCoverage] = useState(
+    defaultCoverInfo.departmentCoverage,
   );
-  const [departmentCoverage, setDepartmentCoverage] = useState("ALL DEPARTMENT");
-  const [area, setArea] = useState("BALI, JAKARTA, MEDAN AND BATAM");
+  const [area, setArea] = useState(defaultCoverInfo.area);
 
   const [findingSections, setFindingSections] = useState([]);
-  const [loadingFindings, setLoadingFindings] = useState(true);
+  /** Data modul utuh dari hub — fallback USER section saat client state kosong setelah unlock. */
+  const [hubModuleSections, setHubModuleSections] = useState([]);
   const [findingsLoadCompleted, setFindingsLoadCompleted] = useState(false);
   const [findingsReloadToken, setFindingsReloadToken] = useState(0);
+  const resetHandledRef = useRef(false);
+  const skipPersistUntilRef = useRef(0);
   /** First load always pulls module APIs fresh (avoids stale DB snapshot on open). */
   const sopModuleRefreshRef = useRef(true);
   const findingsLoadInProgressRef = useRef(false);
@@ -1075,14 +1093,22 @@ function ReportPreviewPageContent() {
   const savedFindingSectionsRef = useRef([]);
   const hiddenAuditEditsRef = useRef({});
   const persistReportStateRef = useRef(null);
+  const buildReportExportPayloadRef = useRef(null);
   const hubRevisionInitRef = useRef(null);
+  const onlyOfficeSyncRevisionRef = useRef(0);
+  const hubRevisionRef = useRef(0);
+  const skipPersistOnceRef = useRef(false);
+  const narrativeSnapshotRef = useRef(null);
+  const lastDbNarrativeRef = useRef(null);
   /** Lock/unlock from Audit Review before DB publish-status catches up. */
   const pendingPublishByDeptRef = useRef({});
 
   const {
     publishStatusByDept,
-    streamConnected,
+    publishStatusRef,
     refreshPublishStatus,
+    applyPublishEvent,
+    syncPublishFromLockedByDept,
   } = useReportAuditPublishRealtime(year);
 
   /** HTML preview visibility — overrides DB when user unlocks (saved to report state). */
@@ -1090,8 +1116,8 @@ function ReportPreviewPageContent() {
   const auditVisibleByDeptRef = useRef({});
 
   const effectivePublishByDept = useMemo(
-    () => buildEffectivePublishMap(publishStatusByDept, auditVisibleByDept),
-    [publishStatusByDept, auditVisibleByDept],
+    () => buildEffectivePublishMap(publishStatusByDept, auditVisibleByDept, findingSections),
+    [publishStatusByDept, auditVisibleByDept, findingSections],
   );
 
   const displayFindingSections = useMemo(
@@ -1099,43 +1125,43 @@ function ReportPreviewPageContent() {
     [findingSections, effectivePublishByDept],
   );
 
+  function auditRowsForDept(deptKey, visibleOnly = true) {
+    const section = findingSections.find((s) => s.deptKey === deptKey);
+    if (!section) return [];
+    const show =
+      !visibleOnly || isDeptPublishedToReport(deptKey, effectivePublishByDept);
+    if (!show) return [];
+    if (section.auditRows?.length) return section.auditRows;
+    const hubSec = lastDbNarrativeRef.current?.findingSections?.find(
+      (s) => s.deptKey === deptKey,
+    );
+    if (hubSec?.auditRows?.length) return hubSec.auditRows;
+    const hidden = hiddenAuditEditsRef.current[deptKey];
+    return Array.isArray(hidden) ? hidden : [];
+  }
+
   useEffect(() => {
     auditVisibleByDeptRef.current = auditVisibleByDept;
   }, [auditVisibleByDept]);
 
-  /** Sync visibility from API; locked in Audit Review always shows in HTML preview. */
-  useEffect(() => {
-    if (!findingsLoadCompleted) return;
-    setAuditVisibleByDept((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const [deptKey, locked] of Object.entries(publishStatusByDept)) {
-        if (locked === true && next[deptKey] !== true) {
-          next[deptKey] = true;
-          changed = true;
-        } else if (next[deptKey] === undefined) {
-          next[deptKey] = locked === true;
-          changed = true;
-        }
-      }
-      if (!changed) return prev;
-      auditVisibleByDeptRef.current = next;
-      return next;
-    });
-  }, [publishStatusByDept, findingsLoadCompleted]);
-
   const prevPublishStatusRef = useRef({});
+  const publishStatusSeededRef = useRef(false);
 
-  /** SSE/batch: dept baru di-lock → muat ulang data audit ke HTML preview. */
+  /** WebSocket/batch: dept baru di-lock → muat ulang data audit ke HTML preview. */
   useEffect(() => {
     if (!findingsLoadCompleted) return;
+
+    const prev = prevPublishStatusRef.current;
+    const isInitialSeed =
+      !publishStatusSeededRef.current && Object.keys(publishStatusByDept).length > 0;
+
     let shouldReload = false;
     for (const [deptKey, locked] of Object.entries(publishStatusByDept)) {
-      const wasLocked = prevPublishStatusRef.current[deptKey] === true;
+      const wasLocked = prev[deptKey] === true;
       if (locked === true && !wasLocked) {
         pendingPublishByDeptRef.current[deptKey] = true;
-        setAuditVisibleByDept((prev) => {
-          const next = { ...prev, [deptKey]: true };
+        setAuditVisibleByDept((prevVis) => {
+          const next = { ...prevVis, [deptKey]: true };
           auditVisibleByDeptRef.current = next;
           return next;
         });
@@ -1143,8 +1169,8 @@ function ReportPreviewPageContent() {
       }
       if (locked === false && wasLocked) {
         pendingPublishByDeptRef.current[deptKey] = false;
-        setAuditVisibleByDept((prev) => {
-          const next = { ...prev, [deptKey]: false };
+        setAuditVisibleByDept((prevVis) => {
+          const next = { ...prevVis, [deptKey]: false };
           auditVisibleByDeptRef.current = next;
           return next;
         });
@@ -1152,19 +1178,15 @@ function ReportPreviewPageContent() {
       }
     }
     prevPublishStatusRef.current = { ...publishStatusByDept };
+    if (Object.keys(publishStatusByDept).length > 0) {
+      publishStatusSeededRef.current = true;
+    }
+    if (isInitialSeed) return;
     if (shouldReload) {
       setMeasuredChunks(null);
       setFindingsReloadToken((t) => t + 1);
     }
   }, [publishStatusByDept, findingsLoadCompleted]);
-
-  /** Lock/unlock + preview visibility: strip audit blocks in HTML preview immediately. */
-  useEffect(() => {
-    setFindingSections((prev) =>
-      applyPublishStateToFindingSections(prev, effectivePublishByDept),
-    );
-    setMeasuredChunks(null);
-  }, [effectivePublishByDept]);
 
   /** Chunk berdasarkan ukuran riil (ukur setelah render), seperti Word: isi halaman sampai penuh lalu next page. */
   const [measuredChunks, setMeasuredChunks] = useState(null);
@@ -1176,6 +1198,8 @@ function ReportPreviewPageContent() {
   const conclusionMeasureRef = useRef(null);
   /** true = tampilkan form isi conclusion + Save; false = tampilkan Add Conclusion atau halaman hasil. */
   const [showConclusionForm, setShowConclusionForm] = useState(false);
+  /** deptKey yang sedang generate conclusion via AI, atau null. */
+  const [conclusionAiLoadingDept, setConclusionAiLoadingDept] = useState(null);
   /** Finding & Recommendation: per department, array indeks finding yang dipilih (checkbox = multi). */
   const [selectedFindingByDept, setSelectedFindingByDept] = useState({});
   /** Modal pilih finding: deptKey yang dibuka (null = tertutup). */
@@ -1194,69 +1218,26 @@ function ReportPreviewPageContent() {
   const [newPreparedName, setNewPreparedName] = useState("");
   const [newPreparedRole, setNewPreparedRole] = useState("MEMBER");
   const [newPreparedDate, setNewPreparedDate] = useState("");
-  const [auditCommitteeName, setAuditCommitteeName] = useState("GN HIANG LIN");
+  const [auditCommitteeName, setAuditCommitteeName] = useState("");
   const [auditCommitteeDate, setAuditCommitteeDate] = useState("");
-  const [presidentDirectorName, setPresidentDirectorName] = useState(
-    "IR. WONG BUDI SETIAWAN",
-  );
+  const [presidentDirectorName, setPresidentDirectorName] = useState("");
   const [presidentDirectorDate, setPresidentDirectorDate] = useState("");
 
-  const preparedByDisplayRow = useMemo(
-    () => resolvePreparedByRow(preparedBy),
+  const preparedByDisplayRows = useMemo(
+    () => resolvePreparedByRows(preparedBy),
     [preparedBy],
-  );
-
-  const auditTeamDisplayRows = useMemo(
-    () => resolveAuditTeamRows(auditTeam),
-    [auditTeam],
   );
 
   const pendingFieldUpdatesRef = useRef({});
   const fieldUpdateTimerRef = useRef(null);
-  const hasAutoDownloadedWordRef = useRef(false);
-  const hasAutoOpenedEditorRef = useRef(false);
-  const emptyCreateAbortRef = useRef(false);
-  const [exportingFormat, setExportingFormat] = useState(null);
   const [openingEditor, setOpeningEditor] = useState(false);
-  const [createProgress, setCreateProgress] = useState(5);
-  const [createStatus, setCreateStatus] = useState("Starting...");
-  const [mounted, setMounted] = useState(false);
-
+  const [aiStatus, setAiStatus] = useState("");
+  const aiStatusTimerRef = useRef(null);
+  /** Avoid hydration mismatch from browser extensions (fdprocessedid on buttons/inputs). */
+  const [clientReady, setClientReady] = useState(false);
   useEffect(() => {
-    setMounted(true);
-    if (onlyOfficeCreate) {
-      preloadLoadingAnimation();
-    }
-  }, [onlyOfficeCreate]);
-
-  useEffect(() => {
-    if (!onlyOfficeCreate) return;
-    const id = window.setInterval(() => {
-      setCreateProgress((p) => (p < 88 ? p + 1 : p));
-    }, 350);
-    return () => window.clearInterval(id);
-  }, [onlyOfficeCreate]);
-
-  useEffect(() => {
-    if (!onlyOfficeCreate) return;
-    if (loadingFindings || !findingsLoadCompleted) {
-      setCreateStatus("Loading module data (SOP, Audit Review, Worksheet)...");
-      setCreateProgress((p) => Math.max(p, 20));
-      return;
-    }
-    if (displayFindingSections.length === 0) {
-      setCreateStatus("No published data for this year.");
-      setCreateProgress((p) => Math.max(p, 35));
-      return;
-    }
-    if (openingEditor) {
-      setCreateStatus("Generating DOCX and opening OnlyOffice...");
-      setCreateProgress((p) => Math.max(p, 72));
-      return;
-    }
-    setCreateStatus("Preparing report...");
-    setCreateProgress((p) => Math.max(p, 48));
-  }, [onlyOfficeCreate, loadingFindings, findingsLoadCompleted, displayFindingSections.length, openingEditor]);
+    setClientReady(true);
+  }, []);
 
   const flushPendingFieldUpdates = () => {
     if (fieldUpdateTimerRef.current) {
@@ -1336,6 +1317,52 @@ function ReportPreviewPageContent() {
   const [richTextEditorSection, setRichTextEditorSection] = useState(null);
   const [appendices, setAppendices] = useState(DEFAULT_APPENDICES);
   const [showAppendixEditor, setShowAppendixEditor] = useState(false);
+
+  const moduleSectionsSource = useMemo(
+    () => (hubModuleSections.length > 0 ? hubModuleSections : findingSections),
+    [hubModuleSections, findingSections],
+  );
+
+  const sectionHasModuleTableData = useCallback((section) => {
+    return (
+      (section.sopRows?.length || 0) > 0 ||
+      (section.auditRows?.length || 0) > 0 ||
+      executiveSummaryRowHasContent(
+        buildDeptExecutiveSummaryFromRow(section.executiveSummary),
+      )
+    );
+  }, []);
+
+  /** SYSTEM: tabel modul SOP/Audit — visibility lock/unlock saja. */
+  const hasSystemFindingModules = useMemo(
+    () => moduleSectionsSource.some(sectionHasModuleTableData),
+    [moduleSectionsSource, sectionHasModuleTableData],
+  );
+
+  /**
+   * USER: dept untuk Conclusion — dari modul ATAU teks tersimpan (tidak ikut SYSTEM unlock).
+   */
+  const conclusionDeptSections = useMemo(() => {
+    const fromModules = moduleSectionsSource.filter(sectionHasModuleTableData);
+    if (fromModules.length > 0) return fromModules;
+    const keys = Object.keys(conclusionValues || {}).filter((k) =>
+      String(conclusionValues[k] ?? "").trim(),
+    );
+    return keys.map((deptKey) => {
+      const fromHub = moduleSectionsSource.find((s) => s.deptKey === deptKey);
+      const fromRows = REPORT_DEPARTMENT_COMPLETION_ROWS.find((r) => r.deptKey === deptKey);
+      return {
+        deptKey,
+        deptLabel: fromHub?.deptLabel || fromRows?.name || deptKey,
+        sopRows: [],
+        auditRows: [],
+      };
+    });
+  }, [moduleSectionsSource, conclusionValues, sectionHasModuleTableData]);
+
+  /** USER paper — tetap render meski SYSTEM unlock (perbaikan Kasus B). */
+  const showConclusionPaper = findingsLoadCompleted;
+  const showAppendixPaper = findingsLoadCompleted && appendices.length > 0;
   const [executiveSummaryHtml, setExecutiveSummaryHtml] = useState(() =>
     createDefaultExecutiveSummaryHtml(year),
   );
@@ -1584,6 +1611,7 @@ function ReportPreviewPageContent() {
   }, []);
 
   useEffect(() => {
+    if (!reportStateHydrated) return;
     try {
       const raw = localStorage.getItem(appendicesStorageKey);
       if (!raw) {
@@ -1599,11 +1627,78 @@ function ReportPreviewPageContent() {
     } catch {
       setAppendices(DEFAULT_APPENDICES);
     }
-  }, [appendicesStorageKey]);
+  }, [appendicesStorageKey, reportStateHydrated]);
+
+  const resetPreviewClientState = useCallback((options = {}) => {
+    if (resetHandledRef.current && options.force !== true) return;
+    resetHandledRef.current = true;
+    skipPersistUntilRef.current = Date.now() + 5000;
+    skipPersistOnceRef.current = true;
+
+    clearClientReportProgress(year);
+    setAppendices(DEFAULT_APPENDICES);
+    const defaultExec = createDefaultExecutiveSummaryHtml(year);
+    setExecutiveSummaryHtml(defaultExec);
+    setDraftRichTextHtml(defaultExec);
+    setAuditObjectivesScopeHtml(createDefaultAuditObjectivesScopeHtml());
+    setAuditApproachMethodologyHtml(createDefaultAuditApproachMethodologyHtml());
+    setConclusionValues({});
+    setSelectedFindingByDept({});
+    setShowConclusionForm(false);
+    setAuditTeam([]);
+    setPreparedBy([]);
+    setAuditCommitteeName("");
+    setAuditCommitteeDate("");
+    setPresidentDirectorName("");
+    setPresidentDirectorDate("");
+    const resetCover = getDefaultReportCoverInfo(year);
+    setPeriodStart(resetCover.periodStart);
+    setPeriodEnd(resetCover.periodEnd);
+    setAuditCoverage(resetCover.auditCoverage);
+    setDepartmentCoverage(resetCover.departmentCoverage);
+    setArea(resetCover.area);
+    setAuditVisibleByDept({});
+    auditVisibleByDeptRef.current = {};
+    if (options.clearSections === true) {
+      setFindingSections([]);
+      setHubModuleSections([]);
+    }
+    hiddenAuditEditsRef.current = {};
+    savedFindingSectionsRef.current = [];
+    findingSectionsRef.current = [];
+    lastDbNarrativeRef.current = null;
+    narrativeSnapshotRef.current = null;
+    hubRevisionInitRef.current = null;
+    onlyOfficeSyncRevisionRef.current = 0;
+    hubRevisionRef.current = 0;
+    publishStatusSeededRef.current = false;
+    prevPublishStatusRef.current = {};
+    sopModuleRefreshRef.current = true;
+    setMeasuredChunks(null);
+    setConclusionChunks(null);
+  }, [year]);
+
+  // Cross-tab: Report page reset in another tab → clear stale preview state (no full-page overlay).
+  useEffect(() => {
+    if (!Number.isFinite(year)) return undefined;
+    const key = getClientResetGenerationKey(year);
+    const onStorage = (event) => {
+      if (event.key !== key) return;
+      const nextGen = Number(event.newValue) || 0;
+      const prevGen = Number(event.oldValue) || 0;
+      if (nextGen <= prevGen) return;
+      resetPreviewClientState({ clearSections: true, force: true });
+      sopModuleRefreshRef.current = true;
+      setFindingsReloadToken((t) => t + 1);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [year, resetPreviewClientState]);
 
   // Load report edits from database (shared across users/browsers).
   useEffect(() => {
     let cancelled = false;
+    resetHandledRef.current = false;
     setReportStateHydrated(false);
 
     (async () => {
@@ -1613,9 +1708,37 @@ function ReportPreviewPageContent() {
           credentials: "include",
         });
         const json = await res.json().catch(() => ({}));
-        if (cancelled || !json.success || !json.state) return;
+        if (cancelled || !json.success) return;
+
+        const serverResetGen = Number(json.resetGeneration) || 0;
+        const clientResetGen = getClientReportResetGeneration(year);
+        if (serverResetGen > clientResetGen) {
+          markClientReportReset(year, serverResetGen);
+          resetPreviewClientState({ clearSections: true, force: true });
+          return;
+        }
+
+        if (!json.state) {
+          clearClientReportProgress(year);
+          return;
+        }
 
         const saved = json.state;
+        if (typeof saved.periodStart === "string" && saved.periodStart.trim()) {
+          setPeriodStart(saved.periodStart);
+        }
+        if (typeof saved.periodEnd === "string" && saved.periodEnd.trim()) {
+          setPeriodEnd(saved.periodEnd);
+        }
+        if (typeof saved.auditCoverage === "string") {
+          setAuditCoverage(saved.auditCoverage);
+        }
+        if (typeof saved.departmentCoverage === "string") {
+          setDepartmentCoverage(saved.departmentCoverage);
+        }
+        if (typeof saved.area === "string") {
+          setArea(saved.area);
+        }
         if (Array.isArray(saved.appendices) && saved.appendices.length > 0) {
           setAppendices(mergeWithDefaultAppendices(saved.appendices));
         }
@@ -1645,7 +1768,14 @@ function ReportPreviewPageContent() {
         if (saved.conclusionValues && typeof saved.conclusionValues === "object") {
           setConclusionValues(saved.conclusionValues);
         }
-        // Do not hydrate findingSections from DB — loadFindings pulls live module APIs.
+        /** Baseline tabel modul dari DB — loadFindings akan merge dengan API live. */
+        if (Array.isArray(saved.findingSections) && saved.findingSections.length > 0) {
+          const initial = stripFindingSectionsForClient(saved.findingSections);
+          setFindingSections(initial);
+          setHubModuleSections(saved.findingSections);
+          savedFindingSectionsRef.current = initial;
+          findingSectionsRef.current = initial;
+        }
         if (
           saved.hiddenAuditFindingEdits &&
           typeof saved.hiddenAuditFindingEdits === "object"
@@ -1655,6 +1785,28 @@ function ReportPreviewPageContent() {
         if (saved.auditVisibleByDept && typeof saved.auditVisibleByDept === "object") {
           setAuditVisibleByDept(saved.auditVisibleByDept);
           auditVisibleByDeptRef.current = saved.auditVisibleByDept;
+        }
+        if (Array.isArray(saved.auditTeam)) {
+          setAuditTeam(
+            saved.auditTeam.filter(
+              (m) => m && String(m.name ?? "").trim().length > 0,
+            ),
+          );
+        }
+        if (Array.isArray(saved.preparedBy)) {
+          setPreparedBy(saved.preparedBy);
+        }
+        if (typeof saved.auditCommitteeName === "string") {
+          setAuditCommitteeName(saved.auditCommitteeName);
+        }
+        if (saved.auditCommitteeDate != null) {
+          setAuditCommitteeDate(parseDateForHtmlInput(saved.auditCommitteeDate));
+        }
+        if (typeof saved.presidentDirectorName === "string") {
+          setPresidentDirectorName(saved.presidentDirectorName);
+        }
+        if (saved.presidentDirectorDate != null) {
+          setPresidentDirectorDate(parseDateForHtmlInput(saved.presidentDirectorDate));
         }
         hubRevisionInitRef.current = {
           onlyOffice: Number(saved.onlyOfficeSyncRevision) || 0,
@@ -1672,23 +1824,33 @@ function ReportPreviewPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [year]);
+  }, [year, resetPreviewClientState]);
 
   const persistReportStateNow = useCallback(async (options = {}) => {
+    if (Date.now() < skipPersistUntilRef.current && options.bypassSkipPersist !== true) return;
     if (!Number.isFinite(year)) return;
-    const effective = buildEffectivePublishMap(
-      publishStatusByDept,
-      auditVisibleByDeptRef.current,
-    );
-    const sectionsForDb = stripFindingSectionsForClient(
-      applyPublishStateToFindingSections(findingSections, effective),
-    );
+    /** DB menyimpan data modul utuh; visibility lewat auditVisibleByDept, bukan hapus auditRows. */
+    const sectionsForDb = stripFindingSectionsForClient(findingSections);
     const hiddenAuditFindingEdits = {
       ...hiddenAuditEditsRef.current,
       ...collectHiddenAuditEdits(findingSections),
     };
     hiddenAuditEditsRef.current = hiddenAuditFindingEdits;
     savedFindingSectionsRef.current = sectionsForDb;
+
+    const coverFields = {
+      periodStart: String(periodStart ?? "").trim(),
+      periodEnd: String(periodEnd ?? "").trim(),
+      auditCoverage: String(auditCoverage ?? "").trim(),
+      departmentCoverage: String(departmentCoverage ?? "").trim(),
+      area: String(area ?? "").trim(),
+      auditTeam,
+      preparedBy,
+      auditCommitteeName: String(auditCommitteeName ?? "").trim(),
+      auditCommitteeDate: String(auditCommitteeDate ?? "").trim(),
+      presidentDirectorName: String(presidentDirectorName ?? "").trim(),
+      presidentDirectorDate: String(presidentDirectorDate ?? "").trim(),
+    };
 
     const tablesPayload = {
       appendices,
@@ -1708,6 +1870,7 @@ function ReportPreviewPageContent() {
       findingSections: sectionsForDb,
       hiddenAuditFindingEdits,
       onlyOfficeSyncRevision: onlyOfficeSyncRevisionRef.current,
+      ...coverFields,
     };
 
     let dbState = lastDbNarrativeRef.current;
@@ -1741,6 +1904,7 @@ function ReportPreviewPageContent() {
           findingSections: sectionsForDb,
           hiddenAuditFindingEdits,
           auditVisibleByDept: auditVisibleByDeptRef.current,
+          ...coverFields,
         }
       : protectNarrative
         ? buildPersistPayloadWithProtectedNarrative({
@@ -1774,7 +1938,18 @@ function ReportPreviewPageContent() {
     auditApproachMethodologyHtml,
     conclusionValues,
     findingSections,
-    publishStatusByDept,
+    auditVisibleByDept,
+    auditTeam,
+    preparedBy,
+    auditCommitteeName,
+    auditCommitteeDate,
+    presidentDirectorName,
+    presidentDirectorDate,
+    periodStart,
+    periodEnd,
+    auditCoverage,
+    departmentCoverage,
+    area,
   ]);
 
   persistReportStateRef.current = persistReportStateNow;
@@ -1782,6 +1957,7 @@ function ReportPreviewPageContent() {
   // Persist module tables (debounced) — keep OnlyOffice narrative from DB.
   useEffect(() => {
     if (!reportStateHydrated || !findingsLoadCompleted || !Number.isFinite(year)) return;
+    if (Date.now() < skipPersistUntilRef.current) return;
     if (skipPersistOnceRef.current) {
       skipPersistOnceRef.current = false;
       return;
@@ -1808,11 +1984,12 @@ function ReportPreviewPageContent() {
   // Persist narrative edited in HTML preview — skip when OnlyOffice owns narrative (DB sync).
   useEffect(() => {
     if (!reportStateHydrated || !findingsLoadCompleted || !Number.isFinite(year)) return;
+    if (Date.now() < skipPersistUntilRef.current) return;
     if (onlyOfficeSyncRevisionRef.current > 0) return;
 
     const timer = window.setTimeout(() => {
       persistReportStateRef.current?.({ narrativeFromPreviewEdit: true });
-    }, 800);
+    }, 300);
 
     return () => window.clearTimeout(timer);
   }, [
@@ -1826,11 +2003,35 @@ function ReportPreviewPageContent() {
     conclusionValues,
   ]);
 
-  const onlyOfficeSyncRevisionRef = useRef(0);
-  const hubRevisionRef = useRef(0);
-  const skipPersistOnceRef = useRef(false);
-  const narrativeSnapshotRef = useRef(null);
-  const lastDbNarrativeRef = useRef(null);
+  // Persist cover / signature block (audit team, prepared by, management approval).
+  useEffect(() => {
+    if (!reportStateHydrated || !findingsLoadCompleted || !Number.isFinite(year)) return;
+    if (Date.now() < skipPersistUntilRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      persistReportStateRef.current?.({ narrativeFromPreviewEdit: true });
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    reportStateHydrated,
+    findingsLoadCompleted,
+    year,
+    auditTeam,
+    preparedBy,
+    auditCommitteeName,
+    auditCommitteeDate,
+    presidentDirectorName,
+    presidentDirectorDate,
+    periodStart,
+    periodEnd,
+    auditCoverage,
+    departmentCoverage,
+    area,
+  ]);
+
+  const acknowledgeHubRevisionRef = useRef(null);
+  const corruptionHealAttemptsRef = useRef(0);
 
   useEffect(() => {
     const init = hubRevisionInitRef.current;
@@ -1840,11 +2041,56 @@ function ReportPreviewPageContent() {
     hubRevisionInitRef.current = null;
   }, [reportStateHydrated]);
 
+  const applyCoverFieldsFromReportState = useCallback((saved) => {
+    if (!saved || typeof saved !== "object") return;
+    if (typeof saved.periodStart === "string" && saved.periodStart.trim()) {
+      setPeriodStart(saved.periodStart);
+    }
+    if (typeof saved.periodEnd === "string" && saved.periodEnd.trim()) {
+      setPeriodEnd(saved.periodEnd);
+    }
+    if (typeof saved.auditCoverage === "string") {
+      setAuditCoverage(saved.auditCoverage);
+    }
+    if (typeof saved.departmentCoverage === "string") {
+      setDepartmentCoverage(saved.departmentCoverage);
+    }
+    if (typeof saved.area === "string") {
+      setArea(saved.area);
+    }
+    if (Array.isArray(saved.auditTeam)) {
+      setAuditTeam(
+        saved.auditTeam.filter((m) => m && String(m.name ?? "").trim().length > 0),
+      );
+    } else if (saved.auditTeam === null) {
+      setAuditTeam([]);
+    }
+    if (Array.isArray(saved.preparedBy)) {
+      setPreparedBy(saved.preparedBy);
+    } else if (saved.preparedBy === null) {
+      setPreparedBy([]);
+    }
+    if (typeof saved.auditCommitteeName === "string") {
+      setAuditCommitteeName(saved.auditCommitteeName);
+    }
+    if (saved.auditCommitteeDate != null) {
+      setAuditCommitteeDate(parseDateForHtmlInput(saved.auditCommitteeDate));
+    }
+    if (typeof saved.presidentDirectorName === "string") {
+      setPresidentDirectorName(saved.presidentDirectorName);
+    }
+    if (saved.presidentDirectorDate != null) {
+      setPresidentDirectorDate(parseDateForHtmlInput(saved.presidentDirectorDate));
+    }
+  }, []);
+
   /** OnlyOffice / DB narrative — kept when module tables reload. */
   const applyNarrativeFromReportState = useCallback(
     (saved) => {
       const narrative = pickNarrativeFromReportState(saved);
       if (!narrative) return;
+
+      applyCoverFieldsFromReportState(saved);
 
       if (narrative.auditVisibleByDept && typeof narrative.auditVisibleByDept === "object") {
         setAuditVisibleByDept(narrative.auditVisibleByDept);
@@ -1887,34 +2133,392 @@ function ReportPreviewPageContent() {
         lastDbNarrativeRef.current = saved;
       }
     },
-    [year],
+    [year, applyCoverFieldsFromReportState],
+  );
+
+  const collabClientIdRef = useRef(getPreviewTabClientId());
+  const applyingRemoteWsRef = useRef(false);
+  const wsPushTimerRef = useRef(null);
+  const wsPushEnabledRef = useRef(false);
+  const [wsPushEnabled, setWsPushEnabled] = useState(false);
+
+  /** Build payload pushed to peers via WebSocket (instant, no HTTP). */
+  const buildPreviewSyncPayload = useCallback(() => {
+    return {
+      periodStart: String(periodStart ?? "").trim(),
+      periodEnd: String(periodEnd ?? "").trim(),
+      auditCoverage: String(auditCoverage ?? "").trim(),
+      departmentCoverage: String(departmentCoverage ?? "").trim(),
+      area: String(area ?? "").trim(),
+      auditTeam,
+      preparedBy,
+      auditCommitteeName: String(auditCommitteeName ?? "").trim(),
+      auditCommitteeDate: String(auditCommitteeDate ?? "").trim(),
+      presidentDirectorName: String(presidentDirectorName ?? "").trim(),
+      presidentDirectorDate: String(presidentDirectorDate ?? "").trim(),
+      appendices,
+      executiveSummaryHtml: sanitizeExecutiveSummaryHtml(executiveSummaryHtml, year),
+      auditObjectivesScopeHtml: sanitizeHtmlWithFallback(
+        auditObjectivesScopeHtml,
+        createDefaultAuditObjectivesScopeHtml(),
+      ),
+      auditApproachMethodologyHtml: ensureAuditApproachMethodologyCompleteness(
+        sanitizeHtmlWithFallback(
+          auditApproachMethodologyHtml,
+          createDefaultAuditApproachMethodologyHtml(),
+        ),
+      ),
+      conclusionValues,
+      auditVisibleByDept: auditVisibleByDeptRef.current,
+    };
+  }, [
+    periodStart,
+    periodEnd,
+    auditCoverage,
+    departmentCoverage,
+    area,
+    auditTeam,
+    preparedBy,
+    auditCommitteeName,
+    auditCommitteeDate,
+    presidentDirectorName,
+    presidentDirectorDate,
+    appendices,
+    executiveSummaryHtml,
+    auditObjectivesScopeHtml,
+    auditApproachMethodologyHtml,
+    conclusionValues,
+    year,
+  ]);
+
+  /** Apply state received directly from WebSocket peer. */
+  const applyPreviewStateFromWs = useCallback(
+    (state) => {
+      if (!state || typeof state !== "object") return;
+      applyingRemoteWsRef.current = true;
+      skipPersistOnceRef.current = true;
+
+      applyCoverFieldsFromReportState(state);
+      applyNarrativeFromReportState(state);
+
+      if (state.auditVisibleByDept && typeof state.auditVisibleByDept === "object") {
+        setAuditVisibleByDept(state.auditVisibleByDept);
+        auditVisibleByDeptRef.current = state.auditVisibleByDept;
+      }
+
+      lastDbNarrativeRef.current = {
+        ...(lastDbNarrativeRef.current || {}),
+        ...state,
+      };
+      setMeasuredChunks(null);
+
+      window.setTimeout(() => {
+        applyingRemoteWsRef.current = false;
+      }, 500);
+    },
+    [applyCoverFieldsFromReportState, applyNarrativeFromReportState],
+  );
+
+  const joinOnlyOfficeEditor = useCallback(
+    async (editorPath, options = {}) => {
+      if (!editorPath) return;
+      if (options.syncBeforeOpen !== false && Number.isFinite(year)) {
+        try {
+          skipPersistUntilRef.current = 0;
+          flushPendingFieldUpdates();
+          await persistReportStateRef.current?.({
+            narrativeFromPreviewEdit: true,
+            bypassSkipPersist: true,
+          });
+          const overlay =
+            typeof options.overlay === "object" && options.overlay
+              ? options.overlay
+              : buildReportExportPayloadRef.current?.() || {};
+          await syncReportDocxFromPreview(year, overlay);
+        } catch (e) {
+          console.warn("[preview] OnlyOffice sync before open:", e);
+        }
+      }
+      router.replace(editorPath);
+      window.setTimeout(() => {
+        if (!window.location.pathname.includes("/Page/report/editor")) {
+          window.location.replace(editorPath);
+        }
+      }, 600);
+    },
+    [year, router],
+  );
+
+  const handleOnlyOfficeRedirect = useCallback(
+    (data) => {
+      if (!data?.editorPath) return;
+      joinOnlyOfficeEditor(data.editorPath);
+    },
+    [joinOnlyOfficeEditor],
+  );
+
+  const {
+    participants: collabParticipants,
+    wsConnected: collabWsConnected,
+    clientId: collabClientId,
+  } = usePreviewCollaboration(year, {
+    location: "preview",
+    onPreviewStatePush: applyPreviewStateFromWs,
+    onOnlyOfficeRedirect: handleOnlyOfficeRedirect,
+  });
+
+  useEffect(() => {
+    collabClientIdRef.current = collabClientId || getPreviewTabClientId();
+  }, [collabClientId]);
+
+  /** Re-join OnlyOffice if a teammate is still editing (e.g. browser Back from editor). */
+  useEffect(() => {
+    if (!clientReady || !Number.isFinite(year)) return undefined;
+
+    let cancelled = false;
+
+    const redirectIfOnlyOfficeLive = async () => {
+      const collab = await getReportCollaborationStatus(year);
+      if (cancelled) return;
+      if (collab.ok && collab.onlyOfficeOpen && collab.editorPath) {
+        joinOnlyOfficeEditor(collab.editorPath);
+      }
+    };
+
+    void redirectIfOnlyOfficeLive();
+
+    const onPageShow = (ev) => {
+      if (ev.persisted) void redirectIfOnlyOfficeLive();
+    };
+    window.addEventListener("pageshow", onPageShow);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [clientReady, year, joinOnlyOfficeEditor]);
+
+  useEffect(() => {
+    if (!clientReady || !Number.isFinite(year)) return;
+    const someoneInOnlyOffice = collabParticipants.some((p) => p.location === "onlyoffice");
+    if (!someoneInOnlyOffice) return;
+
+    let cancelled = false;
+    void getReportCollaborationStatus(year).then((collab) => {
+      if (cancelled) return;
+      if (collab.ok && collab.onlyOfficeOpen && collab.editorPath) {
+        joinOnlyOfficeEditor(collab.editorPath);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientReady, year, collabParticipants, joinOnlyOfficeEditor]);
+
+  /** Push local edits to all preview peers via WebSocket (queued until connected). */
+  const broadcastPreviewStateNow = useCallback(
+    (override = {}, { force = false } = {}) => {
+      if (applyingRemoteWsRef.current) return;
+      if (!force && !wsPushEnabledRef.current) return;
+      if (!Number.isFinite(year)) return;
+      pushPreviewStateToPeers(year, {
+        clientId: collabClientIdRef.current,
+        state: { ...buildPreviewSyncPayload(), ...override },
+      });
+    },
+    [year, buildPreviewSyncPayload],
+  );
+
+  const scheduleWsStatePush = useCallback(() => {
+    if (applyingRemoteWsRef.current) return;
+    if (!wsPushEnabledRef.current) return;
+    if (!Number.isFinite(year)) return;
+    if (wsPushTimerRef.current) {
+      window.clearTimeout(wsPushTimerRef.current);
+    }
+    wsPushTimerRef.current = window.setTimeout(() => {
+      wsPushTimerRef.current = null;
+      broadcastPreviewStateNow();
+    }, 80);
+  }, [year, broadcastPreviewStateNow]);
+
+  useEffect(() => {
+    if (!reportStateHydrated) {
+      wsPushEnabledRef.current = false;
+      setWsPushEnabled(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      wsPushEnabledRef.current = true;
+      setWsPushEnabled(true);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [reportStateHydrated]);
+
+  useEffect(() => {
+    if (!reportStateHydrated || !wsPushEnabled) return;
+    scheduleWsStatePush();
+  }, [
+    reportStateHydrated,
+    wsPushEnabled,
+    scheduleWsStatePush,
+    auditCommitteeName,
+    auditCommitteeDate,
+    presidentDirectorName,
+    presidentDirectorDate,
+    appendices,
+    executiveSummaryHtml,
+    auditObjectivesScopeHtml,
+    auditApproachMethodologyHtml,
+    conclusionValues,
+    auditVisibleByDept,
+    periodStart,
+    periodEnd,
+    auditCoverage,
+    departmentCoverage,
+    area,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (wsPushTimerRef.current) {
+        window.clearTimeout(wsPushTimerRef.current);
+      }
+      if (aiStatusTimerRef.current) {
+        window.clearTimeout(aiStatusTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleAiApply = useCallback(
+    (patch) => {
+      if (!patch || typeof patch !== "object") return;
+      const wsOverride = {};
+
+      if (patch.executiveSummaryHtml != null) {
+        const html = normalizeExecutiveSummaryHtml(patch.executiveSummaryHtml, year);
+        setExecutiveSummaryHtml(html);
+        setDraftRichTextHtml(html);
+        wsOverride.executiveSummaryHtml = sanitizeExecutiveSummaryHtml(html, year);
+      }
+
+      if (patch.conclusionValues && typeof patch.conclusionValues === "object") {
+        setConclusionValues((prev) => {
+          const next = { ...prev, ...patch.conclusionValues };
+          wsOverride.conclusionValues = next;
+          return next;
+        });
+        setShowConclusionForm(true);
+      }
+
+      if (Object.keys(wsOverride).length > 0) {
+        window.setTimeout(() => {
+          broadcastPreviewStateNow(wsOverride, { force: true });
+        }, 0);
+      }
+    },
+    [year, broadcastPreviewStateNow],
+  );
+
+  const clearAiStatusSoon = useCallback((delayMs = 2000) => {
+    if (aiStatusTimerRef.current) {
+      window.clearTimeout(aiStatusTimerRef.current);
+    }
+    aiStatusTimerRef.current = window.setTimeout(() => {
+      setAiStatus("");
+      aiStatusTimerRef.current = null;
+    }, delayMs);
+  }, []);
+
+  const handleGenerateConclusionAi = useCallback(
+    async (section) => {
+      if (!section?.deptKey || !Number.isFinite(year)) return;
+      const deptKey = section.deptKey;
+      if (aiStatusTimerRef.current) {
+        window.clearTimeout(aiStatusTimerRef.current);
+        aiStatusTimerRef.current = null;
+      }
+      setConclusionAiLoadingDept(deptKey);
+      setAiStatus(`Generating conclusion for ${section.deptLabel || deptKey}…`);
+
+      try {
+        const auditRows = auditRowsForDept(deptKey, false);
+        const res = await fetch("/api/report/ai/assist", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            year,
+            task: "conclusion_dept",
+            deptKey,
+            deptSection: {
+              deptKey,
+              deptLabel: section.deptLabel,
+              executiveSummary: section.executiveSummary ?? null,
+              sopRows: section.sopRows || [],
+              auditRows: auditRows.length ? auditRows : section.auditRows || [],
+            },
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || `AI failed (${res.status})`);
+        }
+        const text = String(json.text || "").trim();
+        if (!text) {
+          throw new Error("AI tidak mengembalikan teks. Coba lagi.");
+        }
+        handleAiApply({ conclusionValues: { [deptKey]: text } });
+        setAiStatus(`Conclusion generated for ${section.deptLabel || deptKey}.`);
+        clearAiStatusSoon(2000);
+      } catch (e) {
+        if (aiStatusTimerRef.current) {
+          window.clearTimeout(aiStatusTimerRef.current);
+          aiStatusTimerRef.current = null;
+        }
+        setAiStatus("");
+        window.alert(e?.message || "Generate conclusion failed");
+      } finally {
+        setConclusionAiLoadingDept(null);
+      }
+    },
+    [year, handleAiApply, auditRowsForDept, clearAiStatusSoon],
   );
 
   /** Terapkan snapshot hub (narasi OnlyOffice + tabel modul) ke UI preview. */
   const applyHubSnapshot = useCallback(
     (snap, options = {}) => {
       if (!snap || snap.success === false) return;
-      const freshModuleReload = options.freshModuleReload !== false;
+      const freshModuleReload = options.freshModuleReload === true;
 
       skipPersistOnceRef.current = true;
-      if (Number(snap.hubRevision) > 0) hubRevisionRef.current = Number(snap.hubRevision);
+      if (Number(snap.hubRevision) > 0) {
+        hubRevisionRef.current = Number(snap.hubRevision);
+        acknowledgeHubRevisionRef.current?.(snap.hubRevision);
+      }
       if (Number(snap.onlyOfficeSyncRevision) > 0) {
         onlyOfficeSyncRevisionRef.current = Number(snap.onlyOfficeSyncRevision);
       }
 
-      const narrativeSource = snap.state || {
-        ...snap.narrative,
-        auditVisibleByDept: snap.auditVisibleByDept,
-      };
+      const narrativeSource = snap.state || snap.narrative;
       if (narrativeSource && typeof narrativeSource === "object") {
         lastDbNarrativeRef.current = snap.state || narrativeSource;
-        applyNarrativeFromReportState(narrativeSource);
+        const { auditVisibleByDept: _vis, ...narrativeOnly } = narrativeSource;
+        applyNarrativeFromReportState(narrativeOnly);
       }
 
-      if (snap.auditVisibleByDept && typeof snap.auditVisibleByDept === "object") {
-        setAuditVisibleByDept(snap.auditVisibleByDept);
-        auditVisibleByDeptRef.current = snap.auditVisibleByDept;
+      const lockedByDeptSnap = snap.lockedByDept || {};
+      const hubVisible = snap.auditVisibleByDept || auditVisibleByDeptRef.current || {};
+      const syncedVisible = syncAuditVisibleFromLockedByDept(lockedByDeptSnap, hubVisible);
+      for (const [deptKey, pending] of Object.entries(pendingPublishByDeptRef.current)) {
+        if (pending === false) syncedVisible[deptKey] = false;
+        else if (pending === true) syncedVisible[deptKey] = true;
       }
+      setAuditVisibleByDept(syncedVisible);
+      auditVisibleByDeptRef.current = syncedVisible;
+      syncPublishFromLockedByDept(lockedByDeptSnap);
       if (snap.hiddenAuditFindingEdits && typeof snap.hiddenAuditFindingEdits === "object") {
         hiddenAuditEditsRef.current = {
           ...hiddenAuditEditsRef.current,
@@ -1922,8 +2526,10 @@ function ReportPreviewPageContent() {
         };
       }
 
-      const sections = Array.isArray(snap.sections) ? snap.sections : [];
-      const lockedByDept = snap.lockedByDept || {};
+      const moduleSections = Array.isArray(snap.sections) ? snap.sections : [];
+      const dbSections = Array.isArray(snap.state?.findingSections) ? snap.state.findingSections : [];
+      const sections = mergeModuleSectionsForHub(dbSections, moduleSections);
+      const lockedByDept = lockedByDeptSnap;
       const preservedSource = freshModuleReload
         ? []
         : savedFindingSectionsRef.current.length > 0
@@ -1936,23 +2542,31 @@ function ReportPreviewPageContent() {
         hiddenAuditEditsRef.current,
         { freshModuleReload },
       );
+      /** Module/hub rows selalu menang atas shell kosong dari client setelah unlock. */
+      const withModuleRows = mergeModuleSectionsForHub(sections, merged);
       hiddenAuditEditsRef.current = {
         ...hiddenAuditEditsRef.current,
-        ...collectHiddenAuditEdits(merged),
+        ...collectHiddenAuditEdits(withModuleRows),
       };
-      const effectiveLocked = buildEffectivePublishMap(
-        lockedByDept,
-        auditVisibleByDeptRef.current,
-      );
-      const normalized = applyPublishStateToFindingSections(merged, effectiveLocked);
-      const clientSections = stripFindingSectionsForClient(normalized);
+      const clientSections = stripFindingSectionsForClient(withModuleRows);
       setFindingSections(clientSections);
+      setHubModuleSections(sections);
       savedFindingSectionsRef.current = clientSections;
       findingSectionsRef.current = clientSections;
+      /** Simpan data modul utuh untuk fallback renderer — jangan timpa dengan state tampilan. */
+      lastDbNarrativeRef.current = {
+        ...(snap.state || lastDbNarrativeRef.current || {}),
+        findingSections: sections,
+        auditVisibleByDept: syncedVisible,
+      };
       setMeasuredChunks(null);
+
     },
-    [applyNarrativeFromReportState],
+    [applyNarrativeFromReportState, syncPublishFromLockedByDept],
   );
+
+  const applyHubSnapshotRef = useRef(applyHubSnapshot);
+  applyHubSnapshotRef.current = applyHubSnapshot;
 
   const onHubSnapshotAutoRefresh = useCallback(
     async (snap) => {
@@ -1961,7 +2575,13 @@ function ReportPreviewPageContent() {
     [applyHubSnapshot],
   );
 
-  const { forceRefreshHub } = usePreviewHubAutoRefresh(year, onHubSnapshotAutoRefresh);
+  const { forceRefreshHub, acknowledgeHubRevision } = usePreviewHubAutoRefresh(
+    year,
+    onHubSnapshotAutoRefresh,
+  );
+  acknowledgeHubRevisionRef.current = acknowledgeHubRevision;
+  const forceRefreshHubRef = useRef(forceRefreshHub);
+  forceRefreshHubRef.current = forceRefreshHub;
 
   /** Pull latest SOP/Audit rows from module APIs (not stale DB snapshot). */
   const reloadModulesIntoPreview = useCallback(() => {
@@ -1975,8 +2595,22 @@ function ReportPreviewPageContent() {
 
   useSopReviewRealtime(year, onSopReviewDataChanged);
 
-  // Lock/unlock from Audit Review → reload audit data into HTML preview (hub for OnlyOffice).
+  // Lock/unlock from Audit Review → update visibility + muat ulang findings di HTML preview.
   useEffect(() => {
+    const applyVisibilityToSections = (deptKey, visible) => {
+      setFindingSections((prev) => {
+        const next = prev.map((section) =>
+          section.deptKey === deptKey
+            ? { ...section, isPublishedToReport: visible === true }
+            : section,
+        );
+        savedFindingSectionsRef.current = next;
+        findingSectionsRef.current = next;
+        return next;
+      });
+      setMeasuredChunks(null);
+    };
+
     const syncFromServer = async (detail) => {
       const eventReportYear =
         detail?.reportYear != null
@@ -1989,26 +2623,25 @@ function ReportPreviewPageContent() {
       }
       if (detail?.deptKey) {
         const visible = detail.isLocked === true;
+        applyPublishEvent(detail);
         pendingPublishByDeptRef.current[detail.deptKey] = visible;
         setAuditVisibleByDept((prev) => {
           const next = { ...prev, [detail.deptKey]: visible };
           auditVisibleByDeptRef.current = next;
           return next;
         });
+        applyVisibilityToSections(detail.deptKey, visible);
       }
       flushPendingFieldUpdates();
-      await refreshPublishStatus();
-      try {
-        await fetch("/api/report/hub/sync-modules", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ year }),
-        });
-      } catch (err) {
-        console.warn("[REPORT-PREVIEW] hub sync-modules:", err);
+      if (detail?.deptKey) {
+        sopModuleRefreshRef.current = true;
+        setMeasuredChunks(null);
+        setFindingsReloadToken((t) => t + 1);
       }
       await forceRefreshHub();
+      window.setTimeout(() => {
+        refreshPublishStatus();
+      }, 2500);
     };
     const onStorage = (e) => {
       if (e.key !== AUDIT_REVIEW_PUBLISH_CHANGED_KEY) return;
@@ -2026,13 +2659,19 @@ function ReportPreviewPageContent() {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(AUDIT_REVIEW_PUBLISH_CHANGED_KEY, onPublishChanged);
     };
-  }, [year, refreshPublishStatus, forceRefreshHub]);
+  }, [year, refreshPublishStatus, forceRefreshHub, applyPublishEvent]);
 
   useEffect(() => {
     let focusDebounce = null;
+    const lastFocusReloadRef = { at: 0 };
     const scheduleModuleReload = () => {
       window.clearTimeout(focusDebounce);
-      focusDebounce = window.setTimeout(() => reloadModulesIntoPreview(), 120);
+      focusDebounce = window.setTimeout(() => {
+        const now = Date.now();
+        if (now - lastFocusReloadRef.at < 30000) return;
+        lastFocusReloadRef.at = now;
+        reloadModulesIntoPreview();
+      }, 300);
     };
     const onFocus = () => scheduleModuleReload();
     const onVisible = () => {
@@ -2093,6 +2732,7 @@ function ReportPreviewPageContent() {
   }, [draftRichTextHtml]);
 
   useEffect(() => {
+    if (!reportStateHydrated) return;
     try {
       const raw = localStorage.getItem(auditObjectivesScopeStorageKey);
       setAuditObjectivesScopeHtml(
@@ -2101,7 +2741,7 @@ function ReportPreviewPageContent() {
     } catch {
       setAuditObjectivesScopeHtml(createDefaultAuditObjectivesScopeHtml());
     }
-  }, [auditObjectivesScopeStorageKey, year]);
+  }, [auditObjectivesScopeStorageKey, year, reportStateHydrated]);
 
   useEffect(() => {
     try {
@@ -2115,6 +2755,7 @@ function ReportPreviewPageContent() {
   }, [auditObjectivesScopeHtml, auditObjectivesScopeStorageKey, year]);
 
   useEffect(() => {
+    if (!reportStateHydrated) return;
     try {
       const raw = localStorage.getItem(auditApproachMethodologyStorageKey);
       setAuditApproachMethodologyHtml(
@@ -2125,7 +2766,7 @@ function ReportPreviewPageContent() {
     } catch {
       setAuditApproachMethodologyHtml(createDefaultAuditApproachMethodologyHtml());
     }
-  }, [auditApproachMethodologyStorageKey, year]);
+  }, [auditApproachMethodologyStorageKey, year, reportStateHydrated]);
 
   useEffect(() => {
     try {
@@ -2476,14 +3117,13 @@ function ReportPreviewPageContent() {
 
   useEffect(() => {
     let cancelled = false;
+    const loadSeq = ++moduleLoadSeqRef.current;
+    setFindingsLoadCompleted(false);
+    findingsLoadInProgressRef.current = true;
+    const freshModuleReload = sopModuleRefreshRef.current;
+    sopModuleRefreshRef.current = false;
 
     async function loadFindings() {
-      const loadSeq = ++moduleLoadSeqRef.current;
-      setLoadingFindings(true);
-      setFindingsLoadCompleted(false);
-      findingsLoadInProgressRef.current = true;
-      const freshModuleReload = sopModuleRefreshRef.current;
-      sopModuleRefreshRef.current = false;
       try {
         let snap = null;
         try {
@@ -2509,8 +3149,22 @@ function ReportPreviewPageContent() {
         }
 
         if (!cancelled && loadSeq === moduleLoadSeqRef.current && snap?.success) {
-          applyHubSnapshot(snap, { freshModuleReload });
-          refreshPublishStatus();
+          const dbFallback =
+            snap.state?.findingSections || lastDbNarrativeRef.current?.findingSections || [];
+          if ((!snap.sections || snap.sections.length === 0) && dbFallback.length > 0) {
+            snap.sections = dbFallback;
+          }
+          applyHubSnapshotRef.current?.(snap, { freshModuleReload });
+          const moduleSectionsForCheck = Array.isArray(snap.sections) ? snap.sections : [];
+          if (
+            findingSectionsLookCorrupted(moduleSectionsForCheck, snap.lockedByDept || {}) &&
+            !sopModuleRefreshRef.current &&
+            corruptionHealAttemptsRef.current < 1
+          ) {
+            corruptionHealAttemptsRef.current += 1;
+            sopModuleRefreshRef.current = true;
+            window.setTimeout(() => void forceRefreshHubRef.current?.(), 0);
+          }
           if (Object.keys(pendingPublishByDeptRef.current).length > 0) {
             pendingPublishByDeptRef.current = {};
           }
@@ -2519,12 +3173,22 @@ function ReportPreviewPageContent() {
           skipPersistOnceRef.current = true;
           void (async () => {
             if (persistSeq !== moduleLoadSeqRef.current) return;
-            await persistReportStateRef.current?.({
+            const persistRes = await persistReportStateRef.current?.({
               syncMode:
                 onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
               protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
             });
             if (persistSeq !== moduleLoadSeqRef.current) return;
+            try {
+              const persistJson = await persistRes?.json?.().catch(() => ({}));
+              if (persistJson?.state) {
+                acknowledgeHubRevisionRef.current?.(getHubRevision(persistJson.state));
+              }
+            } catch {
+              /* ignore */
+            }
+            if (persistSeq !== moduleLoadSeqRef.current) return;
+            if (!freshModuleReload) return;
             try {
               window.dispatchEvent(
                 new CustomEvent("kias-report-modules-synced", {
@@ -2533,6 +3197,7 @@ function ReportPreviewPageContent() {
                     reportYear: year,
                     moduleTablesHash: computeModuleTablesHash(clientSections),
                     onlyOfficeSyncRevision: onlyOfficeSyncRevisionRef.current,
+                    source: "module-tables",
                   },
                 }),
               );
@@ -2542,20 +3207,19 @@ function ReportPreviewPageContent() {
           })();
         }
       } finally {
-        if (!cancelled) {
+        if (loadSeq === moduleLoadSeqRef.current) {
           findingsLoadInProgressRef.current = false;
-          setLoadingFindings(false);
           setFindingsLoadCompleted(true);
         }
       }
     }
 
-    loadFindings();
+    void loadFindings();
 
     return () => {
       cancelled = true;
     };
-  }, [year, findingsReloadToken, applyHubSnapshot]);
+  }, [year, findingsReloadToken]);
 
   useEffect(() => {
     findingSectionsRef.current = findingSections;
@@ -2573,14 +3237,47 @@ function ReportPreviewPageContent() {
   const FINDING_TABLE_ROW_GUARD_PX = 6;
   const FINDING_TABLE_PAGE_END_GUARD_PX = 8;
   const FINDING_AUDIT_SECTION_CHROME_PX = 40;
+  /**
+   * Pagination pakai findingSections (source utuh), bukan displayFindingSections yang
+   * sudah di-strip — cegah auditRows hilang di renderer meski DB/state masih punya data.
+   */
   const paginatedFindingSections = useMemo(
     () =>
-      displayFindingSections.map((section) => ({
-        ...section,
-        sopRows: expandSopRowsForPagination(section.sopRows || []),
-        auditRows: expandAuditRowsForPagination(section.auditRows || []),
-      })),
-    [displayFindingSections],
+      findingSections
+        .map((section) => {
+          const locked = isDeptPublishedToReport(section.deptKey, effectivePublishByDept);
+          const hubSec = lastDbNarrativeRef.current?.findingSections?.find(
+            (s) => s.deptKey === section.deptKey,
+          );
+          const hubAudit = hubSec?.auditRows || [];
+          const hubSop = hubSec?.sopRows || [];
+          const rawSop = section.sopRows?.length ? section.sopRows : hubSop;
+          const rawAudit = section.auditRows?.length
+            ? section.auditRows
+            : locked
+              ? hubAudit.length
+                ? hubAudit
+                : hiddenAuditEditsRef.current[section.deptKey] || []
+              : [];
+          return {
+            ...section,
+            sopRows: expandSopRowsForPagination(rawSop),
+            auditRows: locked ? expandAuditRowsForPagination(rawAudit) : [],
+            executiveSummary: locked ? section.executiveSummary : null,
+          };
+        })
+        .filter((section) => {
+          const locked = isDeptPublishedToReport(section.deptKey, effectivePublishByDept);
+          const hasSop = (section.sopRows?.length || 0) > 0;
+          const hasAudit = locked && (section.auditRows?.length || 0) > 0;
+          const hasExec =
+            locked &&
+            executiveSummaryRowHasContent(
+              buildDeptExecutiveSummaryFromRow(section.executiveSummary),
+            );
+          return hasSop || hasAudit || hasExec;
+        }),
+    [findingSections, effectivePublishByDept],
   );
 
   /**
@@ -2705,15 +3402,12 @@ function ReportPreviewPageContent() {
    * Hanya Conclusion: ukur blok teks per department-chunk agar teks panjang bisa lanjut ke page berikutnya.
    */
   useEffect(() => {
-    if (!displayFindingSections.length || !conclusionMeasureRef.current) return;
-    const conclusionSegments = displayFindingSections.flatMap((section, index) =>
-      splitConclusionTextIntoChunks(conclusionValues[section.deptKey] ?? "").map((text, chunkIndex) => ({
-        deptKey: section.deptKey,
-        deptLabel: section.deptLabel,
-        sectionNumber: index + 1,
-        text,
-        chunkIndex,
-      })),
+    if (!showConclusionPaper || conclusionDeptSections.length === 0 || !conclusionMeasureRef.current) {
+      return;
+    }
+    const conclusionSegments = buildConclusionDeptSegments(
+      conclusionDeptSections,
+      conclusionValues,
     );
     if (conclusionSegments.length === 0) {
       setConclusionChunks([]);
@@ -2726,30 +3420,18 @@ function ReportPreviewPageContent() {
       const blocks = container.querySelectorAll("[data-conclusion-block]");
       if (!blocks.length || blocks.length !== conclusionSegments.length) return;
       const heights = Array.from(blocks).map((el) => el.getBoundingClientRect().height);
-      const chunks = [];
-      let chunk = [];
-      let sum = 0;
-      const spacing = 18;
-      const limitFirst = CONCLUSION_PAGE_MAX_HEIGHT_PX - CONCLUSION_FIRST_PAGE_EXTRA_PX;
-      for (let i = 0; i < conclusionSegments.length; i++) {
-        const h = heights[i] ?? 80;
-        const limit = chunks.length === 0 ? limitFirst : CONCLUSION_PAGE_MAX_HEIGHT_PX;
-        if (sum + h + spacing > limit && chunk.length > 0) {
-          chunks.push(chunk);
-          chunk = [];
-          sum = 0;
-        }
-        chunk.push(conclusionSegments[i]);
-        sum += h + spacing;
-      }
-      if (chunk.length > 0) chunks.push(chunk);
+      const chunks = paginateConclusionSegments(conclusionSegments, heights, {
+        spacing: 18,
+        limitFirst: CONCLUSION_PAGE_MAX_HEIGHT_PX - CONCLUSION_FIRST_PAGE_EXTRA_PX,
+        limitPage: CONCLUSION_PAGE_MAX_HEIGHT_PX,
+      });
       if (!cancelled) setConclusionChunks(chunks);
     };
     requestAnimationFrame(() => requestAnimationFrame(runMeasure));
     const ro = new ResizeObserver(() => requestAnimationFrame(runMeasure));
     ro.observe(container);
     return () => { cancelled = true; ro.disconnect(); };
-  }, [displayFindingSections, conclusionValues]);
+  }, [showConclusionPaper, conclusionDeptSections, conclusionValues]);
 
   const conclusionChunksLength = conclusionChunks?.length ?? 0;
   useEffect(() => {
@@ -2767,14 +3449,9 @@ function ReportPreviewPageContent() {
   /** Save conclusion: hanya department yang berisi data; hitung pagination (page 1 penuh dulu) lalu tutup form. */
   const handleSaveConclusion = () => {
     requestAnimationFrame(() => {
-      const conclusionSegments = displayFindingSections.flatMap((section, index) =>
-        splitConclusionTextIntoChunks(conclusionValues[section.deptKey] ?? "").map((text, chunkIndex) => ({
-          deptKey: section.deptKey,
-          deptLabel: section.deptLabel,
-          sectionNumber: index + 1,
-          text,
-          chunkIndex,
-        })),
+      const conclusionSegments = buildConclusionDeptSegments(
+        conclusionDeptSections,
+        conclusionValues,
       );
       if (conclusionSegments.length === 0) {
         setConclusionChunks([]);
@@ -2793,23 +3470,11 @@ function ReportPreviewPageContent() {
         return;
       }
       const heights = Array.from(blocks).map((el) => el.getBoundingClientRect().height);
-      const chunks = [];
-      let chunk = [];
-      let sum = 0;
-      const spacing = 18;
-      const limitFirst = CONCLUSION_PAGE_MAX_HEIGHT_PX - CONCLUSION_FIRST_PAGE_EXTRA_PX;
-      for (let i = 0; i < conclusionSegments.length; i++) {
-        const h = heights[i] ?? 80;
-        const limit = chunks.length === 0 ? limitFirst : CONCLUSION_PAGE_MAX_HEIGHT_PX;
-        if (sum + h + spacing > limit && chunk.length > 0) {
-          chunks.push(chunk);
-          chunk = [];
-          sum = 0;
-        }
-        chunk.push(conclusionSegments[i]);
-        sum += h + spacing;
-      }
-      if (chunk.length > 0) chunks.push(chunk);
+      const chunks = paginateConclusionSegments(conclusionSegments, heights, {
+        spacing: 18,
+        limitFirst: CONCLUSION_PAGE_MAX_HEIGHT_PX - CONCLUSION_FIRST_PAGE_EXTRA_PX,
+        limitPage: CONCLUSION_PAGE_MAX_HEIGHT_PX,
+      });
       setConclusionChunks(chunks);
       setShowConclusionForm(false);
     });
@@ -2965,25 +3630,46 @@ function ReportPreviewPageContent() {
     const pages = [];
     paginatedFindingSections.forEach((section) => {
       const showAudit = isDeptPublishedToReport(section.deptKey, effectivePublishByDept);
-      const auditRowsForSection = showAudit ? section.auditRows || [] : [];
-      const sopChunkMetas =
-        measuredChunks?.sop?.[section.deptKey]?.length > 0
-          ? measuredChunks.sop[section.deptKey].map((chunk) => ({
-              rows: [...(chunk.rows || [])],
-              height: chunk.height ?? 0,
-              limit: chunk.limit ?? FINDING_SOP_TABLE_HEIGHT_PX,
-            }))
-          : chunkRowsByContent(
-              section.sopRows,
-              getSopRowWeight,
-              SOP_ROWS_PER_PAGE,
-              SOP_PAGE_CAPACITY_UNITS
-            ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
+      const auditRowsForSection = showAudit
+        ? section.auditRows?.length
+          ? section.auditRows
+          : auditRowsForDept(section.deptKey, true)
+        : [];
+      const storedSopChunks = measuredChunks?.sop?.[section.deptKey];
+      const measuredSopRowCount = (storedSopChunks || []).reduce(
+        (sum, chunk) => sum + (chunk.rows?.length || 0),
+        0,
+      );
+      const useMeasuredSop =
+        storedSopChunks?.length > 0 &&
+        measuredSopRowCount > 0 &&
+        measuredSopRowCount === (section.sopRows?.length || 0);
+      const sopChunkMetas = useMeasuredSop
+        ? storedSopChunks.map((chunk) => ({
+            rows: [...(chunk.rows || [])],
+            height: chunk.height ?? 0,
+            limit: chunk.limit ?? FINDING_SOP_TABLE_HEIGHT_PX,
+          }))
+        : chunkRowsByContent(
+            section.sopRows,
+            getSopRowWeight,
+            SOP_ROWS_PER_PAGE,
+            SOP_PAGE_CAPACITY_UNITS
+          ).map((chunk) => ({ rows: chunk, height: null, limit: null }));
+      const storedAuditChunks = measuredChunks?.audit?.[section.deptKey];
+      const measuredAuditRowCount = (storedAuditChunks || []).reduce(
+        (sum, chunk) => sum + (chunk.rows?.length || 0),
+        0,
+      );
+      const useMeasuredAudit =
+        storedAuditChunks?.length > 0 &&
+        measuredAuditRowCount > 0 &&
+        measuredAuditRowCount === auditRowsForSection.length;
       const auditChunkMetas =
         !showAudit || auditRowsForSection.length === 0
           ? []
-          : measuredChunks?.audit?.[section.deptKey]?.length > 0
-            ? measuredChunks.audit[section.deptKey].map((chunk) => ({
+          : useMeasuredAudit
+            ? storedAuditChunks.map((chunk) => ({
                 rows: [...(chunk.rows || [])],
                 height: chunk.height ?? 0,
                 limit: chunk.limit ?? FINDING_AUDIT_TABLE_HEIGHT_PX,
@@ -3147,10 +3833,12 @@ function ReportPreviewPageContent() {
   const findingDetailPages = (() => {
     const list = [];
     findingSections.forEach((section) => {
+      if (!isDeptPublishedToReport(section.deptKey, effectivePublishByDept)) return;
       const indices = selectedFindingByDept[section.deptKey];
       if (!Array.isArray(indices) || indices.length === 0) return;
+      const auditRows = auditRowsForDept(section.deptKey, true);
       indices.forEach((rowIndex, i) => {
-        const finding = section.auditRows[rowIndex] ?? null;
+        const finding = auditRows[rowIndex] ?? null;
         if (!finding) return;
         list.push({ section, finding, findingIndex: i + 1, rowIndex });
       });
@@ -3160,7 +3848,7 @@ function ReportPreviewPageContent() {
 
   /** Conclusion: pakai chunk dari Save (page 1 penuh dulu, sisanya next page); hanya ada setelah user klik Save. */
   const conclusionPages = (() => {
-    if (!displayFindingSections.length) return [];
+    if (!showConclusionPaper) return [];
     if (conclusionChunks && conclusionChunks.length > 0) return conclusionChunks;
     return [];
   })();
@@ -3168,15 +3856,86 @@ function ReportPreviewPageContent() {
   const appendixPageBase =
     findingsPageStartNumber +
     findingPages.length +
-    1 +
     findingDetailPages.length +
-    (displayFindingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
+    (showConclusionPaper ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
     1;
-  const appendixPages = buildAppendixPages(appendices);
+  const appendixPages = showAppendixPaper ? buildAppendixPages(appendices) : [];
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const totalPages = computeReportTotalPages({
+    executiveSummaryEndPage,
+    auditObjectivesEndPage,
+    auditApproachEndPage,
+    findingsPageStartNumber,
+    findingPagesLength: findingPages.length,
+    findingDetailPagesLength: findingDetailPages.length,
+    showConclusionPaper,
+    conclusionPagesLength: conclusionPages.length,
+    showAppendixPaper,
+    appendixPageBase,
+    appendixPagesLength: appendixPages.length,
+  });
+
+  useEffect(() => {
+    const renderedRows = findingPages.reduce(
+      (sum, page) => sum + (page.auditRows?.length || 0),
+      0,
+    );
+    console.log(
+      "AUDIT_RENDER",
+      JSON.stringify(
+        {
+          sectionsLength: findingSections.length,
+          hubModuleSectionsLength: hubModuleSections.length,
+          hasSystemFindingModules,
+          showConclusionPaper,
+          showAppendixPaper,
+          appendixPagesLength: appendixPages.length,
+          displaySectionsLength: displayFindingSections.length,
+          paginatedSectionsLength: paginatedFindingSections.length,
+          findingPagesLength: findingPages.length,
+          renderedRows,
+          depts: findingSections.map((section) => {
+            const deptKey = section.deptKey;
+            const locked = publishStatusByDept[deptKey] === true;
+            const visible = auditVisibleByDept[deptKey] !== false;
+            const effective = effectivePublishByDept[deptKey] === true;
+            const displaySec = displayFindingSections.find((d) => d.deptKey === deptKey);
+            const paginatedSec = paginatedFindingSections.find((p) => p.deptKey === deptKey);
+            const pagesForDept = findingPages.filter((p) => p.dept.deptKey === deptKey);
+            const pageAuditRows = pagesForDept.reduce(
+              (n, p) => n + (p.auditRows?.length || 0),
+              0,
+            );
+            return {
+              deptKey,
+              locked,
+              visible,
+              effective,
+              stateAuditRowsLength: section.auditRows?.length ?? 0,
+              displayAuditRowsLength: displaySec?.auditRows?.length ?? 0,
+              paginatedAuditRowsLength: paginatedSec?.auditRows?.length ?? 0,
+              pageAuditRows,
+            };
+          }),
+        },
+        null,
+        2,
+      ),
+    );
+  }, [
+    findingSections,
+    hubModuleSections,
+    hasSystemFindingModules,
+    showConclusionPaper,
+    showAppendixPaper,
+    appendixPages,
+    displayFindingSections,
+    paginatedFindingSections,
+    findingPages,
+    effectivePublishByDept,
+    publishStatusByDept,
+    auditVisibleByDept,
+  ]);
 
   const refreshModulesIntoPreview = useCallback(async () => {
     sopModuleRefreshRef.current = true;
@@ -3186,8 +3945,8 @@ function ReportPreviewPageContent() {
 
   const buildReportExportPayload = useCallback((findingSectionsOverride) => {
     const exportFindingSections = findingSectionsOverride ?? findingSections;
-    const periodStartVal = `JANUARY ${year}`;
-    const periodEndVal = `DECEMBER ${year}`;
+    const periodStartVal = String(periodStart ?? "").trim() || `JANUARY ${year}`;
+    const periodEndVal = String(periodEnd ?? "").trim() || `DECEMBER ${year}`;
     const issuedDateVal = new Date().toLocaleDateString("en-US", {
       month: "long",
       day: "numeric",
@@ -3239,41 +3998,40 @@ function ReportPreviewPageContent() {
     const exportConclusionPages =
       conclusionPages.length > 0
         ? conclusionPages
-        : exportFindingSections.length > 0
-          ? (() => {
-              const segments = exportFindingSections
-                .map((section, i) => ({
-                  sectionNumber: i + 1,
-                  deptLabel: section.deptLabel,
-                  deptKey: section.deptKey,
-                  text: (conclusionValues[section.deptKey] || "").trim(),
-                }))
-                .filter((seg) => seg.text);
-              return segments.length > 0 ? [segments] : [[]];
-            })()
-          : [];
+            .map((page) =>
+              (Array.isArray(page) ? page : []).filter((seg) => String(seg?.text ?? "").trim()),
+            )
+            .filter((page) => page.length > 0)
+        : (() => {
+            const segments = buildConclusionDeptSegments(
+              conclusionDeptSections,
+              conclusionValues,
+            ).map((seg, i) => ({
+              ...seg,
+              sectionNumber: deptIndexMap[seg.deptKey] ?? i + 1,
+            }));
+            return segments.length > 0 ? [segments] : [];
+          })();
 
-    const conclusionPageCount =
-      displayFindingSections.length > 0
-        ? exportConclusionPages.length || 1
-        : 0;
-
-    const totalPages =
-      4 +
-      executiveSummaryPages.length +
-      auditObjectivesScopePages.length +
-      auditApproachMethodologyPages.length +
-      findingPages.length +
-      findingDetailPages.length +
-      conclusionPageCount +
-      appendixPages.length;
+    const totalPages = computeReportTotalPages({
+      executiveSummaryEndPage,
+      auditObjectivesEndPage,
+      auditApproachEndPage,
+      findingsPageStartNumber,
+      findingPagesLength: findingPages.length,
+      findingDetailPagesLength: findingDetailPages.length,
+      showConclusionPaper,
+      conclusionPagesLength: exportConclusionPages.length,
+      showAppendixPaper,
+      appendixPageBase,
+      appendixPagesLength: appendixPages.length,
+    });
 
     const appendixStartPage =
       findingsPageStartNumber +
       findingPages.length +
-      1 +
       findingDetailPages.length +
-      (displayFindingSections.length > 0 ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
+      (showConclusionPaper ? (conclusionPages.length > 0 ? conclusionPages.length : 1) : 0) +
       1;
 
     const departmentCompletionRows = REPORT_DEPARTMENT_COMPLETION_ROWS.filter((row) =>
@@ -3332,8 +4090,8 @@ function ReportPreviewPageContent() {
       executiveSummaryPages: filterMeaningfulHtmlPages(executiveSummaryPages),
       auditObjectivesScopePages: filterMeaningfulHtmlPages(auditObjectivesScopePages),
       auditApproachMethodologyPages: filterMeaningfulHtmlPages(auditApproachMethodologyPages),
-      auditTeam: auditTeamDisplayRows,
-      preparedBy: [preparedByDisplayRow],
+      auditTeam: resolveAuditTeamRows(auditTeam),
+      preparedBy: preparedBy.length > 0 ? preparedBy : [],
       auditCommitteeName,
       auditCommitteeDate: formattedAuditCommitteeDate,
       presidentDirectorName,
@@ -3341,9 +4099,19 @@ function ReportPreviewPageContent() {
       tableOfContents: tocItems,
       departmentCompletionRows,
       deptIndexMap,
+      conclusionValues,
       conclusionChunks: conclusionTexts,
       conclusionPages: exportConclusionPages,
       source: "html-preview",
+      coverSnapshotHash: computeCoverSnapshotHash({
+        auditTeam: resolveAuditTeamRows(auditTeam),
+        preparedBy,
+        auditCommitteeName,
+        auditCommitteeDate: formattedAuditCommitteeDate,
+        presidentDirectorName,
+        presidentDirectorDate: formattedPresidentDirectorDate,
+        appendices,
+      }),
       previewSnapshotHash: computePreviewSnapshotHash(
         auditVisibleByDept,
         exportFindingSections,
@@ -3352,10 +4120,18 @@ function ReportPreviewPageContent() {
           auditObjectivesScopeHtml,
           auditApproachMethodologyHtml,
           conclusionValues,
+          auditTeam: resolveAuditTeamRows(auditTeam),
+          preparedBy,
+          auditCommitteeName,
+          auditCommitteeDate: formattedAuditCommitteeDate,
+          presidentDirectorName,
+          presidentDirectorDate: formattedPresidentDirectorDate,
+          appendices,
         },
       ),
       moduleTablesHash: computeModuleTablesHash(exportFindingSections),
       auditVisibleByDept,
+      effectivePublishByDept,
       findingSections: filterFindingSectionsForDisplay(
         exportFindingSections,
         effectivePublishByDept,
@@ -3374,23 +4150,33 @@ function ReportPreviewPageContent() {
         showAppendicesHeading: page.showAppendicesHeading,
         segments: page.segments,
       })),
-      findingPages: findingPages.map((page, idx) => ({
+      findingPages: filterFindingPagesForPreview(
+        findingPages.map((page) => ({
+          deptKey: page.dept.deptKey,
+          deptLabel: page.dept.deptLabel,
+          deptNum: deptIndexMap[page.dept.deptKey] || 1,
+          executiveSummary:
+            page.isFirstPageForDept &&
+            isDeptPublishedToReport(page.dept.deptKey, effectivePublishByDept)
+              ? page.dept.executiveSummary
+              : null,
+          sopRows: page.sopRows || [],
+          auditRows: page.auditRows || [],
+          isFirstPageForDept: page.isFirstPageForDept,
+          isFirstSopChunk: page.isFirstSopChunk,
+          isFirstAuditChunk: page.isFirstAuditChunk,
+        })),
+        effectivePublishByDept,
+      ).map((page, idx) => ({
+        ...page,
         pageNumber: findingsPageStartNumber + idx,
-        deptKey: page.dept.deptKey,
-        deptLabel: page.dept.deptLabel,
-        deptNum: deptIndexMap[page.dept.deptKey] || 1,
-        executiveSummary: page.isFirstPageForDept ? page.dept.executiveSummary : null,
-        sopRows: page.sopRows || [],
-        auditRows: page.auditRows || [],
-        isFirstPageForDept: page.isFirstPageForDept,
-        isFirstSopChunk: page.isFirstSopChunk,
-        isFirstAuditChunk: page.isFirstAuditChunk,
       })),
       selectedFindingByDept,
       findingDetailPages: findingDetailPages.map((item, idx) => ({
         ...item,
-        pageNumber: findingsPageStartNumber + findingPages.length + 1 + idx,
+        pageNumber: findingsPageStartNumber + findingPages.length + idx,
       })),
+      deptFindingNarratives: [],
       pageLayout: {
         totalPages,
         executiveSummaryStartPage,
@@ -3400,22 +4186,21 @@ function ReportPreviewPageContent() {
         auditApproachEndPage,
         findingsPageStartNumber,
         conclusionStartPage:
-          findingsPageStartNumber +
-          findingPages.length +
-          1 +
-          findingDetailPages.length,
+          findingsPageStartNumber + findingPages.length + findingDetailPages.length,
         appendixStartPage,
       },
     };
   }, [
     year,
+    periodStart,
+    periodEnd,
     auditCoverage,
     departmentCoverage,
     area,
     executiveSummaryHtml,
     auditObjectivesScopeHtml,
     auditApproachMethodologyHtml,
-    auditTeamDisplayRows,
+    auditTeam,
     preparedBy,
     auditCommitteeName,
     formattedAuditCommitteeDate,
@@ -3444,169 +4229,59 @@ function ReportPreviewPageContent() {
     findingDetailPages,
     selectedFindingByDept,
     conclusionPages,
+    conclusionDeptSections,
     appendixPages,
     findingsPageStartNumber,
   ]);
 
-  const runReportExport = async (format) => {
-    if (loadingFindings) return;
-    if (displayFindingSections.length === 0) {
-      window.alert("No report data loaded yet. Please wait for data or publish SOP/Audit data first.");
-      return;
-    }
-    setExportingFormat(format);
-    try {
-      const payload = buildReportExportPayload();
-      const result = await downloadConsolidatedReport(payload, format);
-      if (!result.ok) {
-        window.alert(result.error || "Export failed.");
-      }
-    } catch (err) {
-      console.error("Report export error:", err);
-      window.alert(err?.message || "Export failed.");
-    } finally {
-      setExportingFormat(null);
-    }
-  };
+  buildReportExportPayloadRef.current = buildReportExportPayload;
 
-  const handleDownloadWord = () => runReportExport("docx");
-  const handleDownloadPdf = () => runReportExport("pdf");
-
-  const openDocumentEditor = async () => {
-    if (loadingFindings) return;
+  const handleCreateWordAndOpenOnlyOffice = async () => {
     if (displayFindingSections.length === 0) {
-      const msg =
-        "Belum ada data laporan. Publikasikan data SOP / Audit Review terlebih dahulu.";
-      if (onlyOfficeCreate) {
-        window.alert(msg);
-        router.replace(
-          `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
-        );
-      } else {
-        window.alert(msg);
-      }
+      window.alert(
+        "No report data yet. Publish SOP / Audit Review data first.",
+      );
       return;
     }
     setOpeningEditor(true);
-    if (onlyOfficeCreate) {
-      setCreateProgress(60);
-      setCreateStatus("Building report snapshot...");
-    }
     try {
-      if (onlyOfficeCreate) {
-        setCreateProgress(55);
-        setCreateStatus("Loading latest SOP & Audit Review data...");
-      }
-      const freshSections = await refreshModulesIntoPreview();
-      const payload = buildReportExportPayload(freshSections);
-      if (onlyOfficeCreate) {
-        setCreateProgress(75);
-        setCreateStatus("Generating DOCX file...");
-      }
-      await persistReportStateRef.current?.({
-        syncMode:
-          onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
-        protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
+      skipPersistUntilRef.current = 0;
+      skipPersistOnceRef.current = false;
+      flushPendingFieldUpdates();
+      await persistReportStateNow({
+        narrativeFromPreviewEdit: true,
+        bypassSkipPersist: true,
       });
-      const result = await openSharedReportEditor(payload);
+      const payload = buildReportExportPayload();
+      const initiatorClientId = getPreviewTabClientId();
+      const result = await syncReportDocxFromPreview(year, payload);
       if (!result.ok) {
-        window.alert(result.error || "Could not open editor.");
-        if (onlyOfficeCreate) {
-          router.replace(
-            `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
-          );
-        }
+        window.alert(result.error || "Failed to create Word document.");
         return;
       }
-      if (result.editorEnabled && result.onlyOfficeReachable === false) {
-        const downloadNow = window.confirm(
-          "OnlyOffice tidak berjalan (Docker Desktop + port 8082).\n\n" +
-            "DOCX report sudah dibuat di server.\n\n" +
-            "OK = unduh Word sekarang\n" +
-            "Cancel = buka halaman editor (akan error sampai OnlyOffice siap)",
-        );
-        if (downloadNow && result.sessionId) {
-          const dl = await downloadReportSession(result.sessionId, "docx", result.year);
-          if (!dl.ok) window.alert(dl.error || "Download failed.");
-          if (onlyOfficeCreate) {
-            router.replace(
-              `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
-            );
-          }
-          return;
-        }
-      }
       if (result.editorPath) {
-        if (onlyOfficeCreate) {
-          setCreateProgress(100);
-          setCreateStatus("Opening OnlyOffice...");
-        }
-        const go = onlyOfficeCreate ? router.replace.bind(router) : router.push.bind(router);
-        go(result.editorPath);
+        pushOnlyOfficeRedirectToPeers(year, {
+          clientId: initiatorClientId,
+          editorPath: result.editorPath,
+          sessionId: result.sessionId,
+        });
+        await notifyOnlyOfficeSessionOpened(year, {
+          sessionId: result.sessionId,
+          editorPath: result.editorPath,
+          initiatorClientId,
+        });
+        await joinOnlyOfficeEditor(result.editorPath, { syncBeforeOpen: false });
+        return;
       }
+      window.alert("Word document created but editor URL is missing.");
     } catch (e) {
       console.error(e);
-      window.alert(e?.message || "Could not open editor.");
-      if (onlyOfficeCreate) {
-        router.replace(
-          `/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`,
-        );
-      }
+      window.alert(e?.message || "Failed to create Word document.");
     } finally {
       setOpeningEditor(false);
     }
   };
 
-  useEffect(() => {
-    if (!shouldAutoDownloadWord || hasAutoDownloadedWordRef.current) return;
-    if (loadingFindings) return;
-    if (displayFindingSections.length === 0) return;
-
-    const timer = window.setTimeout(() => {
-      if (hasAutoDownloadedWordRef.current) return;
-      hasAutoDownloadedWordRef.current = true;
-      openDocumentEditor();
-    }, 600);
-
-    return () => window.clearTimeout(timer);
-  }, [shouldAutoDownloadWord, loadingFindings, displayFindingSections.length]);
-
-  useEffect(() => {
-    if (!shouldOpenEditor || hasAutoOpenedEditorRef.current) return;
-    if (loadingFindings || !findingsLoadCompleted) return;
-
-    if (displayFindingSections.length === 0) {
-      if (onlyOfficeCreate && !emptyCreateAbortRef.current) {
-        emptyCreateAbortRef.current = true;
-        hasAutoOpenedEditorRef.current = true;
-        window.alert(
-          "Belum ada data laporan. Publikasikan data SOP / Audit Review terlebih dahulu.",
-        );
-        router.replace(`/Page/report${Number.isFinite(year) ? `?year=${year}` : ""}`);
-      }
-      return;
-    }
-
-    const delayMs = onlyOfficeCreate ? 1400 : 600;
-    const timer = window.setTimeout(() => {
-      if (hasAutoOpenedEditorRef.current) return;
-      hasAutoOpenedEditorRef.current = true;
-      openDocumentEditor();
-    }, delayMs);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    shouldOpenEditor,
-    loadingFindings,
-    findingsLoadCompleted,
-    displayFindingSections.length,
-    onlyOfficeCreate,
-    year,
-    router,
-  ]);
-
-  const periodStart = `JANUARY ${year}`;
-  const periodEnd = `DECEMBER ${year}`;
   // Tanggal issued mengikuti tanggal hari ini (format: Month DD, YYYY)
   const issuedDate = new Date().toLocaleDateString("en-US", {
     month: "long",
@@ -3614,21 +4289,13 @@ function ReportPreviewPageContent() {
     year: "numeric",
   });
 
-  if (!mounted) {
-    if (onlyOfficeCreate) {
-      return (
-        <LoadingProgressOverlay
-          open
-          progress={8}
-          title="Creating consolidated report"
-          subtitle={Number.isFinite(year) ? `Audit year ${year}` : ""}
-          statusLabel="Loading..."
-        />
-      );
-    }
+  if (!clientReady) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center text-sm text-slate-600">
-        Loading report preview...
+      <div
+        suppressHydrationWarning
+        className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4 print:bg-white"
+      >
+        <p className="text-sm text-slate-500">Loading report preview…</p>
       </div>
     );
   }
@@ -3636,29 +4303,9 @@ function ReportPreviewPageContent() {
   return (
     <div
       suppressHydrationWarning
-      className={
-        onlyOfficeCreate
-          ? "min-h-screen bg-gray-100 h-screen overflow-hidden relative"
-          : "min-h-screen bg-gray-100 flex flex-col items-center justify-start p-4 print:bg-white print:p-0 gap-6"
-      }
+      className="min-h-screen bg-gray-100 flex flex-col items-center justify-start p-4 print:bg-white print:p-0 gap-6"
     >
-      {onlyOfficeCreate ? (
-        <LoadingProgressOverlay
-          open
-          progress={createProgress}
-          title="Creating consolidated report"
-          subtitle={Number.isFinite(year) ? `Audit year ${year}` : ""}
-          statusLabel={createStatus}
-        />
-      ) : null}
-      <div
-        className={
-          onlyOfficeCreate
-            ? "absolute -left-[10000px] top-0 w-[210mm] overflow-visible pointer-events-none [visibility:hidden]"
-            : "flex flex-col items-center justify-start gap-6 w-full"
-        }
-        aria-hidden={onlyOfficeCreate ? true : undefined}
-      >
+      <div className="flex flex-col items-center justify-start gap-6 w-full">
       <style jsx global>{`
         @media print {
           * {
@@ -3704,26 +4351,75 @@ function ReportPreviewPageContent() {
         .executive-summary-content u {
           text-decoration: underline;
         }
+        .audit-findings-table th,
+        .audit-findings-table td {
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
+        .audit-findings-table th {
+          font-size: 7px;
+          line-height: 1.15;
+          padding: 3px 2px;
+        }
+        .audit-findings-table td {
+          vertical-align: top;
+        }
+        .sop-review-table th,
+        .sop-review-table td {
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          vertical-align: top;
+        }
+        .sop-review-table th {
+          font-size: 8px;
+          line-height: 1.15;
+          padding: 3px 2px;
+        }
       `}</style>
-      {!onlyOfficeCreate ? (
-        <div
-          className="fixed top-3 right-3 z-[90] print:hidden flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[10px] text-slate-600 shadow-sm"
-          title="Sinkron lock/unlock Audit Review ke report (realtime)"
+      <div
+        suppressHydrationWarning
+        className="fixed top-3 left-3 right-3 z-[91] print:hidden flex items-start justify-between gap-2 pointer-events-none"
+      >
+        <button
+          type="button"
+          suppressHydrationWarning
+          onClick={() => {
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              router.back();
+              return;
+            }
+            const params = new URLSearchParams();
+            if (Number.isFinite(year)) params.set("year", String(year));
+            router.replace(`/Page/report?${params.toString()}`);
+          }}
+          className="pointer-events-auto shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold shadow-md hover:bg-slate-50"
         >
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${streamConnected ? "bg-emerald-500" : "bg-amber-400"}`}
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+        <div className="flex items-start gap-2">
+          <button
+            type="button"
+            suppressHydrationWarning
+            onClick={handleCreateWordAndOpenOnlyOffice}
+            disabled={openingEditor}
+            className="pointer-events-auto shrink-0 inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {openingEditor ? "Creating Word…" : "Create Word & Open OnlyOffice"}
+          </button>
+          <PreviewCollaborationBar
+            participants={collabParticipants}
+            wsConnected={collabWsConnected}
           />
-          {streamConnected ? "Report sync realtime" : "Report sync connecting…"}
         </div>
-      ) : null}
-      {loadingFindings && !onlyOfficeCreate ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 backdrop-blur-[1px] print:hidden">
-          <div className="bg-white rounded-xl shadow-xl px-6 py-5 flex items-center gap-3 min-w-[260px]">
-            <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-            <div className="text-sm text-gray-800 font-medium">Loading report data...</div>
-          </div>
+      </div>
+      {aiStatus && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[92] max-w-lg px-4 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-900 text-xs shadow-md print:hidden">
+          {aiStatus}
         </div>
-      ) : null}
+      )}
       {/* Cover — one A4: background fill + bordered text boxes (Arial only on page 1) */}
       <div
         className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] min-h-[297mm] max-h-[297mm] overflow-hidden break-after-page relative box-border isolate [print-size:A4] font-[Arial]"
@@ -3828,12 +4524,17 @@ function ReportPreviewPageContent() {
                   const role = newPreparedRole.trim();
                   const date = newPreparedDate.trim();
                   if (!name || !role) return;
-                  setPreparedBy([{ name, role, date }]);
+                  const nextPrepared = [...preparedBy, { name, role, date }];
+                  setPreparedBy(nextPrepared);
+                  broadcastPreviewStateNow({ preparedBy: nextPrepared }, { force: true });
                   setIsPreparedByModalOpen(false);
+                  setNewPreparedName("");
+                  setNewPreparedRole("MEMBER");
+                  setNewPreparedDate("");
                 }}
                 className="px-3 py-1 rounded bg-blue-600 text-white"
               >
-                Save
+                Add
               </button>
             </div>
           </div>
@@ -3864,14 +4565,32 @@ function ReportPreviewPageContent() {
         {/* Detail table - label lebar tetap agar tanda : sejajar vertikal */}
         <div className="max-w-[650px] mx-auto text-[11px] text-gray-900 space-y-3">
           {/* PERIOD */}
-          <div className="flex flex-row items-center gap-3 flex-wrap">
-            <div className="font-semibold tracking-wide w-[230px] shrink-0 whitespace-nowrap text-gray-700">
+          <div className="flex flex-row items-start gap-3 flex-wrap">
+            <div className="font-semibold tracking-wide w-[230px] shrink-0 pt-1 whitespace-nowrap text-gray-700">
               PERIOD <span>:</span>
             </div>
-            <div className="flex-1 min-w-0 font-semibold tracking-wide text-gray-900">
-              {periodStart}
-              <span className="mx-2">-</span>
-              {periodEnd}
+            <div className="flex-1 min-w-[200px] flex flex-row items-start gap-2 flex-wrap font-semibold tracking-wide text-gray-900">
+              <textarea
+                value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                onInput={(e) => {
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                rows={1}
+                className="flex-1 min-w-[120px] font-semibold leading-snug bg-transparent border-none resize-none focus:outline-none p-0 overflow-hidden"
+              />
+              <span className="pt-1 shrink-0">-</span>
+              <textarea
+                value={periodEnd}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+                onInput={(e) => {
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                rows={1}
+                className="flex-1 min-w-[120px] font-semibold leading-snug bg-transparent border-none resize-none focus:outline-none p-0 overflow-hidden"
+              />
             </div>
           </div>
 
@@ -3940,7 +4659,7 @@ function ReportPreviewPageContent() {
 
       {/* Audit team, department completion date, and footer (satu halaman) */}
       <div className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] overflow-hidden flex flex-col px-20 pt-24 pb-16 break-after-page">
-        {/* Audit Team — borderless table, example row when empty */}
+        {/* Audit Team — borderless table */}
         <div className="mb-20 text-[11px]">
           <div className="text-center font-bold tracking-wide mb-2 text-[10px]">
             AUDIT TEAM <span>:</span>
@@ -3965,29 +4684,40 @@ function ReportPreviewPageContent() {
                 <col className="w-1/2" />
               </colgroup>
               <tbody>
-                {auditTeamDisplayRows.map((member, idx) => (
-                  <tr key={`audit-team-${idx}-${member.name}-${member.role}`}>
-                    <td className="py-2 pr-6 text-center font-semibold align-middle">
-                      <span className="inline-flex items-center justify-center gap-1">
-                        <span>{member.name}</span>
-                        {auditTeam.length > 0 && (
+                {auditTeam.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={2}
+                      className="py-2 text-center text-gray-400 align-middle print:text-transparent"
+                    >
+                      —
+                    </td>
+                  </tr>
+                ) : (
+                  auditTeam.map((member, idx) => (
+                    <tr key={`audit-team-${idx}-${member.name}-${member.role}`}>
+                      <td className="py-2 pr-6 text-center font-semibold align-middle">
+                        <span className="inline-flex items-center justify-center gap-1">
+                          <span>{member.name}</span>
                           <button
                             type="button"
-                            onClick={() =>
-                              setAuditTeam((prev) => prev.filter((_, i) => i !== idx))
-                            }
+                            onClick={() => {
+                              const nextTeam = auditTeam.filter((_, i) => i !== idx);
+                              setAuditTeam(nextTeam);
+                              broadcastPreviewStateNow({ auditTeam: nextTeam }, { force: true });
+                            }}
                             className="print:hidden text-[7px] text-red-600 hover:text-red-800 shrink-0"
                           >
                             Delete
                           </button>
-                        )}
-                      </span>
-                    </td>
-                    <td className="py-2 text-center font-semibold align-middle uppercase tracking-wide">
-                      {member.role}
-                    </td>
-                  </tr>
-                ))}
+                        </span>
+                      </td>
+                      <td className="py-2 text-center font-semibold align-middle uppercase tracking-wide">
+                        {member.role}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -4034,14 +4764,19 @@ function ReportPreviewPageContent() {
                     onClick={() => {
                       const trimmedName = newAuditName.trim();
                       if (!trimmedName) return;
-                      setAuditTeam((prev) => [...prev, { name: trimmedName, role: newAuditRole }]);
+                      const nextTeam = [
+                        ...auditTeam,
+                        { name: trimmedName, role: newAuditRole },
+                      ];
+                      setAuditTeam(nextTeam);
+                      broadcastPreviewStateNow({ auditTeam: nextTeam }, { force: true });
                       setIsAuditTeamModalOpen(false);
                       setNewAuditName("");
                       setNewAuditRole("MEMBER");
                     }}
                     className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
                   >
-                    Save
+                    Add
                   </button>
                 </div>
               </div>
@@ -4136,7 +4871,7 @@ function ReportPreviewPageContent() {
             </div>
             <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
             <div className="flex-1 text-right">
-              PAGE <span className="mx-1">2</span> of <span className="ml-1">40</span>
+              PAGE <span className="mx-1">2</span> of <span className="ml-1">{totalPages}</span>
             </div>
           </div>
         </div>
@@ -4195,33 +4930,49 @@ function ReportPreviewPageContent() {
                 <col className="w-[36%]" />
               </colgroup>
               <tbody>
-                <tr className="align-bottom">
-                  <td className="py-1.5 pr-3 font-semibold">{preparedByDisplayRow.name}</td>
-                  <td className="py-1.5 pr-2 font-semibold uppercase tracking-wide whitespace-nowrap">
-                    {preparedByDisplayRow.role}
-                  </td>
-                  <td className="py-1.5 pr-3 align-bottom">
-                    <span
-                      className="block w-full border-0 border-b border-black border-solid min-h-[0.5em] leading-none"
-                      aria-hidden="true"
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2 font-semibold whitespace-nowrap">DATE</td>
-                  <td className="py-1.5 font-semibold whitespace-nowrap">
-                    {preparedByDisplayRow.date}
-                  </td>
-                </tr>
+                {preparedByDisplayRows.length === 0 ? (
+                  <tr className="align-bottom">
+                    <td colSpan={5} className="py-1.5 text-center text-gray-400 print:text-transparent">
+                      —
+                    </td>
+                  </tr>
+                ) : (
+                  preparedByDisplayRows.map((row, idx) => (
+                    <tr key={`prepared-by-${idx}-${row.name}-${row.role}`} className="align-bottom">
+                      <td className="py-1.5 pr-3 font-semibold">
+                        <span className="inline-flex items-center gap-1">
+                          <span>{row.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextPrepared = preparedBy.filter((_, i) => i !== idx);
+                              setPreparedBy(nextPrepared);
+                              broadcastPreviewStateNow({ preparedBy: nextPrepared }, { force: true });
+                            }}
+                            className="print:hidden text-[7px] text-red-600 hover:text-red-800 shrink-0"
+                          >
+                            Delete
+                          </button>
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-2 font-semibold uppercase tracking-wide whitespace-nowrap">
+                        {row.role}
+                      </td>
+                      <td className="py-1.5 pr-3 align-bottom">
+                        <span
+                          className="inline-block w-20 border-0 border-b border-black border-solid min-h-[0.5em] leading-none"
+                          aria-hidden="true"
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2 font-semibold whitespace-nowrap">DATE</td>
+                      <td className="py-1.5 font-semibold whitespace-nowrap">
+                        {row.date || "\u00a0"}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
-            {preparedBy.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setPreparedBy([])}
-                className="print:hidden mt-2 text-[9px] text-red-600 hover:text-red-800"
-              >
-                Delete
-              </button>
-            )}
           </div>
 
           {/* Management approval: jabatan + tanggal satu baris (sejajar), lalu ruang tanda tangan → garis → nama */}
@@ -4244,7 +4995,7 @@ function ReportPreviewPageContent() {
                   </div>
                 </div>
                 <div className="w-full min-h-[64px] mt-3" aria-hidden="true" />
-                <div className="border-t border-gray-400 w-44 max-w-full" />
+                <div className="border-t border-gray-400 w-28 mx-auto" />
                 <div className="mt-2 text-[10px] font-semibold text-center w-full px-1">
                   <input
                     type="text"
@@ -4270,7 +5021,7 @@ function ReportPreviewPageContent() {
                   </div>
                 </div>
                 <div className="w-full min-h-[64px] mt-3" aria-hidden="true" />
-                <div className="border-t border-gray-400 w-44 max-w-full" />
+                <div className="border-t border-gray-400 w-28 mx-auto" />
                 <div className="mt-2 text-[10px] font-semibold text-center w-full px-1">
                   <input
                     type="text"
@@ -4293,7 +5044,7 @@ function ReportPreviewPageContent() {
             </div>
             <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
             <div className="flex-1 text-right">
-              PAGE <span className="mx-1">3</span> of <span className="ml-1">40</span>
+              PAGE <span className="mx-1">3</span> of <span className="ml-1">{totalPages}</span>
             </div>
           </div>
         </div>
@@ -4393,7 +5144,7 @@ function ReportPreviewPageContent() {
               INTERNAL AUDIT REPORT
             </div>
             <div className="flex-1 text-right">
-              PAGE <span className="mx-1">4</span> of <span className="ml-1">40</span>
+              PAGE <span className="mx-1">4</span> of <span className="ml-1">{totalPages}</span>
             </div>
           </div>
         </div>
@@ -4439,7 +5190,10 @@ function ReportPreviewPageContent() {
                   SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
                 </div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE 5 of 40</div>
+                <div className="flex-1 text-right">
+                  PAGE <span className="mx-1">{executiveSummaryStartPage}</span> of{" "}
+                  <span className="ml-1">{totalPages}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -4453,7 +5207,10 @@ function ReportPreviewPageContent() {
                   SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
                 </div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE 6 of 40</div>
+                <div className="flex-1 text-right">
+                  PAGE <span className="mx-1">{executiveSummaryStartPage + 1}</span> of{" "}
+                  <span className="ml-1">{totalPages}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -4491,7 +5248,10 @@ function ReportPreviewPageContent() {
                   SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
                 </div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE 7 of 40</div>
+                <div className="flex-1 text-right">
+                  PAGE <span className="mx-1">{auditObjectivesStartPage}</span> of{" "}
+                  <span className="ml-1">{totalPages}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -4505,7 +5265,10 @@ function ReportPreviewPageContent() {
                   SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
                 </div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE 8 of 40</div>
+                <div className="flex-1 text-right">
+                  PAGE <span className="mx-1">{auditObjectivesStartPage + 1}</span> of{" "}
+                  <span className="ml-1">{totalPages}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -4543,7 +5306,10 @@ function ReportPreviewPageContent() {
                   SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
                 </div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE 8 of 40</div>
+                <div className="flex-1 text-right">
+                  PAGE <span className="mx-1">{auditApproachStartPage}</span> of{" "}
+                  <span className="ml-1">{totalPages}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -4557,7 +5323,10 @@ function ReportPreviewPageContent() {
                   SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM
                 </div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE 9 of 40</div>
+                <div className="flex-1 text-right">
+                  PAGE <span className="mx-1">{auditApproachStartPage + 1}</span> of{" "}
+                  <span className="ml-1">{totalPages}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -4603,7 +5372,7 @@ function ReportPreviewPageContent() {
                 INTERNAL AUDIT REPORT
               </div>
               <div className="flex-1 text-right">
-                PAGE <span className="mx-1">{executiveSummaryStartPage + pageIdx}</span> of <span className="ml-1">40</span>
+                PAGE <span className="mx-1">{executiveSummaryStartPage + pageIdx}</span> of <span className="ml-1">{totalPages}</span>
               </div>
             </div>
           </div>
@@ -4781,7 +5550,7 @@ function ReportPreviewPageContent() {
                 onClick={saveRichTextEditor}
                 className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
               >
-                Save
+                Done
               </button>
             </div>
           </div>
@@ -4827,7 +5596,7 @@ function ReportPreviewPageContent() {
                 INTERNAL AUDIT REPORT
               </div>
               <div className="flex-1 text-right">
-                PAGE <span className="mx-1">{auditObjectivesStartPage + pageIdx}</span> of <span className="ml-1">40</span>
+                PAGE <span className="mx-1">{auditObjectivesStartPage + pageIdx}</span> of <span className="ml-1">{totalPages}</span>
               </div>
             </div>
           </div>
@@ -4873,7 +5642,7 @@ function ReportPreviewPageContent() {
                 INTERNAL AUDIT REPORT
               </div>
               <div className="flex-1 text-right">
-                PAGE <span className="mx-1">{auditApproachStartPage + pageIdx}</span> of <span className="ml-1">40</span>
+                PAGE <span className="mx-1">{auditApproachStartPage + pageIdx}</span> of <span className="ml-1">{totalPages}</span>
               </div>
             </div>
           </div>
@@ -5007,14 +5776,21 @@ function ReportPreviewPageContent() {
 
             {/* SOP Review table: subjudul hanya saat chunk pertama; halaman lanjutan (data berlanjut) tanpa subjudul */}
             {page.sopRows.length > 0 && (
-              <div>
+              <div
+                {...(page.isFirstSopChunk
+                  ? reportBlockHtmlProps(
+                      systemFindingSopBlockId(page.dept.deptKey),
+                      BLOCK_KIND.SYSTEM,
+                    )
+                  : {})}
+              >
                 {page.isFirstSopChunk && (
                   <p className="font-semibold mb-2">
                     Standard Operating Procedure Related (SOP Review)
                   </p>
                 )}
                 <div className="px-2 min-w-0 w-full overflow-hidden">
-                  <table className="w-full border-collapse text-[9px] table-fixed" style={{ tableLayout: "fixed", width: "100%" }}>
+                  <table className="sop-review-table w-full border-collapse text-[9px] table-fixed" style={{ tableLayout: "fixed", width: "100%" }}>
                     <colgroup>
                       <col style={{ width: "4%" }} />
                       <col style={{ width: "42%" }} />
@@ -5024,40 +5800,30 @@ function ReportPreviewPageContent() {
                     </colgroup>
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-1.5 py-1 text-center whitespace-nowrap">
-                          No
-                        </th>
-                        <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">
-                          Standard Operating Procedure Related
-                        </th>
-                        <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">
-                          Review
-                        </th>
-                        <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">
-                          Auditee Comment
-                        </th>
-                        <th className="border border-gray-300 px-1.5 py-1 text-left min-w-0">
-                          Follow-Up Detail
-                        </th>
+                        <th className="border border-gray-300 text-center whitespace-nowrap">No</th>
+                        <th className="border border-gray-300 text-left min-w-0">SOP Related</th>
+                        <th className="border border-gray-300 text-left min-w-0">Review</th>
+                        <th className="border border-gray-300 text-left min-w-0">Auditee Comment</th>
+                        <th className="border border-gray-300 text-left min-w-0">Follow-Up Detail</th>
                       </tr>
                     </thead>
                     <tbody>
                       {page.sopRows.map((row, rIdx) => (
-                        <tr key={`sop-${page.dept.deptKey}-${idx}-${rIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>
+                        <tr key={`sop-${page.dept.deptKey}-${idx}-${rIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="border border-gray-300 px-1.5 py-0.5 text-center whitespace-nowrap">
                             {row.no}
                           </td>
-                          <td className={row.__continuedRow ? (row.sopRelated ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                          <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">
                             {row.sopRelated || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.reviewComment ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                            {row.reviewComment || (row.__continuedRow ? "" : "-")}
+                          <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">
+                            {row.reviewComment || "-"}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                            {row.__continuedRow ? "" : (row.auditeeComment || "-")}
+                          <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">
+                            {row.auditeeComment || "-"}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                            {row.__continuedRow ? "" : (row.followUpDetail || "-")}
+                          <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">
+                            {row.followUpDetail || "-"}
                           </td>
                         </tr>
                       ))}
@@ -5071,95 +5837,72 @@ function ReportPreviewPageContent() {
             {/* Audit Review table: subjudul hanya saat chunk pertama; halaman lanjutan tanpa subjudul */}
             {isDeptPublishedToReport(page.dept.deptKey, effectivePublishByDept) &&
               page.auditRows.length > 0 && (
-              <div>
+              <div
+                {...(page.isFirstAuditChunk
+                  ? reportBlockHtmlProps(
+                      systemFindingAuditBlockId(page.dept.deptKey),
+                      BLOCK_KIND.SYSTEM,
+                    )
+                  : {})}
+              >
                 {page.isFirstAuditChunk && (
                   <p className="font-semibold mb-1 text-[10px]">
                     Audit Review — Findings Detail
                   </p>
                 )}
                 <div className="px-2 min-w-0 w-full overflow-hidden">
-                  <table className="w-full border-collapse text-[9px] leading-tight table-fixed" style={{ tableLayout: "fixed", width: "100%" }}>
+                  <table className="audit-findings-table w-full border-collapse text-[9px] leading-tight table-fixed" style={{ tableLayout: "fixed", width: "100%" }}>
                     <colgroup>{auditTableColgroup()}</colgroup>
                     <thead>
                       <tr className="bg-blue-900 text-white">
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle leading-tight whitespace-nowrap">
-                          <span className="block whitespace-nowrap">No</span>
-                        </th>
-                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
-                          <span className="block whitespace-nowrap">Risk ID</span>
-                        </th>
-                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
-                          <span className="block">Risk</span>
-                          <span className="block">Details</span>
-                        </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
-                          <span className="block">Risk</span>
-                          <span className="block">Level</span>
-                        </th>
-                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
-                          <span className="block">Audit Program</span>
-                          <span className="block">Code</span>
-                        </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
-                          <span className="block">Substantive</span>
-                          <span className="block">Test</span>
-                        </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
-                          <span className="block whitespace-nowrap">Methodology</span>
-                        </th>
-                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
-                          <span className="block">Finding</span>
-                          <span className="block">Result</span>
-                        </th>
-                        <th className={`border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0`}>
-                          <span className="block">Finding</span>
-                          <span className="block">Description</span>
-                        </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
-                          <span className="block">Auditee</span>
-                          <span className="block">Comment</span>
-                        </th>
-                        <th className="border border-blue-800 px-1 py-1.5 text-center align-middle min-w-0 leading-tight">
-                          <span className="block whitespace-nowrap">Follow-Up</span>
-                          <span className="block">Detail</span>
-                        </th>
+                        <th className="border border-blue-800 text-center">No</th>
+                        <th className="border border-blue-800 text-center min-w-0">Risk ID</th>
+                        <th className="border border-blue-800 text-center min-w-0">Risk Details</th>
+                        <th className="border border-blue-800 text-center min-w-0">Risk Level</th>
+                        <th className="border border-blue-800 text-center min-w-0">AP Code</th>
+                        <th className="border border-blue-800 text-center min-w-0">Sub. Test</th>
+                        <th className="border border-blue-800 text-center min-w-0">Method.</th>
+                        <th className="border border-blue-800 text-center min-w-0">Finding Res.</th>
+                        <th className="border border-blue-800 text-center min-w-0">Finding Desc.</th>
+                        <th className="border border-blue-800 text-center min-w-0">Auditee Comment</th>
+                        <th className="border border-blue-800 text-center min-w-0">Follow-Up</th>
                       </tr>
                     </thead>
                     <tbody>
                       {page.auditRows.map((row, aIdx) => (
-                        <tr key={`audit-${page.dept.deptKey}-${idx}-${aIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>
+                        <tr key={`audit-${page.dept.deptKey}-${idx}-${aIdx}-${row.sourceIndex ?? row.no ?? "row"}`} className={aIdx % 2 === 0 ? "bg-white" : "bg-blue-50"}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap">
                             {row.no}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0">
                             {row.riskId || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.riskDetails ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">
                             {row.riskDetails || ""}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0">
                             {row.riskLevel ?? ""}
                           </td>
-                          <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0">
                             {row.apCode || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.substantiveTest ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">
                             {row.substantiveTest || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">
                             {row.methodology || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.findingResult ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">
                             {row.findingResult || ""}
                           </td>
-                          <td className={row.__continuedRow ? (row.findingDescription ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">
                             {row.findingDescription || ""}
                           </td>
-                          <td className={row.__continuedRow ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                            {row.auditeeComment || (row.__continuedRow ? "" : "-")}
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 whitespace-pre-wrap break-words">
+                            {row.auditeeComment || "-"}
                           </td>
-                          <td className={row.__continuedRow ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                            {row.followUpDetail || (row.__continuedRow ? "" : "-")}
+                          <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 whitespace-pre-wrap break-words">
+                            {row.followUpDetail || "-"}
                           </td>
                         </tr>
                       ))}
@@ -5187,124 +5930,12 @@ function ReportPreviewPageContent() {
                 INTERNAL AUDIT REPORT
               </div>
               <div className="flex-1 text-right">
-                PAGE <span className="mx-1">{findingsPageStartNumber + idx}</span> of <span className="ml-1">40</span>
+                PAGE <span className="mx-1">{findingsPageStartNumber + idx}</span> of <span className="ml-1">{totalPages}</span>
               </div>
             </div>
           </div>
         </div>
       ))}
-
-      {/* Satu blok per department: 5.x Department, 5.x.1 Finding : -, Select Finding — hanya untuk layar, tidak ikut print */}
-      {displayFindingSections.length > 0 && (
-        <div className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] min-h-[297mm] overflow-hidden flex flex-col px-16 pt-20 pb-16 break-after-page print:hidden">
-          <div className="text-center mb-6 flex-shrink-0">
-            <h1 className="text-2xl font-bold">Findings &amp; Recommendations</h1>
-          </div>
-          <div className="flex-1 text-[11px] leading-relaxed space-y-8">
-            <p className="font-bold">5&nbsp;&nbsp;&nbsp;Finding &amp; Recommendation</p>
-            {displayFindingSections.map((section) => {
-              const deptNum = deptIndexMap[section.deptKey] ?? 1;
-              const selectedCount = (selectedFindingByDept[section.deptKey] ?? []).length;
-              return (
-                <div
-                  key={section.deptKey}
-                  className={`space-y-2 ${selectedCount === 0 ? "print:hidden" : ""}`}
-                >
-                  <p>5.{deptNum}&nbsp;&nbsp;Department&nbsp;&nbsp;<span className="font-semibold">{section.deptLabel}</span></p>
-                  <p className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span>5.{deptNum}.1&nbsp;&nbsp;Finding :&nbsp;&nbsp;</span>
-                    {selectedCount > 0 ? (
-                      <span className="text-gray-600">{selectedCount} finding(s) dipilih</span>
-                    ) : (
-                      <span className="text-gray-500">-</span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setFindingModalDeptKey(section.deptKey)}
-                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 print:hidden"
-                    >
-                      Select Finding
-                    </button>
-                  </p>
-                  <p className="text-gray-500 text-sm print:hidden">Pilih finding dari Audit Review (tombol Select Finding di atas).</p>
-                </div>
-              );
-            })}
-          </div>
-          <div className="w-full flex-shrink-0 mt-auto pt-4">
-            <div className="border-t border-gray-300 mb-2" />
-            <div className="flex items-center text-[9px] text-gray-700">
-              <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
-              <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-              <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + 1}</span> of <span className="ml-1">40</span></div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal pilih finding (checkbox, multi) — hanya finding dari audit review yang masuk report */}
-      {findingModalDeptKey != null && (() => {
-        const section = displayFindingSections.find((s) => s.deptKey === findingModalDeptKey);
-        const rows = section?.auditRows ?? [];
-        const handleConfirm = () => {
-          setSelectedFindingByDept((prev) => ({ ...prev, [findingModalDeptKey]: [...modalCheckedIndices].sort((a, b) => a - b) }));
-          setFindingModalDeptKey(null);
-        };
-        const toggle = (idx) => {
-          setModalCheckedIndices((prev) => prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx].sort((a, b) => a - b));
-        };
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-              <div className="p-4 border-b">
-                <h2 className="text-lg font-bold">
-                  Select Finding(s) — {section?.deptLabel ?? findingModalDeptKey}
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">Pilih satu atau lebih finding dari Audit Review. Satu finding = satu halaman detail.</p>
-              </div>
-              <div className="p-4 overflow-y-auto flex-1">
-                <div className="space-y-2">
-                  {rows.map((row, idx) => (
-                    <label
-                      key={idx}
-                      className={`flex items-start gap-3 p-3 border rounded cursor-pointer ${modalCheckedIndices.includes(idx) ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={modalCheckedIndices.includes(idx)}
-                        onChange={() => toggle(idx)}
-                        className="mt-1"
-                      />
-                      <div className="text-sm flex-1 min-w-0">
-                        <p><span className="font-semibold">Risk :</span> {(row.risk || "-").toString().slice(0, 80)}{(row.risk || "").length > 80 ? "…" : ""}</p>
-                        <p><span className="font-semibold">Risk Description :</span> {(row.riskDetails || "-").toString().slice(0, 120)}{(row.riskDetails || "").length > 120 ? "…" : ""}</p>
-                        <p><span className="font-semibold">Audit Program Code :</span> {row.apCode || "-"}</p>
-                        <p><span className="font-semibold">Finding :</span> {(row.findingDescription || row.findingResult || "-").toString().slice(0, 80)}{((row.findingDescription || row.findingResult) || "").length > 80 ? "…" : ""}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="p-4 border-t flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFindingModalDeptKey(null)}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Finding & Recommendation — satu halaman per finding yang dipilih (multi checkbox) */}
       {findingDetailPages.map(({ section, finding, findingIndex }, idx) => {
@@ -5362,15 +5993,15 @@ function ReportPreviewPageContent() {
               <div className="flex items-center text-[9px] text-gray-700">
                 <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + 1 + idx}</span> of <span className="ml-1">40</span></div>
+                <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + idx}</span> of <span className="ml-1">{totalPages}</span></div>
               </div>
             </div>
           </div>
         );
       })}
 
-      {/* 6 Conclusion — hanya tampil jika ada data SOP/Audit. Add Conclusion → isi form → Save → system hitung (page 1 penuh dulu, sisanya next page). */}
-      {displayFindingSections.length > 0 && (
+      {/* 6 Conclusion — USER section; tetap tampil meski SYSTEM di-unlock. */}
+      {showConclusionPaper && (
         <>
           {showConclusionForm ? (
             /* Form: title + input per department + Save */
@@ -5378,18 +6009,28 @@ function ReportPreviewPageContent() {
               <div className="text-center mb-6 flex-shrink-0">
                 <h1 className="text-2xl font-bold">Conclusion</h1>
               </div>
-              <div className="mb-4">
+              <div className={`mb-4 ${CONCLUSION_APPENDIX_TEXT_CLASS}`}>
                 <p className="font-bold">6&nbsp;&nbsp;&nbsp;Conclusion</p>
               </div>
-              <div className="flex-1 text-[11px] leading-relaxed space-y-6">
-                {displayFindingSections.map((section, i) => (
+              <div className={`flex-1 ${CONCLUSION_APPENDIX_TEXT_CLASS} leading-relaxed space-y-6`}>
+                {conclusionDeptSections.map((section, i) => (
                   <div key={section.deptKey} className="space-y-2">
-                    <p className="font-semibold">
-                      6.{i + 1}&nbsp;&nbsp;Department&nbsp;&nbsp;{section.deptLabel}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold">
+                        6.{i + 1}&nbsp;&nbsp;Department&nbsp;&nbsp;{section.deptLabel}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={conclusionAiLoadingDept != null}
+                        onClick={() => handleGenerateConclusionAi(section)}
+                        className="print:hidden shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-medium hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {conclusionAiLoadingDept === section.deptKey ? "Generating…" : "Generate with AI"}
+                      </button>
+                    </div>
                     <textarea
                       data-conclusion-textarea
-                      className="w-full border border-gray-300 rounded p-3 text-[11px] min-h-[80px] resize-y overflow-y-auto bg-gray-50 placeholder:text-gray-400"
+                      className={`w-full border border-gray-300 rounded p-3 ${CONCLUSION_APPENDIX_TEXT_CLASS} min-h-[80px] resize-y overflow-y-auto bg-gray-50 placeholder:text-gray-400`}
                       placeholder="Conclusion for this department..."
                       value={conclusionValues[section.deptKey] ?? ""}
                       onChange={(e) => setConclusionValues((prev) => ({ ...prev, [section.deptKey]: e.target.value }))}
@@ -5403,7 +6044,7 @@ function ReportPreviewPageContent() {
                   onClick={handleSaveConclusion}
                   className="px-6 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700"
                 >
-                  Save
+                  Done
                 </button>
               </div>
               <div className="w-full flex-shrink-0 mt-auto pt-4">
@@ -5411,7 +6052,7 @@ function ReportPreviewPageContent() {
                 <div className="flex items-center text-[9px] text-gray-700">
                   <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
                   <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                  <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + 1 + findingDetailPages.length + 1}</span> of <span className="ml-1">40</span></div>
+                  <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + findingDetailPages.length}</span> of <span className="ml-1">{totalPages}</span></div>
                 </div>
               </div>
             </div>
@@ -5435,7 +6076,7 @@ function ReportPreviewPageContent() {
                   </div>
                 )}
                 <div
-                  className="flex-1 min-h-0 min-w-0 overflow-hidden text-[11px] leading-relaxed space-y-6"
+                  className={`flex-1 min-h-0 min-w-0 overflow-hidden ${CONCLUSION_APPENDIX_TEXT_CLASS} leading-relaxed space-y-6`}
                   style={{ paddingBottom: `${CONCLUSION_SAFE_ZONE_PX}px` }}
                 >
                   {pageIdx === 0 && (
@@ -5446,10 +6087,12 @@ function ReportPreviewPageContent() {
                   {pageSections.map((segment, i) => {
                     return (
                       <div key={`${segment.deptKey}-${pageIdx}-${i}`} className="space-y-2 break-inside-avoid">
-                        <p className="font-semibold">
-                          6.{segment.sectionNumber}&nbsp;&nbsp;Department&nbsp;&nbsp;{segment.deptLabel}
-                        </p>
-                        <div className="w-full border border-gray-300 rounded p-3 text-[11px] bg-gray-50 whitespace-pre-wrap break-words">
+                        {segment.showHeader !== false && (
+                          <p className="font-semibold">
+                            6.{segment.sectionNumber}&nbsp;&nbsp;Department&nbsp;&nbsp;{segment.deptLabel}
+                          </p>
+                        )}
+                        <div className={`w-full border border-gray-300 rounded p-3 ${CONCLUSION_APPENDIX_TEXT_CLASS} bg-gray-50 whitespace-pre-wrap break-words`}>
                           {segment.text}
                         </div>
                       </div>
@@ -5461,7 +6104,7 @@ function ReportPreviewPageContent() {
                   <div className="flex items-center text-[9px] text-gray-700">
                     <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
                     <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                    <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + 1 + findingDetailPages.length + pageIdx + 1}</span> of <span className="ml-1">40</span></div>
+                    <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + findingDetailPages.length + pageIdx}</span> of <span className="ml-1">{totalPages}</span></div>
                   </div>
                 </div>
               </div>
@@ -5472,7 +6115,7 @@ function ReportPreviewPageContent() {
               <div className="text-center mb-6 flex-shrink-0">
                 <h1 className="text-2xl font-bold">Conclusion</h1>
               </div>
-              <div className="mb-6">
+              <div className={`mb-6 ${CONCLUSION_APPENDIX_TEXT_CLASS}`}>
                 <p className="font-bold">6&nbsp;&nbsp;&nbsp;Conclusion</p>
               </div>
               <div className="flex-1 flex flex-col items-center justify-start pt-8">
@@ -5483,14 +6126,14 @@ function ReportPreviewPageContent() {
                 >
                   Add Conclusion
                 </button>
-                <p className="mt-4 text-sm text-gray-500 print:hidden">Klik untuk mengisi conclusion per department (yang ada data SOP/Audit Review).</p>
+                <p className="mt-4 text-sm text-gray-500 print:hidden">Click to fill in conclusion per department (departments with SOP/Audit Review data).</p>
               </div>
               <div className="w-full flex-shrink-0 mt-auto pt-4">
                 <div className="border-t border-gray-300 mb-2" />
                 <div className="flex items-center text-[9px] text-gray-700">
                   <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
                   <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                  <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + 1 + findingDetailPages.length + 1}</span> of <span className="ml-1">40</span></div>
+                  <div className="flex-1 text-right">PAGE <span className="mx-1">{findingsPageStartNumber + findingPages.length + findingDetailPages.length}</span> of <span className="ml-1">{totalPages}</span></div>
                 </div>
               </div>
             </div>
@@ -5499,34 +6142,34 @@ function ReportPreviewPageContent() {
       )}
 
       {/* Hanya Conclusion: pengukuran hanya untuk department yang berisi data (untuk Save). */}
-      {displayFindingSections.length > 0 && (
+      {showConclusionPaper && conclusionDeptSections.length > 0 && (
         <div
           ref={conclusionMeasureRef}
           className="absolute left-[-9999px] top-0 w-[210mm] overflow-visible"
           style={{ visibility: "hidden", pointerEvents: "none" }}
           aria-hidden="true"
         >
-          <div className="px-16 text-[11px] leading-relaxed space-y-6">
-            {displayFindingSections.flatMap((section, i) =>
-              splitConclusionTextIntoChunks(conclusionValues[section.deptKey] ?? "").map((text, chunkIndex) => (
-                <div
-                  key={`${section.deptKey}-measure-${chunkIndex}`}
-                  data-conclusion-block
-                  className="space-y-2"
-                >
-                  <p className="font-semibold">6.{i + 1}&nbsp;&nbsp;Department&nbsp;&nbsp;{section.deptLabel}</p>
-                  <div className="w-full border border-gray-300 rounded p-3 text-[11px] min-h-0 bg-gray-50 whitespace-pre-wrap break-words">
-                    {text}
-                  </div>
+          <div className={`px-16 ${CONCLUSION_APPENDIX_TEXT_CLASS} leading-relaxed space-y-6`}>
+            {buildConclusionDeptSegments(conclusionDeptSections, conclusionValues).map((segment) => (
+              <div
+                key={`${segment.deptKey}-measure`}
+                data-conclusion-block
+                className="space-y-2"
+              >
+                <p className="font-semibold">
+                  6.{segment.sectionNumber}&nbsp;&nbsp;Department&nbsp;&nbsp;{segment.deptLabel}
+                </p>
+                <div className={`w-full border border-gray-300 rounded p-3 ${CONCLUSION_APPENDIX_TEXT_CLASS} min-h-0 bg-gray-50 whitespace-pre-wrap break-words`}>
+                  {segment.text}
                 </div>
-              )),
-            )}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Pengukuran tinggi riil (seperti Word): isi halaman sampai penuh lalu next page. Tabel tersembunyi, sama lebar & style dengan report. */}
-      {displayFindingSections.length > 0 && (
+      {paginatedFindingSections.length > 0 && (
         <div
           ref={measureContainerRef}
           className="absolute left-[-9999px] top-0 w-[210mm] overflow-visible"
@@ -5541,7 +6184,7 @@ function ReportPreviewPageContent() {
                     <div className="px-2">
                       <table
                         data-measure-sop={section.deptKey}
-                        className="w-full max-w-full border-collapse text-[9px] table-fixed"
+                        className="sop-review-table w-full max-w-full border-collapse text-[9px] table-fixed"
                         style={{ tableLayout: "fixed" }}
                       >
                         <colgroup>
@@ -5562,20 +6205,12 @@ function ReportPreviewPageContent() {
                         </thead>
                         <tbody>
                           {section.sopRows.map((row, rIdx) => (
-                            <tr key={rIdx} className={row.__continuedRow ? "bg-white" : (rIdx % 2 === 0 ? "bg-white" : "bg-gray-50")}>
-                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>{row.no}</td>
-                              <td className={row.__continuedRow ? (row.sopRelated ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words"}>{row.sopRelated || ""}</td>
-                              <td className={row.__continuedRow ? (row.reviewComment ? "border-x border-b border-t-0 border-gray-300 px-1.5 py-0 align-top whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words"}>{row.reviewComment || (row.__continuedRow ? "" : "-")}</td>
-                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                                <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                  {row.__continuedRow ? "" : (row.auditeeComment || "-")}
-                                </div>
-                              </td>
-                              <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-gray-300 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>
-                                <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                  {row.__continuedRow ? "" : (row.followUpDetail || "-")}
-                                </div>
-                              </td>
+                            <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                              <td className="border border-gray-300 px-1.5 py-0.5 text-center whitespace-nowrap">{row.no}</td>
+                              <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">{row.sopRelated || ""}</td>
+                              <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">{row.reviewComment || "-"}</td>
+                              <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">{row.auditeeComment || "-"}</td>
+                              <td className="border border-gray-300 px-1.5 py-0.5 whitespace-pre-wrap break-words min-w-0">{row.followUpDetail || "-"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -5587,7 +6222,7 @@ function ReportPreviewPageContent() {
                   <div className="px-2">
                     <table
                       data-measure-audit={section.deptKey}
-                      className="w-full max-w-full border-collapse text-[9px] leading-tight table-fixed"
+                      className="audit-findings-table w-full max-w-full border-collapse text-[9px] leading-tight table-fixed"
                       style={{ tableLayout: "fixed" }}
                     >
                       <colgroup>{auditTableColgroup()}</colgroup>
@@ -5608,25 +6243,21 @@ function ReportPreviewPageContent() {
                       </thead>
                       <tbody>
                         {section.auditRows.map((row, aIdx) => (
-                          <tr key={aIdx} className={row.__continuedRow ? "bg-white" : (aIdx % 2 === 0 ? "bg-white" : "bg-blue-50")}>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap"}>{row.no}</td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>{row.riskId || ""}</td>
-                            <td className={row.__continuedRow ? (row.riskDetails ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>{row.riskDetails || ""}</td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : "border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0 overflow-hidden"}>{row.riskLevel ?? ""}</td>
-                            <td className={row.__continuedRow ? "border-0 p-0 bg-transparent" : `border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden`}>{row.apCode || ""}</td>
-                            <td className={row.__continuedRow ? (row.substantiveTest ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.substantiveTest || ""}</td>
-                            <td className={row.__continuedRow ? (row.methodology ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden"}>{row.methodology || ""}</td>
-                            <td className={row.__continuedRow ? (row.findingResult ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>{row.findingResult || ""}</td>
-                            <td className={row.__continuedRow ? (row.findingDescription ? `border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden` : "border-0 p-0 bg-transparent") : `border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0 overflow-hidden`}>{row.findingDescription || ""}</td>
-                            <td className={row.__continuedRow ? (row.auditeeComment ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                              <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                {row.auditeeComment || (row.__continuedRow ? "" : "-")}
-                              </div>
+                          <tr key={aIdx} className={aIdx % 2 === 0 ? "bg-white" : "bg-blue-50"}>
+                            <td className="border border-blue-800 px-1.5 py-0.5 text-center align-top whitespace-nowrap">{row.no}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0">{row.riskId || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">{row.riskDetails || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top text-center min-w-0">{row.riskLevel ?? ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0">{row.apCode || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">{row.substantiveTest || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">{row.methodology || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">{row.findingResult || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top whitespace-pre-wrap break-words min-w-0">{row.findingDescription || ""}</td>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 whitespace-pre-wrap break-words">
+                              {row.auditeeComment || "-"}
                             </td>
-                            <td className={row.__continuedRow ? (row.followUpDetail ? "border-x border-b border-t-0 border-blue-800 px-1.5 py-0 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words" : "border-0 p-0 bg-transparent") : "border border-blue-800 px-1.5 py-0.5 align-top min-w-0 overflow-hidden whitespace-pre-wrap break-words"}>
-                              <div className="min-h-[14px] leading-snug whitespace-pre-wrap break-words">
-                                {row.followUpDetail || (row.__continuedRow ? "" : "-")}
-                              </div>
+                            <td className="border border-blue-800 px-1.5 py-0.5 align-top min-w-0 whitespace-pre-wrap break-words">
+                              {row.followUpDetail || "-"}
                             </td>
                           </tr>
                         ))}
@@ -5673,7 +6304,7 @@ function ReportPreviewPageContent() {
             </div>
           </div>
 
-          <div className="flex-1 text-[11px] leading-relaxed space-y-8">
+          <div className={`flex-1 ${CONCLUSION_APPENDIX_TEXT_CLASS} leading-relaxed space-y-8`}>
             {appendices.map((appendix, idx) => (
               <div key={appendix.id} className="space-y-3">
                 <div className="flex items-start justify-between gap-4">
@@ -5690,7 +6321,7 @@ function ReportPreviewPageContent() {
                             ),
                           )
                         }
-                        className="border border-gray-300 rounded px-2 py-1 text-[11px] w-full max-w-[420px] print:border-none print:p-0 print:bg-transparent"
+                        className={`border border-gray-300 rounded px-2 py-1 ${CONCLUSION_APPENDIX_TEXT_CLASS} w-full max-w-[420px] print:border-none print:p-0 print:bg-transparent`}
                       />
                     </p>
                   </div>
@@ -5708,7 +6339,7 @@ function ReportPreviewPageContent() {
                 {appendix.type === "table" ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="font-semibold">{appendix.content || "Risk Matrix"}</div>
+                      <div className={`font-semibold ${CONCLUSION_APPENDIX_TEXT_CLASS}`}>{appendix.content || "Risk Matrix"}</div>
                       <button
                         type="button"
                         onClick={() => addAppendixTableRow(appendix.id)}
@@ -5718,7 +6349,10 @@ function ReportPreviewPageContent() {
                       </button>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full border-collapse table-fixed text-[10px]">
+                      <table
+                        className="w-full border-collapse table-fixed text-[10px]"
+                        style={{ tableLayout: "fixed", width: "100%" }}
+                      >
                         <colgroup>
                           <col className="w-[12%]" />
                           <col className="w-[10%]" />
@@ -5729,55 +6363,55 @@ function ReportPreviewPageContent() {
                         </colgroup>
                         <thead>
                           <tr className="bg-[#8f8f8f] text-white">
-                            <th className="border border-black px-2 py-1 text-center font-semibold">Department</th>
-                            <th className="border border-black px-2 py-1 text-center font-semibold">AP No</th>
-                            <th className="border border-black px-2 py-1 text-center font-semibold">Risk Factor</th>
-                            <th className="border border-black px-2 py-1 text-center font-semibold">Risk Indicator</th>
-                            <th className="border border-black px-2 py-1 text-center font-semibold">Risk Level</th>
+                            <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Department</th>
+                            <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>AP No</th>
+                            <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Risk Factor</th>
+                            <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Risk Indicator</th>
+                            <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Risk Level</th>
                             <th className="border border-black px-2 py-1 text-center font-semibold print:hidden">Action</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(appendix.tableRows || []).map((row, rowIdx) => (
                             <tr key={`${appendix.id}-row-${rowIdx}`} className="bg-white">
-                              <td className="border border-black p-0 align-top h-8">
+                              <td className={`border border-black p-0 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>
                                 <input
                                   type="text"
                                   value={row.department || ""}
                                   onChange={(e) => updateAppendixTableCell(appendix.id, rowIdx, "department", e.target.value)}
-                                  className="w-full h-full min-h-8 px-2 py-1 bg-transparent border-none focus:outline-none"
+                                  className={APPENDIX_TABLE_INPUT}
                                 />
                               </td>
-                              <td className="border border-black p-0 align-top h-8">
+                              <td className={`border border-black p-0 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>
                                 <input
                                   type="text"
                                   value={row.apNo || ""}
                                   onChange={(e) => updateAppendixTableCell(appendix.id, rowIdx, "apNo", e.target.value)}
-                                  className="w-full h-full min-h-8 px-2 py-1 bg-transparent border-none focus:outline-none"
+                                  className={APPENDIX_TABLE_INPUT}
                                 />
                               </td>
-                              <td className="border border-black p-0 align-top h-8">
-                                <input
-                                  type="text"
+                              <td className={`border border-black p-0 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>
+                                <textarea
+                                  rows={1}
                                   value={row.riskFactor || ""}
                                   onChange={(e) => updateAppendixTableCell(appendix.id, rowIdx, "riskFactor", e.target.value)}
-                                  className="w-full h-full min-h-8 px-2 py-1 bg-transparent border-none focus:outline-none"
+                                  className={APPENDIX_TABLE_INPUT}
                                 />
                               </td>
-                              <td className="border border-black p-0 align-top h-8">
-                                <input
-                                  type="text"
+                              <td className={`border border-black p-0 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>
+                                <textarea
+                                  rows={1}
                                   value={row.riskIndicator || ""}
                                   onChange={(e) => updateAppendixTableCell(appendix.id, rowIdx, "riskIndicator", e.target.value)}
-                                  className="w-full h-full min-h-8 px-2 py-1 bg-transparent border-none focus:outline-none"
+                                  className={APPENDIX_TABLE_INPUT}
                                 />
                               </td>
-                              <td className="border border-black p-0 align-top h-8">
+                              <td className={`border border-black p-0 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>
                                 <input
                                   type="text"
                                   value={row.riskLevel || ""}
                                   onChange={(e) => updateAppendixTableCell(appendix.id, rowIdx, "riskLevel", e.target.value)}
-                                  className="w-full h-full min-h-8 px-2 py-1 bg-transparent border-none focus:outline-none"
+                                  className={APPENDIX_TABLE_INPUT}
                                 />
                               </td>
                               <td className="border border-black px-1 py-1 text-center print:hidden">
@@ -5805,7 +6439,7 @@ function ReportPreviewPageContent() {
                         ),
                       )
                     }
-                    className="w-full border border-gray-300 rounded p-3 text-[11px] min-h-[140px] resize-y bg-gray-50"
+                    className={`w-full border border-gray-300 rounded p-3 ${CONCLUSION_APPENDIX_TEXT_CLASS} min-h-[140px] resize-y bg-gray-50`}
                     placeholder="Input appendix content here..."
                   />
                 )}
@@ -5818,7 +6452,7 @@ function ReportPreviewPageContent() {
             <div className="flex items-center text-[9px] text-gray-700">
               <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
               <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-              <div className="flex-1 text-right">PAGE <span className="mx-1">{appendixPageBase}</span> of <span className="ml-1">40</span></div>
+              <div className="flex-1 text-right">PAGE <span className="mx-1">{appendixPageBase}</span> of <span className="ml-1">{totalPages}</span></div>
             </div>
           </div>
         </div>
@@ -5828,7 +6462,7 @@ function ReportPreviewPageContent() {
             key={`appendix-page-${pageIdx}`}
             className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] overflow-hidden flex flex-col px-16 pt-20 pb-16 break-after-page"
           >
-            <div className="flex-1 min-h-0 text-[11px] leading-relaxed space-y-6 overflow-hidden">
+            <div className={`flex-1 min-h-0 ${CONCLUSION_APPENDIX_TEXT_CLASS} leading-relaxed space-y-6 overflow-hidden`}>
               {page.showAppendicesHeading && (
                 <div className="text-center mb-2 flex-shrink-0 flex flex-col items-center gap-2">
                   <h1 className="text-2xl font-bold">Appendices</h1>
@@ -5873,9 +6507,12 @@ function ReportPreviewPageContent() {
 
                   {segment.type === "table" ? (
                     <div className="space-y-2">
-                      <div className="font-semibold">{segment.subtitle}</div>
+                      <div className={`font-semibold ${CONCLUSION_APPENDIX_TEXT_CLASS}`}>{segment.subtitle}</div>
                       <div className="overflow-x-auto">
-                        <table className="w-full border-collapse table-fixed text-[10px]">
+                        <table
+                          className="w-full border-collapse table-fixed text-[10px]"
+                          style={{ tableLayout: "fixed", width: "100%" }}
+                        >
                           <colgroup>
                             <col className="w-[13%]" />
                             <col className="w-[12%]" />
@@ -5885,21 +6522,21 @@ function ReportPreviewPageContent() {
                           </colgroup>
                           <thead>
                             <tr className="bg-[#8f8f8f] text-white">
-                              <th className="border border-black px-2 py-1 text-center font-semibold">Department</th>
-                              <th className="border border-black px-2 py-1 text-center font-semibold">AP No</th>
-                              <th className="border border-black px-2 py-1 text-center font-semibold">Risk Factor</th>
-                              <th className="border border-black px-2 py-1 text-center font-semibold">Risk Indicator</th>
-                              <th className="border border-black px-2 py-1 text-center font-semibold">Risk Level</th>
+                              <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Department</th>
+                              <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>AP No</th>
+                              <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Risk Factor</th>
+                              <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Risk Indicator</th>
+                              <th className={`border border-black px-2 py-1 text-center font-semibold ${APPENDIX_TABLE_CELL_WRAP}`}>Risk Level</th>
                             </tr>
                           </thead>
                           <tbody>
                             {(segment.rows || []).map((row, rowIdx) => (
                               <tr key={`${segment.appendixId}-view-${pageIdx}-${rowIdx}`} className="bg-white">
-                                <td className="border border-black px-2 py-1 align-top h-8">{row.department || ""}</td>
-                                <td className="border border-black px-2 py-1 align-top h-8">{row.apNo || ""}</td>
-                                <td className="border border-black px-2 py-1 align-top h-8">{row.riskFactor || ""}</td>
-                                <td className="border border-black px-2 py-1 align-top h-8">{row.riskIndicator || ""}</td>
-                                <td className="border border-black px-2 py-1 align-top h-8">{row.riskLevel || ""}</td>
+                                <td className={`border border-black px-2 py-1 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>{row.department || ""}</td>
+                                <td className={`border border-black px-2 py-1 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>{row.apNo || ""}</td>
+                                <td className={`border border-black px-2 py-1 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>{row.riskFactor || ""}</td>
+                                <td className={`border border-black px-2 py-1 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>{row.riskIndicator || ""}</td>
+                                <td className={`border border-black px-2 py-1 align-top min-h-8 ${APPENDIX_TABLE_CELL_WRAP}`}>{row.riskLevel || ""}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -5920,7 +6557,7 @@ function ReportPreviewPageContent() {
               <div className="flex items-center text-[9px] text-gray-700">
                 <div className="flex-1 text-left">SUPPORT BY KIAS - PT KARYA PRIMA UNGGULAN AUDIT SYSTEM</div>
                 <div className="flex-1 text-center font-semibold">INTERNAL AUDIT REPORT</div>
-                <div className="flex-1 text-right">PAGE <span className="mx-1">{appendixPageBase + pageIdx}</span> of <span className="ml-1">40</span></div>
+                <div className="flex-1 text-right">PAGE <span className="mx-1">{appendixPageBase + pageIdx}</span> of <span className="ml-1">{totalPages}</span></div>
               </div>
             </div>
           </div>
@@ -5929,44 +6566,6 @@ function ReportPreviewPageContent() {
 
       </div>
 
-      {/* Export & editor actions (screen only) */}
-      {!onlyOfficeCreate ? (
-      <div className="mt-4 print:hidden w-full max-w-[210mm] mx-auto px-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={openDocumentEditor}
-            disabled={openingEditor || !!exportingFormat}
-            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {openingEditor ? "Opening editor…" : "Edit in OnlyOffice"}
-          </button>
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-[#141D38] to-[#2D3A5A] text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg"
-          >
-            Print HTML preview
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadWord}
-            disabled={!!exportingFormat || openingEditor}
-            className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-600 text-emerald-800 bg-emerald-50 text-xs sm:text-sm font-semibold hover:bg-emerald-100 disabled:opacity-60"
-          >
-            {exportingFormat === "docx" ? "Generating…" : "Direct DOCX (no editor)"}
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={!!exportingFormat || openingEditor}
-            className="inline-flex items-center px-4 py-2 rounded-lg border border-red-600 text-red-800 bg-red-50 text-xs sm:text-sm font-semibold hover:bg-red-100 disabled:opacity-60"
-          >
-            {exportingFormat === "pdf" ? "Generating…" : "Direct PDF (fallback)"}
-          </button>
-        </div>
-      </div>
-      ) : null}
     </div>
   );
 }

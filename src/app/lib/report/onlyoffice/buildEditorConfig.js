@@ -27,22 +27,36 @@ export function buildDocumentAccessToken(sessionId) {
  * Local dev: static DOCX via kias-doc-proxy /reports/ (avoids OnlyOffice nginx 403 on API proxy).
  * Production: authenticated Next.js API route.
  */
-export function buildDocumentFileUrl(sessionId) {
+export function buildDocumentFileUrl(sessionId, meta = null) {
   const host = getReportDocumentHostUrl();
   const useStatic =
     String(process.env.REPORT_DOCUMENT_STATIC_FILES ?? "true").toLowerCase() !== "false" &&
     (process.env.NODE_ENV === "development" || host.includes("kias-doc-proxy"));
 
+  const cacheBust =
+    meta != null
+      ? [
+          meta.resetGeneration ?? 0,
+          meta.version ?? 1,
+          meta.saveCount ?? 0,
+          meta.previewDocxRevision ?? 0,
+          Math.round(Number(meta.docxMtimeMs) || 0),
+          meta.previewSnapshotHash || "",
+        ].join("-")
+      : null;
+
   if (useStatic) {
-    return `${host}/reports/${encodeURIComponent(sessionId)}.docx`;
+    const base = `${host}/reports/${encodeURIComponent(sessionId)}.docx`;
+    return cacheBust ? `${base}?v=${encodeURIComponent(cacheBust)}` : base;
   }
 
   const token = buildDocumentAccessToken(sessionId);
-  return `${host}/api/report/documents/${encodeURIComponent(sessionId)}/file?token=${encodeURIComponent(token)}`;
+  const base = `${host}/api/report/documents/${encodeURIComponent(sessionId)}/file?token=${encodeURIComponent(token)}`;
+  return cacheBust ? `${base}&v=${encodeURIComponent(cacheBust)}` : base;
 }
 
-export function buildDocumentFileHeaders(sessionId) {
-  const url = buildDocumentFileUrl(sessionId);
+export function buildDocumentFileHeaders(sessionId, meta = null) {
+  const url = buildDocumentFileUrl(sessionId, meta);
   if (url.includes("/reports/")) {
     return {};
   }
@@ -61,8 +75,8 @@ export function buildCallbackUrl(sessionId) {
  */
 export function buildOnlyOfficeEditorConfig({ sessionId, meta, user, mode = "edit" }) {
   const title = meta?.title || `KIAS-Consolidated-Report-${meta?.year || ""}.docx`;
-  const fileUrl = buildDocumentFileUrl(sessionId);
-  const fileHeaders = buildDocumentFileHeaders(sessionId);
+  const fileUrl = buildDocumentFileUrl(sessionId, meta);
+  const fileHeaders = buildDocumentFileHeaders(sessionId, meta);
   const callbackUrl = buildCallbackUrl(sessionId);
 
   const resolvedUserId = String(user?.id || user?.email || "").trim();

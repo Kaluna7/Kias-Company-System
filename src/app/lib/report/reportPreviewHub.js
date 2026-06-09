@@ -10,6 +10,12 @@
  */
 
 import { pickNarrativeFromReportState } from "./reportStateNarrative";
+import { syncSystemBlocksInHub } from "./reportBlocks";
+import {
+  applyAuditVisibilityToSections,
+  buildEffectivePublishMap,
+  mergeModuleSectionsForHub,
+} from "./previewAuditVisibility";
 
 export const HUB_SYNC_MODE_MODULE_TABLES_ONLY = "moduleTablesOnly";
 
@@ -58,7 +64,10 @@ export function mergeModuleTablesIntoHub(existing, incoming) {
   const next = { ...base };
 
   if (Array.isArray(incoming.findingSections)) {
-    next.findingSections = incoming.findingSections;
+    next.findingSections = mergeModuleSectionsForHub(
+      base.findingSections || [],
+      incoming.findingSections,
+    );
   }
   if (
     incoming.hiddenAuditFindingEdits &&
@@ -75,6 +84,26 @@ export function mergeModuleTablesIntoHub(existing, incoming) {
 
   next.moduleTablesRevision = nextModuleTablesRevision(base);
   next.moduleTablesSyncedAt = new Date().toISOString();
+
+  const lockedByDept = {};
+  for (const section of next.findingSections || []) {
+    lockedByDept[section.deptKey] = section.isPublishedToReport === true;
+  }
+  const effectivePublish = buildEffectivePublishMap(
+    lockedByDept,
+    next.auditVisibleByDept || {},
+  );
+  const visibleForBlocks = applyAuditVisibilityToSections(
+    next.findingSections || [],
+    effectivePublish,
+  );
+  const blockSync = syncSystemBlocksInHub(
+    base,
+    visibleForBlocks,
+    next.auditVisibleByDept || {},
+  );
+  next.reportBlocks = blockSync.reportBlocks;
+  next.userNotes = blockSync.userNotes;
 
   return touchHubRevision(next);
 }

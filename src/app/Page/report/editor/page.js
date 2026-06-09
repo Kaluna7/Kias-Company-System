@@ -3,12 +3,13 @@
 export const dynamic = "force-dynamic";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import LoadingProgressOverlay from "@/app/components/shared/LoadingProgressOverlay";
-import ReportEditorAiPanel from "./ReportEditorAiPanel";
+import PreviewCollaborationBar from "@/app/Page/report/preview/PreviewCollaborationBar";
 import { notifyPreviewHubChanged } from "@/app/lib/report/reportPreviewSyncEvents";
-import { regenerateReportDocxFromModules } from "@/app/lib/report/exportReportClient";
-import { SOP_REVIEW_DATA_CHANGED_KEY } from "@/app/lib/sop-review/sopReviewNotifyClient";
+import { usePreviewCollaboration } from "@/app/lib/report/usePreviewCollaboration";
+import { notifyOnlyOfficeSessionOpened } from "@/app/lib/report/exportReportClient";
+import { pushOnlyOfficeRedirectToPeers } from "@/app/lib/report/previewWebSocketClient";
 
 function formatOnlyOfficeError(event) {
   const code = event?.data?.errorCode ?? event?.data?.error ?? "?";
@@ -35,9 +36,14 @@ function ReportEditorContent() {
   const [meta, setMeta] = useState(null);
   const [downloading, setDownloading] = useState(null);
   const [documentServerUrl, setDocumentServerUrl] = useState("");
-  const [aiStatus, setAiStatus] = useState("");
-  const [previewSyncStatus, setPreviewSyncStatus] = useState("");
-  const [collabHint, setCollabHint] = useState("");
+  const reportYear = useMemo(() => {
+    const fromMeta = Number(meta?.year);
+    if (Number.isFinite(fromMeta)) return fromMeta;
+    const m = /shared-report-(\d{4})/.exec(sessionId);
+    return m ? parseInt(m[1], 10) : new Date().getFullYear();
+  }, [sessionId, meta?.year]);
+  const { participants: collabParticipants, wsConnected: collabWsConnected } =
+    usePreviewCollaboration(reportYear, { location: "onlyoffice" });
   const refreshEditorFileRef = useRef(null);
   const lastPreviewSyncRevisionRef = useRef(0);
   const metaRef = useRef(null);
@@ -57,6 +63,13 @@ function ReportEditorContent() {
     setError(formatOnlyOfficeError(event));
     markReady();
   }, [markReady]);
+
+  useEffect(() => {
+    if (!sessionId || !Number.isFinite(reportYear)) return;
+    const editorPath = `/Page/report/editor?session=${encodeURIComponent(sessionId)}`;
+    pushOnlyOfficeRedirectToPeers(reportYear, { sessionId, editorPath });
+    void notifyOnlyOfficeSessionOpened(reportYear, { sessionId, editorPath });
+  }, [sessionId, reportYear]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -92,16 +105,6 @@ function ReportEditorContent() {
 
         if (cancelled) return;
         setMeta(configJson.meta || null);
-        const creator = configJson.meta?.createdBy?.name;
-        if (creator) {
-          setCollabHint(
-            `Kolaborasi: dokumen tahun ${configJson.meta?.year ?? ""} — dibuat oleh ${creator}. User lain membuka editor yang sama akan masuk ke dokumen ini.`,
-          );
-        } else {
-          setCollabHint(
-            "Kolaborasi: semua user membuka laporan tahun yang sama memakai dokumen Word bersama.",
-          );
-        }
         setDocumentServerUrl(configJson.documentServerUrl || "");
 
         if (process.env.NODE_ENV === "development" && configJson.documentFileUrl) {
@@ -155,9 +158,7 @@ function ReportEditorContent() {
           onRequestRefreshFile: refreshEditorFile,
           // Do not auto-refresh on outdated — that retriggers OnlyOffice "Version changed" in a loop.
           onOutdatedVersion: () => {
-            setError(
-              "The document was updated on the server. Close this tab, then use Create report on the Report page to open the latest file.",
-            );
+            void refreshEditorFileRef.current?.();
             markReady();
           },
         };
@@ -205,63 +206,7 @@ function ReportEditorContent() {
         }
       }
     };
-  }, [sessionId, handleOnlyOfficeError, markReady]);
-
-  /** SOP / Audit module edits → rebuild DOCX and refresh OnlyOffice file. */
-  useEffect(() => {
-    const reportYear = Number(meta?.year);
-    if (!Number.isFinite(reportYear)) return undefined;
-
-    let regenTimer = null;
-    const scheduleRegen = () => {
-      window.clearTimeout(regenTimer);
-      regenTimer = window.setTimeout(async () => {
-        setPreviewSyncStatus("Memperbarui Word (modul + lock/unlock, narasi OnlyOffice tetap)...");
-        const regen = await regenerateReportDocxFromModules(reportYear);
-        if (regen.ok) {
-          await refreshEditorFileRef.current?.();
-          setPreviewSyncStatus(
-            "Word diperbarui — tabel modul mengikuti lock/unlock; narasi dari simpanan OnlyOffice.",
-          );
-        } else {
-          setPreviewSyncStatus(
-            regen.error || "Gagal memperbarui Word. Tutup editor, buka dari Report preview.",
-          );
-        }
-      }, 1500);
-    };
-
-    const onSopChanged = (e) => {
-      const y =
-        e.detail?.reportYear != null
-          ? Number(e.detail.reportYear)
-          : e.detail?.year != null
-            ? Number(e.detail.year)
-            : null;
-      if (y != null && Number.isFinite(y) && y !== reportYear) return;
-      scheduleRegen();
-    };
-
-    const onModulesSynced = (e) => {
-      const detail = e.detail || {};
-      const y =
-        detail.reportYear != null
-          ? Number(detail.reportYear)
-          : detail.year != null
-            ? Number(detail.year)
-            : null;
-      if (y != null && Number.isFinite(y) && y !== reportYear) return;
-      scheduleRegen();
-    };
-
-    window.addEventListener(SOP_REVIEW_DATA_CHANGED_KEY, onSopChanged);
-    window.addEventListener("kias-report-modules-synced", onModulesSynced);
-    return () => {
-      window.clearTimeout(regenTimer);
-      window.removeEventListener(SOP_REVIEW_DATA_CHANGED_KEY, onSopChanged);
-      window.removeEventListener("kias-report-modules-synced", onModulesSynced);
-    };
-  }, [meta?.year]);
+  }, [sessionId, reportYear, handleOnlyOfficeError, markReady]);
 
   /** Poll report state DB after OnlyOffice save → updates HTML preview fields. */
   useEffect(() => {
@@ -290,9 +235,6 @@ function ReportEditorContent() {
         if (rev > lastPreviewSyncRevisionRef.current) {
           lastPreviewSyncRevisionRef.current = rev;
           notifyPreviewHubChanged(reportYear, rev);
-          setPreviewSyncStatus(
-            "Saved — HTML preview updated from OnlyOffice.",
-          );
         }
       } catch {
         /* ignore */
@@ -306,6 +248,14 @@ function ReportEditorContent() {
       window.clearInterval(id);
     };
   }, [meta?.year]);
+
+  const handleExitToReport = useCallback(() => {
+    const params = new URLSearchParams();
+    if (Number.isFinite(reportYear)) {
+      params.set("year", String(reportYear));
+    }
+    router.replace(`/Page/report?${params.toString()}`);
+  }, [router, reportYear]);
 
   const downloadFile = async (format) => {
     setDownloading(format);
@@ -337,33 +287,44 @@ function ReportEditorContent() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
-      {aiStatus && !error && (
-        <div className="shrink-0 mx-4 mt-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-900 text-xs">
-          {aiStatus}
-        </div>
-      )}
-      {collabHint && !error && (
-        <div className="shrink-0 mx-4 mt-2 px-3 py-2 rounded-lg bg-sky-50 border border-sky-100 text-sky-900 text-xs">
-          {collabHint}
-        </div>
-      )}
-      {previewSyncStatus && !error && (
-        <div className="shrink-0 mx-4 mt-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-900 text-xs">
-          {previewSyncStatus}
-        </div>
-      )}
+    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden relative">
+      <div className="fixed bottom-11 left-2 z-20 flex flex-col items-center gap-1 pointer-events-none">
+        <PreviewCollaborationBar
+          participants={collabParticipants}
+          wsConnected={collabWsConnected}
+          compact
+          vertical
+          mini
+        />
+        <button
+          type="button"
+          suppressHydrationWarning
+          onClick={handleExitToReport}
+          title="Exit to report"
+          aria-label="Exit to report"
+          className="pointer-events-auto shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-700 shadow-sm hover:bg-slate-50"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
+          </svg>
+        </button>
+      </div>
       {error && (
         <div className="shrink-0 mx-4 mt-3 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
           <p>{error}</p>
           <p className="mt-2 text-xs">
-            Terminal harus menampilkan{" "}
-            <code className="bg-red-100 px-1">[report/doc/file] serve docx</code> saat editor dibuka.
+            Terminal should show{" "}
+            <code className="bg-red-100 px-1">[report/doc/file] serve docx</code> when the editor opens.
           </p>
           <p className="mt-2 text-xs">
-            <code>NEXT_PUBLIC_ONLYOFFICE_URL</code> harus{" "}
-            <code>http://localhost:8082</code> (bukan <code>/onlyoffice-proxy</code> — WebSocket &
-            /cache tidak lewat Next). Hard refresh setelah ubah .env.
+            <code>NEXT_PUBLIC_ONLYOFFICE_URL</code> must be{" "}
+            <code>http://localhost:8082</code> (not <code>/onlyoffice-proxy</code> — WebSocket &
+            /cache do not go through Next). Hard refresh after changing .env.
           </p>
         </div>
       )}
@@ -380,12 +341,6 @@ function ReportEditorContent() {
         <div className="relative flex-1 min-h-0 bg-white">
           <div id="onlyoffice-editor" ref={editorRef} className="absolute inset-0 w-full h-full" />
         </div>
-        <ReportEditorAiPanel
-          sessionId={sessionId}
-          docEditorRef={docEditorRef}
-          onRefreshDocument={() => refreshEditorFileRef.current?.()}
-          onStatus={setAiStatus}
-        />
       </div>
     </div>
   );

@@ -117,5 +117,31 @@ export function pickReportStatePayload(raw) {
     hubSyncedAt: raw.hubSyncedAt ?? null,
     wordFindingsHtml: raw.wordFindingsHtml ?? "",
     wordAppendicesHtml: raw.wordAppendicesHtml ?? "",
+    reportBlocks:
+      raw.reportBlocks && typeof raw.reportBlocks === "object" ? raw.reportBlocks : null,
+    userNotes: Array.isArray(raw.userNotes) ? raw.userNotes : [],
+    userFindingsFreeHtml: raw.userFindingsFreeHtml ?? "",
+    wordFrontMatterHtml: raw.wordFrontMatterHtml ?? "",
+    reportPapers:
+      raw.reportPapers && typeof raw.reportPapers === "object" ? raw.reportPapers : {},
+    findingsPaperRevision: Number(raw.findingsPaperRevision) || 0,
+    findingsPaperResetAt: raw.findingsPaperResetAt ?? null,
+    lastChangedPaperIds: Array.isArray(raw.lastChangedPaperIds) ? raw.lastChangedPaperIds : [],
+    auditTeam: Array.isArray(raw.auditTeam) ? raw.auditTeam : [],
+    preparedBy: Array.isArray(raw.preparedBy) ? raw.preparedBy : [],
+    auditCommitteeName:
+      typeof raw.auditCommitteeName === "string" ? raw.auditCommitteeName : "",
+    auditCommitteeDate:
+      typeof raw.auditCommitteeDate === "string" ? raw.auditCommitteeDate : "",
+    presidentDirectorName:
+      typeof raw.presidentDirectorName === "string" ? raw.presidentDirectorName : "",
+    presidentDirectorDate:
+      typeof raw.presidentDirectorDate === "string" ? raw.presidentDirectorDate : "",
+    periodStart: typeof raw.periodStart === "string" ? raw.periodStart : "",
+    periodEnd: typeof raw.periodEnd === "string" ? raw.periodEnd : "",
+    auditCoverage: typeof raw.auditCoverage === "string" ? raw.auditCoverage : "",
+    departmentCoverage:
+      typeof raw.departmentCoverage === "string" ? raw.departmentCoverage : "",
+    area: typeof raw.area === "string" ? raw.area : "",
   };
 }

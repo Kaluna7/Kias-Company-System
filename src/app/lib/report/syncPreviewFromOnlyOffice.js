@@ -1,4 +1,4 @@
-import { readMeta, readDocx, writeMeta } from "./documentStore";
+import { readMeta, writeMeta, readDocx } from "./documentStore";
 import { readReportState, writeReportState, pickReportStatePayload } from "./reportStateStore";
 import { readPreviewPayload, savePreviewPayload } from "./previewPayloadStore";
 import { computePreviewSnapshotHash } from "./previewAuditVisibility";
@@ -9,17 +9,17 @@ import {
 import { extractPreviewStateFromDocx } from "./docx/docxToPreviewState";
 import { broadcastReportStateChange } from "./reportStateHub";
 import { touchHubRevision } from "./reportPreviewHub";
-
-function mergeHtmlField(fromWord, existing) {
-  const word = String(fromWord ?? "").trim();
-  if (!word) return existing ?? "";
-  return word;
-}
+import { extractUserFreeTextFromFindingsHtml } from "./userFindingsFreeText";
+import {
+  mapExtractedDocxToPapers,
+  mergeChangedPapers,
+  legacyFieldsFromPapers,
+  seedPapersFromLegacyState,
+} from "./reportPapers";
 
 /**
- * After OnlyOffice save (Ctrl+S / status 6 / close status 2):
- * DOCX → narrative HTML fields → consolidated_report_state → broadcast to HTML preview.
- * Table rows (SOP/Audit) stay from modules; only narrative sections are taken from Word.
+ * OnlyOffice save → deteksi paper mana yang berubah → simpan hanya paper itu.
+ * Tabel Findings (modul) tidak ditimpa dari Word.
  */
 export async function syncReportStateFromOnlyOfficeSession(sessionId, updatedBy = "onlyoffice") {
   const meta = await readMeta(sessionId);
@@ -42,76 +42,73 @@ export async function syncReportStateFromOnlyOfficeSession(sessionId, updatedBy 
   });
 
   const visibility = existing.auditVisibleByDept || previewPayload?.auditVisibleByDept || {};
+  /** Jangan strip auditRows ke DB saat OnlyOffice save — data modul tetap utuh. */
+  const findingSections = existing.findingSections || [];
 
-  const baseSections = existing.findingSections || [];
-  const apiPublish = {};
-  for (const section of baseSections) {
-    apiPublish[section.deptKey] = section.isPublishedToReport === true;
-  }
-  const effectivePublish = buildEffectivePublishMap(apiPublish, visibility);
-  const findingSections = applyAuditVisibilityToSections(baseSections, effectivePublish);
+  const wordFindingsHtml = extracted.ok ? extracted.wordFindingsHtml : existing.wordFindingsHtml;
+  const userFindingsFreeHtml = extractUserFreeTextFromFindingsHtml(wordFindingsHtml || "");
+
+  const existingPapers = seedPapersFromLegacyState(existing);
+  const incomingPapers = mapExtractedDocxToPapers(
+    extracted.ok ? extracted : {},
+    userFindingsFreeHtml,
+  );
+  const { papers, changedPaperIds } = mergeChangedPapers(existingPapers, incomingPapers);
+  const legacyFromPapers = legacyFieldsFromPapers(papers, existing);
 
   const syncedAt = new Date().toISOString();
   const revision = Number(existing.onlyOfficeSyncRevision || 0) + 1;
 
   const nextState = pickReportStatePayload({
     ...existing,
+    ...legacyFromPapers,
     appendices: existing.appendices,
-    executiveSummaryHtml: extracted.ok
-      ? mergeHtmlField(extracted.executiveSummaryHtml, existing.executiveSummaryHtml)
-      : existing.executiveSummaryHtml,
-    auditObjectivesScopeHtml: extracted.ok
-      ? mergeHtmlField(extracted.auditObjectivesScopeHtml, existing.auditObjectivesScopeHtml)
-      : existing.auditObjectivesScopeHtml,
-    auditApproachMethodologyHtml: extracted.ok
-      ? mergeHtmlField(extracted.auditApproachMethodologyHtml, existing.auditApproachMethodologyHtml)
-      : existing.auditApproachMethodologyHtml,
-    conclusionValues: extracted.ok
-      ? { ...(existing.conclusionValues || {}), ...extracted.conclusionValues }
-      : existing.conclusionValues,
     auditVisibleByDept: visibility,
     findingSections,
     hiddenAuditFindingEdits: existing.hiddenAuditFindingEdits,
+    reportPapers: papers,
     onlyOfficeSyncedAt: syncedAt,
     onlyOfficeSyncRevision: revision,
     onlyOfficeSessionId: sessionId,
-    wordFindingsHtml: extracted.ok ? extracted.wordFindingsHtml : existing.wordFindingsHtml,
-    wordAppendicesHtml: extracted.ok ? extracted.wordAppendicesHtml : existing.wordAppendicesHtml,
+    userFindingsFreeHtml: legacyFromPapers.userFindingsFreeHtml || userFindingsFreeHtml || "",
+    lastChangedPaperIds: changedPaperIds,
   });
 
   const hubState = touchHubRevision(nextState);
   await writeReportState(year, hubState, updatedBy);
 
   try {
-    await savePreviewPayload(sessionId, {
-      year,
-      source: "html-preview",
-      previewSnapshotHash: computePreviewSnapshotHash(
-        nextState.auditVisibleByDept,
-        findingSections,
-        {
-          executiveSummaryHtml: nextState.executiveSummaryHtml,
-          auditObjectivesScopeHtml: nextState.auditObjectivesScopeHtml,
-          auditApproachMethodologyHtml: nextState.auditApproachMethodologyHtml,
-          conclusionValues: nextState.conclusionValues,
-        },
-      ),
-      auditVisibleByDept: nextState.auditVisibleByDept,
-      executiveSummaryHtml: nextState.executiveSummaryHtml,
-      auditObjectivesScopeHtml: nextState.auditObjectivesScopeHtml,
-      auditApproachMethodologyHtml: nextState.auditApproachMethodologyHtml,
-      conclusionValues: nextState.conclusionValues,
-      appendices: nextState.appendices,
-      findingSections,
-    });
+    await savePreviewPayload(
+      sessionId,
+      {
+        year,
+        previewSnapshotHash: computePreviewSnapshotHash(
+          nextState.auditVisibleByDept,
+          findingSections,
+          {
+            executiveSummaryHtml: nextState.executiveSummaryHtml,
+            auditObjectivesScopeHtml: nextState.auditObjectivesScopeHtml,
+            auditApproachMethodologyHtml: nextState.auditApproachMethodologyHtml,
+            conclusionValues: nextState.conclusionValues,
+          },
+        ),
+        auditVisibleByDept: nextState.auditVisibleByDept,
+        executiveSummaryHtml: nextState.executiveSummaryHtml,
+        auditObjectivesScopeHtml: nextState.auditObjectivesScopeHtml,
+        auditApproachMethodologyHtml: nextState.auditApproachMethodologyHtml,
+        conclusionValues: nextState.conclusionValues,
+        appendices: nextState.appendices,
+      },
+      { narrativeOnly: true },
+    );
   } catch {
     /* ignore */
   }
 
   try {
-    const meta = (await readMeta(sessionId)) || {};
-    meta.onlyOfficeSyncRevision = revision;
-    meta.previewSnapshotHash = computePreviewSnapshotHash(
+    const sessionMeta = (await readMeta(sessionId)) || {};
+    sessionMeta.onlyOfficeSyncRevision = revision;
+    sessionMeta.previewSnapshotHash = computePreviewSnapshotHash(
       nextState.auditVisibleByDept,
       findingSections,
       {
@@ -121,8 +118,8 @@ export async function syncReportStateFromOnlyOfficeSession(sessionId, updatedBy 
         conclusionValues: nextState.conclusionValues,
       },
     );
-    meta.updatedAt = syncedAt;
-    await writeMeta(sessionId, meta);
+    sessionMeta.updatedAt = syncedAt;
+    await writeMeta(sessionId, sessionMeta);
   } catch {
     /* ignore */
   }
@@ -134,7 +131,15 @@ export async function syncReportStateFromOnlyOfficeSession(sessionId, updatedBy 
     moduleTablesRevision: Number(hubState.moduleTablesRevision) || 0,
     sessionId,
     source: updatedBy,
+    changedPaperIds,
   });
 
-  return { ok: true, year, state: hubState, extracted: extracted.ok, revision };
+  return {
+    ok: true,
+    year,
+    state: hubState,
+    extracted: extracted.ok,
+    revision,
+    changedPaperIds,
+  };
 }

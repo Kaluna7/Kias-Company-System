@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { deletePreviewPayload } from "./previewPayloadStore";
 
 const REPORTS_DIR = path.join(process.cwd(), "data", "reports");
 
@@ -98,11 +99,22 @@ export async function bumpDocumentVersion(sessionId) {
  */
 export function getDocumentKey(sessionId, metaOrVersion) {
   if (metaOrVersion != null && typeof metaOrVersion === "object") {
+    const g = Number(metaOrVersion.resetGeneration || 0);
     const v = Number(metaOrVersion.version || 1);
     const s = Number(metaOrVersion.saveCount || 0);
-    return `${sessionId}-v${v}-s${s}`;
+    const p = Number(metaOrVersion.previewDocxRevision || 0);
+    return `${sessionId}-g${g}-v${v}-s${s}-p${p}`;
   }
-  return `${sessionId}-v${metaOrVersion ?? 1}`;
+  return `${sessionId}-g0-v${metaOrVersion ?? 1}-s0-p0`;
+}
+
+/** Server-side DOCX patch (lock/unlock, module tables) — new key so refreshFile loads updated file. */
+export async function bumpDocumentKeyAfterServerPatch(sessionId) {
+  const meta = (await readMeta(sessionId)) || { sessionId, version: 1, saveCount: 0 };
+  meta.saveCount = Number(meta.saveCount || 0) + 1;
+  meta.updatedAt = new Date().toISOString();
+  await writeMeta(sessionId, meta);
+  return meta;
 }
 
 /** After OnlyOffice saves — new key on next open without bumping meta.version. */
@@ -142,7 +154,7 @@ export async function findLatestSessionByYear(year) {
   return latest?.sessionId || null;
 }
 
-/** Remove stored DOCX + metadata for a session. */
+/** Remove stored DOCX + metadata + cached preview payload for a session. */
 export async function deleteReportSession(sessionId) {
   if (!sessionId) return false;
   let removed = false;
@@ -157,6 +169,9 @@ export async function deleteReportSession(sessionId) {
     removed = true;
   } catch {
     // ignore missing meta
+  }
+  if (await deletePreviewPayload(sessionId)) {
+    removed = true;
   }
   return removed;
 }

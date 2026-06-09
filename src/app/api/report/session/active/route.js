@@ -3,8 +3,9 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { readMeta, docxExists } from "@/app/lib/report/documentStore";
+import { readMeta, docxExists, deleteReportSession } from "@/app/lib/report/documentStore";
 import { getSharedReportSessionId } from "@/app/lib/report/reportProgressStorage";
+import { getReportResetGeneration } from "@/app/lib/report/reportResetGeneration";
 import { getOnlyOfficeNarrativeRevision } from "@/app/lib/report/onlyOfficeDocxGuard";
 import { isOnlyOfficeEnabled } from "@/app/lib/report/onlyoffice/jwt";
 
@@ -37,7 +38,19 @@ export async function GET(req) {
       });
     }
 
-    const meta = await readMeta(sessionId);
+    let meta = await readMeta(sessionId);
+    const currentResetGen = await getReportResetGeneration(year);
+    if (meta && Number(meta.resetGeneration || 0) !== currentResetGen) {
+      await deleteReportSession(sessionId);
+      return NextResponse.json({
+        success: false,
+        error: "NO_ACTIVE_SESSION",
+        message:
+          "Report was reset. Create Word again from HTML Preview before opening OnlyOffice.",
+        year,
+        staleAfterReset: true,
+      });
+    }
     const dbOnlyOfficeRev = await getOnlyOfficeNarrativeRevision(year);
     const onlyOfficeSyncRevision = Math.max(
       dbOnlyOfficeRev,
@@ -56,7 +69,9 @@ export async function GET(req) {
         createdAt: meta?.createdAt ?? null,
         updatedAt: meta?.updatedAt ?? null,
         previewSnapshotHash: meta?.previewSnapshotHash ?? null,
+        coverSnapshotHash: meta?.coverSnapshotHash ?? null,
         moduleTablesHash: meta?.moduleTablesHash ?? null,
+        resetGeneration: meta?.resetGeneration ?? 0,
         onlyOfficeSyncRevision,
       },
     });

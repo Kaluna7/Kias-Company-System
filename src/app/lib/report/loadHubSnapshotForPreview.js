@@ -3,9 +3,12 @@ import { loadFindingSectionsForPreviewServer } from "./loadFindingSectionsServer
 import {
   applyAuditVisibilityToSections,
   buildEffectivePublishMap,
+  mergeModuleSectionsForHub,
+  syncAuditVisibleFromLockedByDept,
 } from "./previewAuditVisibility";
 import { getHubRevision } from "./reportPreviewHub";
 import { pickNarrativeFromReportState } from "./reportStateNarrative";
+import { syncSystemBlocksInHub } from "./reportBlocks";
 
 /**
  * Satu snapshot untuk HTML preview: narasi dari hub DB + tabel dari modul live.
@@ -14,19 +17,26 @@ import { pickNarrativeFromReportState } from "./reportStateNarrative";
  */
 export async function loadHubSnapshotForPreview(year, cookieHeader = "") {
   const existing = (await readReportState(year)) || {};
-  const { sections, lockedByDept } = await loadFindingSectionsForPreviewServer(
+  const { sections: moduleSections, lockedByDept } = await loadFindingSectionsForPreviewServer(
     year,
     cookieHeader,
   );
 
-  const auditVisibleByDept =
-    existing.auditVisibleByDept && typeof existing.auditVisibleByDept === "object"
-      ? existing.auditVisibleByDept
-      : {};
+  /** Module API + DB hub: jangan hilangkan auditRows yang sudah tersimpan. */
+  const sections = mergeModuleSectionsForHub(
+    existing.findingSections || [],
+    moduleSections || [],
+  );
+
+  const auditVisibleByDept = syncAuditVisibleFromLockedByDept(
+    lockedByDept,
+    existing.auditVisibleByDept || {},
+  );
 
   const effectivePublish = buildEffectivePublishMap(lockedByDept, auditVisibleByDept);
   const visibleSections = applyAuditVisibilityToSections(sections, effectivePublish);
   const narrative = pickNarrativeFromReportState(existing);
+  const blockSync = syncSystemBlocksInHub(existing, visibleSections, auditVisibleByDept);
 
   return {
     year,
@@ -35,12 +45,18 @@ export async function loadHubSnapshotForPreview(year, cookieHeader = "") {
     moduleTablesRevision: Number(existing.moduleTablesRevision) || 0,
     narrative,
     state: existing,
-    sections: visibleSections,
+    /** Data modul utuh — client filter tampilan lewat auditVisibleByDept. */
+    sections,
+    displaySections: visibleSections,
     lockedByDept,
     auditVisibleByDept,
     hiddenAuditFindingEdits:
       existing.hiddenAuditFindingEdits && typeof existing.hiddenAuditFindingEdits === "object"
         ? existing.hiddenAuditFindingEdits
         : {},
+    reportBlocks: blockSync.reportBlocks,
+    userNotes: blockSync.userNotes,
+    deletedSystemBlockIds: blockSync.deletedSystemIds,
+    changedSystemBlockIds: blockSync.changedSystemIds,
   };
 }

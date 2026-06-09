@@ -1,5 +1,11 @@
 import { pickNarrativeFromReportState } from "./reportStateNarrative";
 import { touchHubRevision } from "./reportPreviewHub";
+import { syncSystemBlocksInHub } from "./reportBlocks";
+import {
+  applyAuditVisibilityToSections,
+  buildEffectivePublishMap,
+  mergeModuleSectionsForHub,
+} from "./previewAuditVisibility";
 
 function narrativeHasContent(value, key) {
   if (key === "conclusionValues") {
@@ -62,7 +68,29 @@ export function mergeReportStateForPersist(existing, incoming, options = {}) {
   }
 
   if (Array.isArray(incoming.findingSections)) {
-    next.findingSections = incoming.findingSections;
+    next.findingSections = mergeModuleSectionsForHub(
+      existing?.findingSections || [],
+      incoming.findingSections,
+    );
+    const lockedByDept = {};
+    for (const section of next.findingSections) {
+      lockedByDept[section.deptKey] = section.isPublishedToReport === true;
+    }
+    const effectivePublish = buildEffectivePublishMap(
+      lockedByDept,
+      next.auditVisibleByDept || {},
+    );
+    const visibleForBlocks = applyAuditVisibilityToSections(
+      next.findingSections,
+      effectivePublish,
+    );
+    const blockSync = syncSystemBlocksInHub(
+      existing,
+      visibleForBlocks,
+      next.auditVisibleByDept || {},
+    );
+    next.reportBlocks = blockSync.reportBlocks;
+    next.userNotes = blockSync.userNotes;
   }
   if (incoming.hiddenAuditFindingEdits && typeof incoming.hiddenAuditFindingEdits === "object") {
     next.hiddenAuditFindingEdits = incoming.hiddenAuditFindingEdits;

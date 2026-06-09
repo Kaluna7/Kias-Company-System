@@ -2,6 +2,8 @@
  * In-process pub/sub: SOP Review publish/edit → report HTML preview (SSE).
  */
 
+import { broadcastPreviewRealtime } from "@/app/lib/report/previewRealtimeHub";
+
 const CHANNEL = "sop-review-data";
 
 if (!global._sopReviewDataHub) {
@@ -39,6 +41,8 @@ export function broadcastSopReviewDataChange(payload) {
       yearSet.delete(sub);
     }
   }
+
+  broadcastPreviewRealtime(event);
 }
 
 export function subscribeSopReviewDataStream(year, send) {

@@ -765,7 +765,7 @@ export default function AuditReviewDeptClient({
       const row = await fetchExecutiveSummaryFromServer();
       if (row) applyExecutiveSummaryRow(row, executiveSummarySetters);
       else setIsLocked(false);
-      notifyAuditReviewPublishChanged({
+      await notifyAuditReviewPublishChanged({
         auditYear,
         reportYear: selectedYear || auditYear,
         deptKey,
@@ -895,7 +895,7 @@ export default function AuditReviewDeptClient({
       await findingsRes.json().catch(() => ({}));
       await reloadReviewFindingsFromServer();
       setIsLocked(nextLocked);
-      notifyAuditReviewPublishChanged({
+      await notifyAuditReviewPublishChanged({
         auditYear,
         reportYear: selectedYear || auditYear,
         deptKey,
