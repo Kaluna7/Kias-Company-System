@@ -17,13 +17,15 @@ if (!global._reportStateHub) {
 const hub = global._reportStateHub;
 
 /**
- * @param {{ year: number, revision?: number, sessionId?: string, source?: string }} payload
+ * @param {{ year: number, revision?: number, hubRevision?: number, moduleTablesRevision?: number, sessionId?: string, source?: string }} payload
  */
 export function broadcastReportStateChange(payload) {
   const event = {
     type: CHANNEL,
     year: Number(payload.year) || new Date().getFullYear(),
     revision: Number(payload.revision) || 0,
+    hubRevision: Number(payload.hubRevision) || 0,
+    moduleTablesRevision: Number(payload.moduleTablesRevision) || 0,
     sessionId: payload.sessionId ? String(payload.sessionId) : null,
     source: payload.source ? String(payload.source) : "onlyoffice",
     ts: Date.now(),

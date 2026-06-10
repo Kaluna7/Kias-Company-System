@@ -3,7 +3,9 @@
 export const dynamic = "force-dynamic";
 
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from "react";
+import LoadingProgressOverlay from "@/app/components/shared/LoadingProgressOverlay";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
 import {
   buildDeptExecutiveSummaryFromRow,
@@ -36,14 +38,18 @@ import {
   stripFindingSectionsForClient,
 } from "@/app/lib/report/mergePreservedFindingSections";
 import {
-  getReportCollaborationStatus,
   notifyOnlyOfficeSessionOpened,
   syncReportDocxFromPreview,
+  waitForReportDocxReady,
 } from "@/app/lib/report/exportReportClient";
 import {
   getPreviewTabClientId,
+  leavePreviewPresence,
+  PREVIEW_WS_EVENTS,
+  pushOnlyOfficeCreatingToPeers,
   pushOnlyOfficeRedirectToPeers,
   pushPreviewStateToPeers,
+  subscribePreviewWebSocket,
 } from "@/app/lib/report/previewWebSocketClient";
 import {
   clearClientReportProgress,
@@ -52,11 +58,14 @@ import {
   markClientReportReset,
 } from "@/app/lib/report/reportProgressStorage";
 import { usePreviewHubAutoRefresh } from "@/app/lib/report/usePreviewHubAutoRefresh";
-import { getHubRevision } from "@/app/lib/report/reportPreviewHub";
+import { getHubRevision, HUB_CHANGE_SOURCE } from "@/app/lib/report/reportPreviewHub";
 import { useSopReviewRealtime } from "@/app/lib/sop-review/useSopReviewRealtime";
 import { loadFindingSectionsFromModules } from "@/app/lib/report/loadFindingSectionsFromModules";
 import { pickNarrativeFromReportState } from "@/app/lib/report/reportStateNarrative";
 import { usePreviewCollaboration } from "@/app/lib/report/usePreviewCollaboration";
+import { usePreviewStatePoll } from "@/app/lib/report/usePreviewStatePoll";
+import { useOnlyOfficeAutoJoin } from "@/app/lib/report/useOnlyOfficeAutoJoin";
+import { clearOnlyOfficeAutoJoinDismissed } from "@/app/lib/report/onlyOfficeAutoJoinDismiss";
 import PreviewCollaborationBar from "./PreviewCollaborationBar";
 import { buildPersistPayloadWithProtectedNarrative } from "@/app/lib/report/mergeReportStateForPersist";
 import {
@@ -1063,6 +1072,7 @@ function formatExecutiveSummaryItem(item) {
 }
 
 function ReportPreviewPageContent() {
+  const { data: authSession } = useSession();
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
   const router = useRouter();
@@ -1093,6 +1103,7 @@ function ReportPreviewPageContent() {
   const savedFindingSectionsRef = useRef([]);
   const hiddenAuditEditsRef = useRef({});
   const persistReportStateRef = useRef(null);
+  const broadcastPreviewStateNowRef = useRef(() => {});
   const buildReportExportPayloadRef = useRef(null);
   const hubRevisionInitRef = useRef(null);
   const onlyOfficeSyncRevisionRef = useRef(0);
@@ -1210,10 +1221,13 @@ function ReportPreviewPageContent() {
    *  Default-nya kosong; baru muncul setelah user klik + Add Member.
    */
   const [auditTeam, setAuditTeam] = useState([]);
+  const appendicesRef = useRef(DEFAULT_APPENDICES);
+  const auditTeamRef = useRef([]);
   const [isAuditTeamModalOpen, setIsAuditTeamModalOpen] = useState(false);
   const [newAuditName, setNewAuditName] = useState("");
   const [newAuditRole, setNewAuditRole] = useState("MEMBER");
   const [preparedBy, setPreparedBy] = useState([]);
+  const preparedByRef = useRef([]);
   const [isPreparedByModalOpen, setIsPreparedByModalOpen] = useState(false);
   const [newPreparedName, setNewPreparedName] = useState("");
   const [newPreparedRole, setNewPreparedRole] = useState("MEMBER");
@@ -1228,9 +1242,20 @@ function ReportPreviewPageContent() {
     [preparedBy],
   );
 
+  useEffect(() => {
+    auditTeamRef.current = auditTeam;
+  }, [auditTeam]);
+
+  useEffect(() => {
+    preparedByRef.current = preparedBy;
+  }, [preparedBy]);
+
   const pendingFieldUpdatesRef = useRef({});
   const fieldUpdateTimerRef = useRef(null);
   const [openingEditor, setOpeningEditor] = useState(false);
+  const [joiningOnlyOffice, setJoiningOnlyOffice] = useState(false);
+  const [teammateCreatingOnlyOffice, setTeammateCreatingOnlyOffice] = useState(null);
+  const [onlyOfficeLoadingProgress, setOnlyOfficeLoadingProgress] = useState(0);
   const [aiStatus, setAiStatus] = useState("");
   const aiStatusTimerRef = useRef(null);
   /** Avoid hydration mismatch from browser extensions (fdprocessedid on buttons/inputs). */
@@ -1249,8 +1274,8 @@ function ReportPreviewPageContent() {
     if (entries.length === 0) return;
 
     pendingFieldUpdatesRef.current = {};
-    setFindingSections((prev) =>
-      prev.map((section) => {
+    setFindingSections((prev) => {
+      const next = prev.map((section) => {
         const sectionEntries = entries.filter(([key]) => key.startsWith(`${section.deptKey}|`));
         if (sectionEntries.length === 0) return section;
 
@@ -1277,8 +1302,13 @@ function ReportPreviewPageContent() {
             return updates ? { ...row, ...updates } : row;
           }),
         };
-      }),
-    );
+      });
+      findingSectionsRef.current = next;
+      queueMicrotask(() => {
+        broadcastPreviewStateNowRef.current?.({}, { force: true });
+      });
+      return next;
+    });
   };
 
   const enqueueRowFieldUpdate = (rowType, deptKey, rowKey, field, value) => {
@@ -1290,7 +1320,7 @@ function ReportPreviewPageContent() {
     fieldUpdateTimerRef.current = window.setTimeout(() => {
       flushPendingFieldUpdates();
       fieldUpdateTimerRef.current = null;
-    }, 180);
+    }, 40);
   };
 
   const autoResizePlainTextarea = (target) => {
@@ -1317,6 +1347,10 @@ function ReportPreviewPageContent() {
   const [richTextEditorSection, setRichTextEditorSection] = useState(null);
   const [appendices, setAppendices] = useState(DEFAULT_APPENDICES);
   const [showAppendixEditor, setShowAppendixEditor] = useState(false);
+
+  useEffect(() => {
+    appendicesRef.current = appendices;
+  }, [appendices]);
 
   const moduleSectionsSource = useMemo(
     () => (hubModuleSections.length > 0 ? hubModuleSections : findingSections),
@@ -1483,8 +1517,18 @@ function ReportPreviewPageContent() {
     return [...mergedDefaults, ...extraAppendices];
   }
 
+  const setAppendicesCollaborative = useCallback((updater) => {
+    setAppendices((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      queueMicrotask(() => {
+        broadcastPreviewStateNowRef.current?.({ appendices: next }, { force: true });
+      });
+      return next;
+    });
+  }, []);
+
   function updateAppendixTableCell(appendixId, rowIdx, field, value) {
-    setAppendices((prev) =>
+    setAppendicesCollaborative((prev) =>
       prev.map((item) =>
         item.id === appendixId
           ? {
@@ -1499,7 +1543,7 @@ function ReportPreviewPageContent() {
   }
 
   function addAppendixTableRow(appendixId) {
-    setAppendices((prev) =>
+    setAppendicesCollaborative((prev) =>
       prev.map((item) =>
         item.id === appendixId
           ? {
@@ -1521,7 +1565,7 @@ function ReportPreviewPageContent() {
   }
 
   function removeAppendixTableRow(appendixId, rowIdx) {
-    setAppendices((prev) =>
+    setAppendicesCollaborative((prev) =>
       prev.map((item) =>
         item.id === appendixId
           ? {
@@ -1595,6 +1639,17 @@ function ReportPreviewPageContent() {
     setRichTextSectionHtml(richTextEditorSection, nextHtml);
     setDraftRichTextHtml(nextHtml);
     setRichTextEditorSection(null);
+    queueMicrotask(() => {
+      const patch = {};
+      if (richTextEditorSection === "auditObjectivesScope") {
+        patch.auditObjectivesScopeHtml = nextHtml;
+      } else if (richTextEditorSection === "auditApproachMethodology") {
+        patch.auditApproachMethodologyHtml = nextHtml;
+      } else {
+        patch.executiveSummaryHtml = nextHtml;
+      }
+      broadcastPreviewStateNowRef.current?.(patch, { force: true });
+    });
   };
 
   useEffect(() => {
@@ -1609,25 +1664,6 @@ function ReportPreviewPageContent() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!reportStateHydrated) return;
-    try {
-      const raw = localStorage.getItem(appendicesStorageKey);
-      if (!raw) {
-        setAppendices(DEFAULT_APPENDICES);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setAppendices(mergeWithDefaultAppendices(parsed));
-      } else {
-        setAppendices(DEFAULT_APPENDICES);
-      }
-    } catch {
-      setAppendices(DEFAULT_APPENDICES);
-    }
-  }, [appendicesStorageKey, reportStateHydrated]);
 
   const resetPreviewClientState = useCallback((options = {}) => {
     if (resetHandledRef.current && options.force !== true) return;
@@ -1814,6 +1850,7 @@ function ReportPreviewPageContent() {
           hub: Number(saved.hubRevision) || 0,
         };
         lastDbNarrativeRef.current = saved;
+        lastPreviewSyncRevisionRef.current = Number(saved.previewSyncRevision) || 0;
       } catch (err) {
         console.warn("[REPORT-PREVIEW] load report state:", err);
       } finally {
@@ -1844,8 +1881,8 @@ function ReportPreviewPageContent() {
       auditCoverage: String(auditCoverage ?? "").trim(),
       departmentCoverage: String(departmentCoverage ?? "").trim(),
       area: String(area ?? "").trim(),
-      auditTeam,
-      preparedBy,
+      auditTeam: auditTeamRef.current,
+      preparedBy: preparedByRef.current,
       auditCommitteeName: String(auditCommitteeName ?? "").trim(),
       auditCommitteeDate: String(auditCommitteeDate ?? "").trim(),
       presidentDirectorName: String(presidentDirectorName ?? "").trim(),
@@ -1915,7 +1952,7 @@ function ReportPreviewPageContent() {
         : tablesPayload;
 
     try {
-      return await fetch("/api/report/state", {
+      const res = await fetch("/api/report/state", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -1926,6 +1963,12 @@ function ReportPreviewPageContent() {
           allowNarrativeOverwrite: options.narrativeFromPreviewEdit === true,
         }),
       });
+      const json = await res.json().catch(() => ({}));
+      const savedRev = Number(json.state?.previewSyncRevision) || 0;
+      if (savedRev > lastPreviewSyncRevisionRef.current) {
+        lastPreviewSyncRevisionRef.current = savedRev;
+      }
+      return res;
     } catch (err) {
       console.warn("[REPORT-PREVIEW] save report state:", err);
       return null;
@@ -1969,7 +2012,7 @@ function ReportPreviewPageContent() {
           onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
         protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
       });
-    }, 800);
+    }, 350);
 
     return () => window.clearTimeout(timer);
   }, [
@@ -2059,15 +2102,20 @@ function ReportPreviewPageContent() {
       setArea(saved.area);
     }
     if (Array.isArray(saved.auditTeam)) {
-      setAuditTeam(
-        saved.auditTeam.filter((m) => m && String(m.name ?? "").trim().length > 0),
+      const next = saved.auditTeam.filter(
+        (m) => m && String(m.name ?? "").trim().length > 0,
       );
+      auditTeamRef.current = next;
+      setAuditTeam(next);
     } else if (saved.auditTeam === null) {
+      auditTeamRef.current = [];
       setAuditTeam([]);
     }
     if (Array.isArray(saved.preparedBy)) {
+      preparedByRef.current = saved.preparedBy;
       setPreparedBy(saved.preparedBy);
     } else if (saved.preparedBy === null) {
+      preparedByRef.current = [];
       setPreparedBy([]);
     }
     if (typeof saved.auditCommitteeName === "string") {
@@ -2084,20 +2132,23 @@ function ReportPreviewPageContent() {
     }
   }, []);
 
-  /** OnlyOffice / DB narrative — kept when module tables reload. */
+  /** OnlyOffice / DB narrative — does not touch cover fields (audit team, dates, etc.). */
   const applyNarrativeFromReportState = useCallback(
     (saved) => {
       const narrative = pickNarrativeFromReportState(saved);
       if (!narrative) return;
 
-      applyCoverFieldsFromReportState(saved);
-
       if (narrative.auditVisibleByDept && typeof narrative.auditVisibleByDept === "object") {
         setAuditVisibleByDept(narrative.auditVisibleByDept);
         auditVisibleByDeptRef.current = narrative.auditVisibleByDept;
       }
-      if (Array.isArray(narrative.appendices) && narrative.appendices.length > 0) {
-        setAppendices(mergeWithDefaultAppendices(narrative.appendices));
+      if (Array.isArray(narrative.appendices)) {
+        const next =
+          narrative.appendices.length > 0
+            ? mergeWithDefaultAppendices(narrative.appendices)
+            : [];
+        appendicesRef.current = next;
+        setAppendices(next);
       }
       if (narrative.executiveSummaryHtml != null) {
         const html = normalizeExecutiveSummaryHtml(narrative.executiveSummaryHtml, year);
@@ -2133,11 +2184,13 @@ function ReportPreviewPageContent() {
         lastDbNarrativeRef.current = saved;
       }
     },
-    [year, applyCoverFieldsFromReportState],
+    [year],
   );
 
   const collabClientIdRef = useRef(getPreviewTabClientId());
   const applyingRemoteWsRef = useRef(false);
+  const lastPreviewSyncRevisionRef = useRef(0);
+  const lastWsStateAtRef = useRef(0);
   const wsPushTimerRef = useRef(null);
   const wsPushEnabledRef = useRef(false);
   const [wsPushEnabled, setWsPushEnabled] = useState(false);
@@ -2150,13 +2203,13 @@ function ReportPreviewPageContent() {
       auditCoverage: String(auditCoverage ?? "").trim(),
       departmentCoverage: String(departmentCoverage ?? "").trim(),
       area: String(area ?? "").trim(),
-      auditTeam,
-      preparedBy,
+      auditTeam: auditTeamRef.current,
+      preparedBy: preparedByRef.current,
       auditCommitteeName: String(auditCommitteeName ?? "").trim(),
       auditCommitteeDate: String(auditCommitteeDate ?? "").trim(),
       presidentDirectorName: String(presidentDirectorName ?? "").trim(),
       presidentDirectorDate: String(presidentDirectorDate ?? "").trim(),
-      appendices,
+      appendices: appendicesRef.current,
       executiveSummaryHtml: sanitizeExecutiveSummaryHtml(executiveSummaryHtml, year),
       auditObjectivesScopeHtml: sanitizeHtmlWithFallback(
         auditObjectivesScopeHtml,
@@ -2170,6 +2223,19 @@ function ReportPreviewPageContent() {
       ),
       conclusionValues,
       auditVisibleByDept: auditVisibleByDeptRef.current,
+      findingSections: stripFindingSectionsForClient(
+        findingSectionsRef.current?.length
+          ? findingSectionsRef.current
+          : findingSections,
+      ),
+      hiddenAuditFindingEdits: {
+        ...hiddenAuditEditsRef.current,
+        ...collectHiddenAuditEdits(
+          findingSectionsRef.current?.length
+            ? findingSectionsRef.current
+            : findingSections,
+        ),
+      },
     };
   }, [
     periodStart,
@@ -2188,22 +2254,65 @@ function ReportPreviewPageContent() {
     auditObjectivesScopeHtml,
     auditApproachMethodologyHtml,
     conclusionValues,
+    findingSections,
     year,
   ]);
 
-  /** Apply state received directly from WebSocket peer. */
+  /** Apply state received directly from WebSocket (peer or server persist). */
   const applyPreviewStateFromWs = useCallback(
-    (state) => {
+    (state, meta = {}) => {
       if (!state || typeof state !== "object") return;
+
+      const revision =
+        Number(meta.previewSyncRevision ?? state.previewSyncRevision) || 0;
+      if (
+        meta.senderClientId === "server" &&
+        revision > 0 &&
+        revision < lastPreviewSyncRevisionRef.current
+      ) {
+        return;
+      }
+      if (revision > lastPreviewSyncRevisionRef.current) {
+        lastPreviewSyncRevisionRef.current = revision;
+      }
+
       applyingRemoteWsRef.current = true;
       skipPersistOnceRef.current = true;
+      skipPersistUntilRef.current = Date.now() + 1500;
+      lastWsStateAtRef.current = Date.now();
 
       applyCoverFieldsFromReportState(state);
       applyNarrativeFromReportState(state);
 
+      if (Array.isArray(state.appendices)) {
+        const next =
+          state.appendices.length > 0
+            ? mergeWithDefaultAppendices(state.appendices)
+            : [];
+        appendicesRef.current = next;
+        setAppendices(next);
+      }
+
       if (state.auditVisibleByDept && typeof state.auditVisibleByDept === "object") {
         setAuditVisibleByDept(state.auditVisibleByDept);
         auditVisibleByDeptRef.current = state.auditVisibleByDept;
+      }
+
+      if (
+        state.hiddenAuditFindingEdits &&
+        typeof state.hiddenAuditFindingEdits === "object"
+      ) {
+        hiddenAuditEditsRef.current = {
+          ...hiddenAuditEditsRef.current,
+          ...state.hiddenAuditFindingEdits,
+        };
+      }
+
+      if (Array.isArray(state.findingSections)) {
+        const clientSections = stripFindingSectionsForClient(state.findingSections);
+        setFindingSections(clientSections);
+        findingSectionsRef.current = clientSections;
+        savedFindingSectionsRef.current = clientSections;
       }
 
       lastDbNarrativeRef.current = {
@@ -2214,37 +2323,60 @@ function ReportPreviewPageContent() {
 
       window.setTimeout(() => {
         applyingRemoteWsRef.current = false;
-      }, 500);
+      }, 800);
     },
     [applyCoverFieldsFromReportState, applyNarrativeFromReportState],
   );
 
+  const joiningOnlyOfficeRef = useRef(false);
+
   const joinOnlyOfficeEditor = useCallback(
     async (editorPath, options = {}) => {
-      if (!editorPath) return;
-      if (options.syncBeforeOpen !== false && Number.isFinite(year)) {
-        try {
-          skipPersistUntilRef.current = 0;
-          flushPendingFieldUpdates();
-          await persistReportStateRef.current?.({
-            narrativeFromPreviewEdit: true,
-            bypassSkipPersist: true,
-          });
-          const overlay =
-            typeof options.overlay === "object" && options.overlay
-              ? options.overlay
-              : buildReportExportPayloadRef.current?.() || {};
-          await syncReportDocxFromPreview(year, overlay);
-        } catch (e) {
-          console.warn("[preview] OnlyOffice sync before open:", e);
-        }
+      if (!editorPath || joiningOnlyOfficeRef.current) return;
+      if (
+        typeof window !== "undefined" &&
+        window.location.pathname.includes("/Page/report/editor")
+      ) {
+        return;
       }
-      router.replace(editorPath);
-      window.setTimeout(() => {
-        if (!window.location.pathname.includes("/Page/report/editor")) {
-          window.location.replace(editorPath);
+      joiningOnlyOfficeRef.current = true;
+      setJoiningOnlyOffice(true);
+      try {
+        if (options.syncBeforeOpen === true && Number.isFinite(year)) {
+          try {
+            skipPersistUntilRef.current = 0;
+            flushPendingFieldUpdates();
+            await persistReportStateRef.current?.({
+              narrativeFromPreviewEdit: true,
+              bypassSkipPersist: true,
+            });
+            const overlay =
+              typeof options.overlay === "object" && options.overlay
+                ? options.overlay
+                : buildReportExportPayloadRef.current?.() || {};
+            await syncReportDocxFromPreview(year, overlay);
+          } catch (e) {
+            console.warn("[preview] OnlyOffice sync before open:", e);
+          }
         }
-      }, 600);
+        if (options.skipDocxWait !== true) {
+          const sessionMatch = /[?&]session=([^&]+)/.exec(editorPath);
+          const sessionId = sessionMatch ? decodeURIComponent(sessionMatch[1]) : null;
+          if (sessionId) {
+            await waitForReportDocxReady(sessionId);
+          }
+        }
+        router.replace(editorPath);
+        window.setTimeout(() => {
+          if (!window.location.pathname.includes("/Page/report/editor")) {
+            window.location.replace(editorPath);
+          }
+        }, 600);
+      } catch (e) {
+        console.warn("[preview] join OnlyOffice:", e);
+        setJoiningOnlyOffice(false);
+        joiningOnlyOfficeRef.current = false;
+      }
     },
     [year, router],
   );
@@ -2252,10 +2384,30 @@ function ReportPreviewPageContent() {
   const handleOnlyOfficeRedirect = useCallback(
     (data) => {
       if (!data?.editorPath) return;
+      setTeammateCreatingOnlyOffice(null);
+      clearOnlyOfficeAutoJoinDismissed(year);
       joinOnlyOfficeEditor(data.editorPath);
     },
-    [joinOnlyOfficeEditor],
+    [joinOnlyOfficeEditor, year],
   );
+
+  const navigateBackToReportHub = useCallback(() => {
+    clearOnlyOfficeAutoJoinDismissed(year);
+    leavePreviewPresence(year);
+    void fetch("/api/report/collaboration/exit-onlyoffice", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        year,
+        tabId: getPreviewTabClientId(),
+        location: "report",
+      }),
+    }).catch(() => {});
+    const params = new URLSearchParams();
+    if (Number.isFinite(year)) params.set("year", String(year));
+    router.replace(`/Page/report?${params.toString()}`);
+  }, [year, router]);
 
   const {
     participants: collabParticipants,
@@ -2271,50 +2423,55 @@ function ReportPreviewPageContent() {
     collabClientIdRef.current = collabClientId || getPreviewTabClientId();
   }, [collabClientId]);
 
-  /** Re-join OnlyOffice if a teammate is still editing (e.g. browser Back from editor). */
   useEffect(() => {
     if (!clientReady || !Number.isFinite(year)) return undefined;
-
-    let cancelled = false;
-
-    const redirectIfOnlyOfficeLive = async () => {
-      const collab = await getReportCollaborationStatus(year);
-      if (cancelled) return;
-      if (collab.ok && collab.onlyOfficeOpen && collab.editorPath) {
-        joinOnlyOfficeEditor(collab.editorPath);
-      }
-    };
-
-    void redirectIfOnlyOfficeLive();
-
-    const onPageShow = (ev) => {
-      if (ev.persisted) void redirectIfOnlyOfficeLive();
-    };
-    window.addEventListener("pageshow", onPageShow);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("pageshow", onPageShow);
-    };
-  }, [clientReady, year, joinOnlyOfficeEditor]);
+    const unsub = subscribePreviewWebSocket(year, (data) => {
+      if (data.type !== PREVIEW_WS_EVENTS.ONLYOFFICE_CREATING) return;
+      const sender = data.senderClientId || data.clientId;
+      if (sender && sender === collabClientIdRef.current) return;
+      setTeammateCreatingOnlyOffice({
+        name: data.openedByName || "A teammate",
+      });
+    });
+    return unsub;
+  }, [year, clientReady]);
 
   useEffect(() => {
-    if (!clientReady || !Number.isFinite(year)) return;
-    const someoneInOnlyOffice = collabParticipants.some((p) => p.location === "onlyoffice");
-    if (!someoneInOnlyOffice) return;
+    if (!teammateCreatingOnlyOffice) return undefined;
+    const id = window.setTimeout(() => setTeammateCreatingOnlyOffice(null), 180_000);
+    return () => window.clearTimeout(id);
+  }, [teammateCreatingOnlyOffice]);
 
-    let cancelled = false;
-    void getReportCollaborationStatus(year).then((collab) => {
-      if (cancelled) return;
-      if (collab.ok && collab.onlyOfficeOpen && collab.editorPath) {
-        joinOnlyOfficeEditor(collab.editorPath);
-      }
-    });
+  useEffect(() => {
+    const active = openingEditor || joiningOnlyOffice || Boolean(teammateCreatingOnlyOffice);
+    if (!active) {
+      setOnlyOfficeLoadingProgress(0);
+      return undefined;
+    }
+    setOnlyOfficeLoadingProgress(10);
+    const id = window.setInterval(() => {
+      setOnlyOfficeLoadingProgress((prev) => (prev >= 92 ? prev : prev + 2));
+    }, 350);
+    return () => window.clearInterval(id);
+  }, [openingEditor, joiningOnlyOffice, teammateCreatingOnlyOffice]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [clientReady, year, collabParticipants, joinOnlyOfficeEditor]);
+  /** WS + HTTP poll fallback for OnlyOffice auto-join. */
+  useOnlyOfficeAutoJoin(year, {
+    enabled: clientReady,
+    ws: true,
+    onJoin: joinOnlyOfficeEditor,
+  });
+
+  usePreviewStatePoll(year, applyPreviewStateFromWs, {
+    enabled: clientReady && reportStateHydrated,
+  });
+
+  const cancelScheduledWsPush = useCallback(() => {
+    if (wsPushTimerRef.current != null) {
+      window.clearTimeout(wsPushTimerRef.current);
+      wsPushTimerRef.current = null;
+    }
+  }, []);
 
   /** Push local edits to all preview peers via WebSocket (queued until connected). */
   const broadcastPreviewStateNow = useCallback(
@@ -2322,26 +2479,57 @@ function ReportPreviewPageContent() {
       if (applyingRemoteWsRef.current) return;
       if (!force && !wsPushEnabledRef.current) return;
       if (!Number.isFinite(year)) return;
+      if (force) cancelScheduledWsPush();
+      if (override.auditTeam) auditTeamRef.current = override.auditTeam;
+      if (override.preparedBy) preparedByRef.current = override.preparedBy;
+      const state = { ...buildPreviewSyncPayload(), ...override };
       pushPreviewStateToPeers(year, {
         clientId: collabClientIdRef.current,
-        state: { ...buildPreviewSyncPayload(), ...override },
+        state,
       });
     },
-    [year, buildPreviewSyncPayload],
+    [year, buildPreviewSyncPayload, cancelScheduledWsPush],
+  );
+
+  const commitCoverFieldsNow = useCallback(
+    async (patch = {}) => {
+      if (patch.auditTeam) {
+        auditTeamRef.current = patch.auditTeam;
+        setAuditTeam(patch.auditTeam);
+      }
+      if (patch.preparedBy) {
+        preparedByRef.current = patch.preparedBy;
+        setPreparedBy(patch.preparedBy);
+      }
+      broadcastPreviewStateNow(patch, { force: true });
+      try {
+        await persistReportStateRef.current?.({
+          narrativeFromPreviewEdit: true,
+          bypassSkipPersist: true,
+        });
+      } catch {
+        /* ignore */
+      }
+    },
+    [broadcastPreviewStateNow],
   );
 
   const scheduleWsStatePush = useCallback(() => {
     if (applyingRemoteWsRef.current) return;
     if (!wsPushEnabledRef.current) return;
     if (!Number.isFinite(year)) return;
-    if (wsPushTimerRef.current) {
-      window.clearTimeout(wsPushTimerRef.current);
-    }
+    cancelScheduledWsPush();
     wsPushTimerRef.current = window.setTimeout(() => {
       wsPushTimerRef.current = null;
       broadcastPreviewStateNow();
     }, 80);
-  }, [year, broadcastPreviewStateNow]);
+  }, [year, broadcastPreviewStateNow, cancelScheduledWsPush]);
+
+  useEffect(() => {
+    broadcastPreviewStateNowRef.current = (override = {}, opts = {}) => {
+      broadcastPreviewStateNow(override, opts);
+    };
+  }, [broadcastPreviewStateNow]);
 
   useEffect(() => {
     if (!reportStateHydrated) {
@@ -2349,12 +2537,21 @@ function ReportPreviewPageContent() {
       setWsPushEnabled(false);
       return undefined;
     }
-    const timer = window.setTimeout(() => {
-      wsPushEnabledRef.current = true;
-      setWsPushEnabled(true);
-    }, 1500);
-    return () => window.clearTimeout(timer);
+    wsPushEnabledRef.current = true;
+    setWsPushEnabled(true);
+    return undefined;
   }, [reportStateHydrated]);
+
+  useEffect(() => {
+    const resetTransientUi = () => {
+      setOpeningEditor(false);
+      setJoiningOnlyOffice(false);
+      setTeammateCreatingOnlyOffice(null);
+    };
+    const onPageShow = () => resetTransientUi();
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   useEffect(() => {
     if (!reportStateHydrated || !wsPushEnabled) return;
@@ -2373,6 +2570,9 @@ function ReportPreviewPageContent() {
     auditApproachMethodologyHtml,
     conclusionValues,
     auditVisibleByDept,
+    auditTeam,
+    preparedBy,
+    findingSections,
     periodStart,
     periodEnd,
     auditCoverage,
@@ -2382,14 +2582,12 @@ function ReportPreviewPageContent() {
 
   useEffect(
     () => () => {
-      if (wsPushTimerRef.current) {
-        window.clearTimeout(wsPushTimerRef.current);
-      }
+      cancelScheduledWsPush();
       if (aiStatusTimerRef.current) {
         window.clearTimeout(aiStatusTimerRef.current);
       }
     },
-    [],
+    [cancelScheduledWsPush],
   );
 
   const handleAiApply = useCallback(
@@ -2492,6 +2690,7 @@ function ReportPreviewPageContent() {
     (snap, options = {}) => {
       if (!snap || snap.success === false) return;
       const freshModuleReload = options.freshModuleReload === true;
+      const skipNarrative = options.skipNarrative === true;
 
       skipPersistOnceRef.current = true;
       if (Number(snap.hubRevision) > 0) {
@@ -2503,10 +2702,19 @@ function ReportPreviewPageContent() {
       }
 
       const narrativeSource = snap.state || snap.narrative;
-      if (narrativeSource && typeof narrativeSource === "object") {
+      if (!skipNarrative && narrativeSource && typeof narrativeSource === "object") {
         lastDbNarrativeRef.current = snap.state || narrativeSource;
         const { auditVisibleByDept: _vis, ...narrativeOnly } = narrativeSource;
         applyNarrativeFromReportState(narrativeOnly);
+      } else if (snap.state && typeof snap.state === "object") {
+        lastDbNarrativeRef.current = {
+          ...(lastDbNarrativeRef.current || {}),
+          findingSections:
+            snap.state.findingSections || lastDbNarrativeRef.current?.findingSections,
+          hiddenAuditFindingEdits:
+            snap.state.hiddenAuditFindingEdits ??
+            lastDbNarrativeRef.current?.hiddenAuditFindingEdits,
+        };
       }
 
       const lockedByDeptSnap = snap.lockedByDept || {};
@@ -2553,11 +2761,13 @@ function ReportPreviewPageContent() {
       setHubModuleSections(sections);
       savedFindingSectionsRef.current = clientSections;
       findingSectionsRef.current = clientSections;
-      /** Simpan data modul utuh untuk fallback renderer — jangan timpa dengan state tampilan. */
+      /** Simpan data modul — jangan timpa cover fields (audit team, dll.) dari snap DB lama. */
       lastDbNarrativeRef.current = {
-        ...(snap.state || lastDbNarrativeRef.current || {}),
+        ...(lastDbNarrativeRef.current || {}),
         findingSections: sections,
         auditVisibleByDept: syncedVisible,
+        auditTeam: auditTeamRef.current,
+        preparedBy: preparedByRef.current,
       };
       setMeasuredChunks(null);
 
@@ -2569,8 +2779,26 @@ function ReportPreviewPageContent() {
   applyHubSnapshotRef.current = applyHubSnapshot;
 
   const onHubSnapshotAutoRefresh = useCallback(
-    async (snap) => {
-      applyHubSnapshot(snap, { freshModuleReload: true });
+    async (snap, meta = {}) => {
+      if (applyingRemoteWsRef.current && meta.trigger !== "force") return;
+      if (
+        meta.trigger !== "force" &&
+        Date.now() - lastWsStateAtRef.current < 8000
+      ) {
+        return;
+      }
+      const onlyOfficeNarrativeSync =
+        meta.source === HUB_CHANGE_SOURCE.ONLYOFFICE ||
+        meta.source === "refresh-docx";
+      const freshModuleReload =
+        meta.trigger === "force" ||
+        meta.source === "audit-publish" ||
+        meta.source === "refresh-docx" ||
+        meta.source === HUB_CHANGE_SOURCE.MODULE_TABLES;
+      applyHubSnapshot(snap, {
+        freshModuleReload,
+        skipNarrative: !onlyOfficeNarrativeSync,
+      });
     },
     [applyHubSnapshot],
   );
@@ -2687,102 +2915,8 @@ function ReportPreviewPageContent() {
   }, [reloadModulesIntoPreview]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(appendicesStorageKey, JSON.stringify(appendices));
-    } catch {
-      // ignore localStorage failures
-    }
-  }, [appendices, appendicesStorageKey]);
-
-  useEffect(() => {
-    if (!reportStateHydrated) return;
-    if (onlyOfficeSyncRevisionRef.current > 0) return;
-
-    try {
-      const raw = localStorage.getItem(executiveSummaryStorageKey);
-      if (!raw) {
-        const defaultHtml = createDefaultExecutiveSummaryHtml(year);
-        setExecutiveSummaryHtml(defaultHtml);
-        setDraftRichTextHtml(defaultHtml);
-        return;
-      }
-      const savedHtml = normalizeExecutiveSummaryHtml(raw, year);
-      setExecutiveSummaryHtml(savedHtml);
-      setDraftRichTextHtml(savedHtml);
-    } catch {
-      const defaultHtml = createDefaultExecutiveSummaryHtml(year);
-      setExecutiveSummaryHtml(defaultHtml);
-      setDraftRichTextHtml(defaultHtml);
-    }
-  }, [executiveSummaryStorageKey, year, reportStateHydrated]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        executiveSummaryStorageKey,
-        sanitizeExecutiveSummaryHtml(executiveSummaryHtml, year),
-      );
-    } catch {
-      // ignore localStorage failures
-    }
-  }, [executiveSummaryHtml, executiveSummaryStorageKey, year]);
-
-  useEffect(() => {
     draftRichTextRef.current = draftRichTextHtml;
   }, [draftRichTextHtml]);
-
-  useEffect(() => {
-    if (!reportStateHydrated) return;
-    try {
-      const raw = localStorage.getItem(auditObjectivesScopeStorageKey);
-      setAuditObjectivesScopeHtml(
-        normalizeHtmlWithFallback(raw, createDefaultAuditObjectivesScopeHtml()),
-      );
-    } catch {
-      setAuditObjectivesScopeHtml(createDefaultAuditObjectivesScopeHtml());
-    }
-  }, [auditObjectivesScopeStorageKey, year, reportStateHydrated]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        auditObjectivesScopeStorageKey,
-        sanitizeHtmlWithFallback(auditObjectivesScopeHtml, createDefaultAuditObjectivesScopeHtml()),
-      );
-    } catch {
-      // ignore localStorage failures
-    }
-  }, [auditObjectivesScopeHtml, auditObjectivesScopeStorageKey, year]);
-
-  useEffect(() => {
-    if (!reportStateHydrated) return;
-    try {
-      const raw = localStorage.getItem(auditApproachMethodologyStorageKey);
-      setAuditApproachMethodologyHtml(
-        ensureAuditApproachMethodologyCompleteness(
-          normalizeHtmlWithFallback(raw, createDefaultAuditApproachMethodologyHtml()),
-        ),
-      );
-    } catch {
-      setAuditApproachMethodologyHtml(createDefaultAuditApproachMethodologyHtml());
-    }
-  }, [auditApproachMethodologyStorageKey, year, reportStateHydrated]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        auditApproachMethodologyStorageKey,
-        ensureAuditApproachMethodologyCompleteness(
-          sanitizeHtmlWithFallback(
-            auditApproachMethodologyHtml,
-            createDefaultAuditApproachMethodologyHtml(),
-          ),
-        ),
-      );
-    } catch {
-      // ignore localStorage failures
-    }
-  }, [auditApproachMethodologyHtml, auditApproachMethodologyStorageKey, year]);
 
   useEffect(() => {
     if (!richTextEditorSection || !executiveSummaryEditorRef.current) return;
@@ -3154,7 +3288,20 @@ function ReportPreviewPageContent() {
           if ((!snap.sections || snap.sections.length === 0) && dbFallback.length > 0) {
             snap.sections = dbFallback;
           }
-          applyHubSnapshotRef.current?.(snap, { freshModuleReload });
+          const snapRevision = Number(snap.state?.previewSyncRevision) || 0;
+          if (
+            snapRevision > 0 &&
+            snapRevision < lastPreviewSyncRevisionRef.current
+          ) {
+            return;
+          }
+          if (snapRevision > lastPreviewSyncRevisionRef.current) {
+            lastPreviewSyncRevisionRef.current = snapRevision;
+          }
+          applyHubSnapshotRef.current?.(snap, {
+            freshModuleReload,
+            skipNarrative: true,
+          });
           const moduleSectionsForCheck = Array.isArray(snap.sections) ? snap.sections : [];
           if (
             findingSectionsLookCorrupted(moduleSectionsForCheck, snap.lockedByDept || {}) &&
@@ -3168,34 +3315,16 @@ function ReportPreviewPageContent() {
           if (Object.keys(pendingPublishByDeptRef.current).length > 0) {
             pendingPublishByDeptRef.current = {};
           }
-          const persistSeq = loadSeq;
-          const clientSections = savedFindingSectionsRef.current;
-          skipPersistOnceRef.current = true;
-          void (async () => {
-            if (persistSeq !== moduleLoadSeqRef.current) return;
-            const persistRes = await persistReportStateRef.current?.({
-              syncMode:
-                onlyOfficeSyncRevisionRef.current > 0 ? "moduleTablesOnly" : undefined,
-              protectOnlyOfficeNarrative: onlyOfficeSyncRevisionRef.current > 0,
-            });
-            if (persistSeq !== moduleLoadSeqRef.current) return;
-            try {
-              const persistJson = await persistRes?.json?.().catch(() => ({}));
-              if (persistJson?.state) {
-                acknowledgeHubRevisionRef.current?.(getHubRevision(persistJson.state));
-              }
-            } catch {
-              /* ignore */
-            }
-            if (persistSeq !== moduleLoadSeqRef.current) return;
-            if (!freshModuleReload) return;
+          if (freshModuleReload) {
             try {
               window.dispatchEvent(
                 new CustomEvent("kias-report-modules-synced", {
                   detail: {
                     year,
                     reportYear: year,
-                    moduleTablesHash: computeModuleTablesHash(clientSections),
+                    moduleTablesHash: computeModuleTablesHash(
+                      savedFindingSectionsRef.current,
+                    ),
                     onlyOfficeSyncRevision: onlyOfficeSyncRevisionRef.current,
                     source: "module-tables",
                   },
@@ -3204,7 +3333,7 @@ function ReportPreviewPageContent() {
             } catch {
               /* ignore */
             }
-          })();
+          }
         }
       } finally {
         if (loadSeq === moduleLoadSeqRef.current) {
@@ -4090,8 +4219,11 @@ function ReportPreviewPageContent() {
       executiveSummaryPages: filterMeaningfulHtmlPages(executiveSummaryPages),
       auditObjectivesScopePages: filterMeaningfulHtmlPages(auditObjectivesScopePages),
       auditApproachMethodologyPages: filterMeaningfulHtmlPages(auditApproachMethodologyPages),
-      auditTeam: resolveAuditTeamRows(auditTeam),
-      preparedBy: preparedBy.length > 0 ? preparedBy : [],
+      auditTeam: resolveAuditTeamRows(
+        auditTeamRef.current.length > 0 ? auditTeamRef.current : auditTeam,
+      ),
+      preparedBy:
+        preparedByRef.current.length > 0 ? preparedByRef.current : preparedBy,
       auditCommitteeName,
       auditCommitteeDate: formattedAuditCommitteeDate,
       presidentDirectorName,
@@ -4104,8 +4236,11 @@ function ReportPreviewPageContent() {
       conclusionPages: exportConclusionPages,
       source: "html-preview",
       coverSnapshotHash: computeCoverSnapshotHash({
-        auditTeam: resolveAuditTeamRows(auditTeam),
-        preparedBy,
+        auditTeam: resolveAuditTeamRows(
+          auditTeamRef.current.length > 0 ? auditTeamRef.current : auditTeam,
+        ),
+        preparedBy:
+          preparedByRef.current.length > 0 ? preparedByRef.current : preparedBy,
         auditCommitteeName,
         auditCommitteeDate: formattedAuditCommitteeDate,
         presidentDirectorName,
@@ -4120,8 +4255,11 @@ function ReportPreviewPageContent() {
           auditObjectivesScopeHtml,
           auditApproachMethodologyHtml,
           conclusionValues,
-          auditTeam: resolveAuditTeamRows(auditTeam),
-          preparedBy,
+          auditTeam: resolveAuditTeamRows(
+            auditTeamRef.current.length > 0 ? auditTeamRef.current : auditTeam,
+          ),
+          preparedBy:
+            preparedByRef.current.length > 0 ? preparedByRef.current : preparedBy,
           auditCommitteeName,
           auditCommitteeDate: formattedAuditCommitteeDate,
           presidentDirectorName,
@@ -4176,7 +4314,6 @@ function ReportPreviewPageContent() {
         ...item,
         pageNumber: findingsPageStartNumber + findingPages.length + idx,
       })),
-      deptFindingNarratives: [],
       pageLayout: {
         totalPages,
         executiveSummaryStartPage,
@@ -4245,15 +4382,22 @@ function ReportPreviewPageContent() {
     }
     setOpeningEditor(true);
     try {
+      clearOnlyOfficeAutoJoinDismissed(year);
+      joiningOnlyOfficeRef.current = false;
       skipPersistUntilRef.current = 0;
       skipPersistOnceRef.current = false;
+      const initiatorClientId = getPreviewTabClientId();
+      pushOnlyOfficeCreatingToPeers(year, {
+        clientId: initiatorClientId,
+        openedByName:
+          authSession?.user?.name || authSession?.user?.email || "A teammate",
+      });
       flushPendingFieldUpdates();
       await persistReportStateNow({
         narrativeFromPreviewEdit: true,
         bypassSkipPersist: true,
       });
       const payload = buildReportExportPayload();
-      const initiatorClientId = getPreviewTabClientId();
       const result = await syncReportDocxFromPreview(year, payload);
       if (!result.ok) {
         window.alert(result.error || "Failed to create Word document.");
@@ -4270,7 +4414,10 @@ function ReportPreviewPageContent() {
           editorPath: result.editorPath,
           initiatorClientId,
         });
-        await joinOnlyOfficeEditor(result.editorPath, { syncBeforeOpen: false });
+        await joinOnlyOfficeEditor(result.editorPath, {
+          syncBeforeOpen: false,
+          skipDocxWait: true,
+        });
         return;
       }
       window.alert("Word document created but editor URL is missing.");
@@ -4300,11 +4447,37 @@ function ReportPreviewPageContent() {
     );
   }
 
+  const onlyOfficeOverlayOpen =
+    openingEditor || joiningOnlyOffice || Boolean(teammateCreatingOnlyOffice);
+
   return (
     <div
       suppressHydrationWarning
       className="min-h-screen bg-gray-100 flex flex-col items-center justify-start p-4 print:bg-white print:p-0 gap-6"
     >
+      <LoadingProgressOverlay
+        open={onlyOfficeOverlayOpen}
+        progress={onlyOfficeLoadingProgress}
+        title={
+          teammateCreatingOnlyOffice
+            ? "Preparing shared Word document"
+            : openingEditor
+              ? "Creating Word document"
+              : "Joining OnlyOffice"
+        }
+        subtitle={
+          teammateCreatingOnlyOffice
+            ? `${teammateCreatingOnlyOffice?.name || "A teammate"} is building Word from HTML Preview. You will join automatically when ready.`
+            : openingEditor
+              ? "Building a fresh DOCX from your HTML Preview…"
+              : "Opening the shared Word document…"
+        }
+        statusLabel={
+          teammateCreatingOnlyOffice
+            ? "Syncing latest preview data to Word…"
+            : "Please wait — do not close this page."
+        }
+      />
       <div className="flex flex-col items-center justify-start gap-6 w-full">
       <style jsx global>{`
         @media print {
@@ -4383,15 +4556,7 @@ function ReportPreviewPageContent() {
         <button
           type="button"
           suppressHydrationWarning
-          onClick={() => {
-            if (typeof window !== "undefined" && window.history.length > 1) {
-              router.back();
-              return;
-            }
-            const params = new URLSearchParams();
-            if (Number.isFinite(year)) params.set("year", String(year));
-            router.replace(`/Page/report?${params.toString()}`);
-          }}
+          onClick={navigateBackToReportHub}
           className="pointer-events-auto shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold shadow-md hover:bg-slate-50"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4524,9 +4689,8 @@ function ReportPreviewPageContent() {
                   const role = newPreparedRole.trim();
                   const date = newPreparedDate.trim();
                   if (!name || !role) return;
-                  const nextPrepared = [...preparedBy, { name, role, date }];
-                  setPreparedBy(nextPrepared);
-                  broadcastPreviewStateNow({ preparedBy: nextPrepared }, { force: true });
+                  const nextPrepared = [...preparedByRef.current, { name, role, date }];
+                  void commitCoverFieldsNow({ preparedBy: nextPrepared });
                   setIsPreparedByModalOpen(false);
                   setNewPreparedName("");
                   setNewPreparedRole("MEMBER");
@@ -4702,9 +4866,8 @@ function ReportPreviewPageContent() {
                           <button
                             type="button"
                             onClick={() => {
-                              const nextTeam = auditTeam.filter((_, i) => i !== idx);
-                              setAuditTeam(nextTeam);
-                              broadcastPreviewStateNow({ auditTeam: nextTeam }, { force: true });
+                              const nextTeam = auditTeamRef.current.filter((_, i) => i !== idx);
+                              void commitCoverFieldsNow({ auditTeam: nextTeam });
                             }}
                             className="print:hidden text-[7px] text-red-600 hover:text-red-800 shrink-0"
                           >
@@ -4765,11 +4928,10 @@ function ReportPreviewPageContent() {
                       const trimmedName = newAuditName.trim();
                       if (!trimmedName) return;
                       const nextTeam = [
-                        ...auditTeam,
+                        ...auditTeamRef.current,
                         { name: trimmedName, role: newAuditRole },
                       ];
-                      setAuditTeam(nextTeam);
-                      broadcastPreviewStateNow({ auditTeam: nextTeam }, { force: true });
+                      void commitCoverFieldsNow({ auditTeam: nextTeam });
                       setIsAuditTeamModalOpen(false);
                       setNewAuditName("");
                       setNewAuditRole("MEMBER");
@@ -4945,9 +5107,8 @@ function ReportPreviewPageContent() {
                           <button
                             type="button"
                             onClick={() => {
-                              const nextPrepared = preparedBy.filter((_, i) => i !== idx);
-                              setPreparedBy(nextPrepared);
-                              broadcastPreviewStateNow({ preparedBy: nextPrepared }, { force: true });
+                              const nextPrepared = preparedByRef.current.filter((_, i) => i !== idx);
+                              void commitCoverFieldsNow({ preparedBy: nextPrepared });
                             }}
                             className="print:hidden text-[7px] text-red-600 hover:text-red-800 shrink-0"
                           >
@@ -6287,7 +6448,7 @@ function ReportPreviewPageContent() {
               <button
                 type="button"
                 onClick={() =>
-                  setAppendices((prev) => [
+                  setAppendicesCollaborative((prev) => [
                     ...prev,
                     {
                       id: `appendix-${Date.now()}`,
@@ -6315,7 +6476,7 @@ function ReportPreviewPageContent() {
                         type="text"
                         value={appendix.title}
                         onChange={(e) =>
-                          setAppendices((prev) =>
+                          setAppendicesCollaborative((prev) =>
                             prev.map((item) =>
                               item.id === appendix.id ? { ...item, title: e.target.value } : item,
                             ),
@@ -6327,9 +6488,11 @@ function ReportPreviewPageContent() {
                   </div>
                   <button
                     type="button"
-                    onClick={() =>
-                      setAppendices((prev) => prev.filter((item) => item.id !== appendix.id))
-                    }
+                    onClick={() => {
+                      setAppendicesCollaborative((prev) =>
+                        prev.filter((item) => item.id !== appendix.id),
+                      );
+                    }}
                     className="print:hidden text-xs text-red-600 hover:text-red-800"
                   >
                     Delete
@@ -6433,7 +6596,7 @@ function ReportPreviewPageContent() {
                   <textarea
                     value={appendix.content}
                     onChange={(e) =>
-                      setAppendices((prev) =>
+                      setAppendicesCollaborative((prev) =>
                         prev.map((item) =>
                           item.id === appendix.id ? { ...item, content: e.target.value } : item,
                         ),
@@ -6477,7 +6640,7 @@ function ReportPreviewPageContent() {
                     <button
                       type="button"
                       onClick={() =>
-                        setAppendices((prev) => [
+                        setAppendicesCollaborative((prev) => [
                           ...prev,
                           {
                             id: `appendix-${Date.now()}`,

@@ -21,8 +21,6 @@ import {
   checkOnlyOfficeDocumentServer,
   getOnlyOfficeLocalStartHint,
 } from "@/app/lib/report/onlyoffice/health";
-import { broadcastOnlyOfficeSessionOpened } from "@/app/lib/report/previewRealtimeHub";
-
 export async function GET(req) {
   try {
     const session = await getServerSession(authOptions);
@@ -98,22 +96,6 @@ export async function GET(req) {
     const usesJwtToken = Boolean(editorConfig?.token);
     const resolvedUserDebug = editorConfig?.editorConfig?.user || null;
     const documentKeyDebug = editorConfig?.document?.key || null;
-
-    if (meta?.year != null) {
-      try {
-        broadcastOnlyOfficeSessionOpened(meta.year, {
-          sessionId,
-          editorPath: `/Page/report/editor?session=${encodeURIComponent(sessionId)}`,
-          openedBy: {
-            id: session.user.id || session.user.email,
-            name: session.user.name || session.user.email,
-            email: session.user.email,
-          },
-        });
-      } catch {
-        /* ignore */
-      }
-    }
 
     return NextResponse.json(
       {

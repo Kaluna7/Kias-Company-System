@@ -8,6 +8,12 @@ import { createReportSession } from "@/app/lib/report/reportService";
 import { sharedReportSessionId } from "@/app/lib/report/onlyOfficeDocxGuard";
 import { buildDocxPayloadFromHtmlPreview } from "@/app/lib/report/buildFullDocxPayloadFromDb";
 import { isOnlyOfficeEnabled } from "@/app/lib/report/onlyoffice/jwt";
+import { flushOnlyOfficeEditsToDisk } from "@/app/lib/report/onlyoffice/forceSave";
+import {
+  hasOnlyOfficeParticipants,
+  broadcastOnlyOfficeDocxRefresh,
+} from "@/app/lib/report/previewRealtimeHub";
+import { markOnlyOfficeLiveSession } from "@/app/lib/report/collabPresenceStore";
 
 function parseYear(value) {
   const y = parseInt(String(value ?? ""), 10);
@@ -49,16 +55,18 @@ export async function POST(req) {
     const sessionId = sharedReportSessionId(year);
     const existingMeta = (await readMeta(sessionId)) || {};
     const user = session.user;
+    const editorsLive = hasOnlyOfficeParticipants(year);
+
+    if (editorsLive) {
+      await flushOnlyOfficeEditsToDisk(sessionId);
+    }
 
     const result = await createReportSession(
       {
         ...payload,
         source: "html-preview",
-        deptFindingNarratives: [],
         userFindingsFreeHtml: "",
         wordFindingsHtml: "",
-        /** Audit grid already paginated in findingPages — avoid duplicate detail pages. */
-        findingDetailPages: [],
       },
       {
         id: user.id || user.email,
@@ -70,10 +78,22 @@ export async function POST(req) {
         regenerateDocx: true,
         bumpVersion: false,
         bumpPreviewDocxRevision: true,
+        /** New document.key so OnlyOffice always loads the freshly built DOCX. */
+        bumpDocumentKey: true,
       },
     );
 
     const meta = (await readMeta(sessionId)) || {};
+
+    if (editorsLive) {
+      broadcastOnlyOfficeDocxRefresh(year, sessionId);
+    }
+
+    await markOnlyOfficeLiveSession(year, {
+      sessionId: result.sessionId,
+      editorPath: result.editorPath,
+      openedBy: user.email || user.name || user.id,
+    });
 
     return NextResponse.json({
       success: true,

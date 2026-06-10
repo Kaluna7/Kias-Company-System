@@ -43,10 +43,13 @@ export async function writeMeta(sessionId, meta) {
 
 export async function saveDocx(sessionId, buffer) {
   ensureReportsDir();
-  await fs.promises.writeFile(getDocxPath(sessionId), buffer);
+  const dest = getDocxPath(sessionId);
+  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
+  await fs.promises.writeFile(tmp, buffer);
+  await fs.promises.rename(tmp, dest);
   const meta = (await readMeta(sessionId)) || { sessionId, version: 1, saveCount: 0 };
   try {
-    const stat = await fs.promises.stat(getDocxPath(sessionId));
+    const stat = await fs.promises.stat(dest);
     meta.docxMtimeMs = stat.mtimeMs;
     meta.updatedAt = new Date().toISOString();
     await writeMeta(sessionId, meta);
@@ -96,16 +99,17 @@ export async function bumpDocumentVersion(sessionId) {
 /**
  * OnlyOffice document.key — stable for one editing round; advances on save (saveCount).
  * meta.version only changes on Reset + new generate, not on each Create.
+ * previewDocxRevision is NOT part of the key (URL cache-bust only) so co-editors
+ * stay on the same document when HTML preview syncs regenerate the file on disk.
  */
 export function getDocumentKey(sessionId, metaOrVersion) {
   if (metaOrVersion != null && typeof metaOrVersion === "object") {
     const g = Number(metaOrVersion.resetGeneration || 0);
     const v = Number(metaOrVersion.version || 1);
     const s = Number(metaOrVersion.saveCount || 0);
-    const p = Number(metaOrVersion.previewDocxRevision || 0);
-    return `${sessionId}-g${g}-v${v}-s${s}-p${p}`;
+    return `${sessionId}-g${g}-v${v}-s${s}`;
   }
-  return `${sessionId}-g0-v${metaOrVersion ?? 1}-s0-p0`;
+  return `${sessionId}-g0-v${metaOrVersion ?? 1}-s0`;
 }
 
 /** Server-side DOCX patch (lock/unlock, module tables) — new key so refreshFile loads updated file. */

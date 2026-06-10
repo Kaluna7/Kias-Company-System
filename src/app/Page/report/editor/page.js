@@ -8,8 +8,12 @@ import LoadingProgressOverlay from "@/app/components/shared/LoadingProgressOverl
 import PreviewCollaborationBar from "@/app/Page/report/preview/PreviewCollaborationBar";
 import { notifyPreviewHubChanged } from "@/app/lib/report/reportPreviewSyncEvents";
 import { usePreviewCollaboration } from "@/app/lib/report/usePreviewCollaboration";
-import { notifyOnlyOfficeSessionOpened } from "@/app/lib/report/exportReportClient";
-import { pushOnlyOfficeRedirectToPeers } from "@/app/lib/report/previewWebSocketClient";
+import {
+  getPreviewTabClientId,
+  subscribePreviewWebSocket,
+  PREVIEW_WS_EVENTS,
+} from "@/app/lib/report/previewWebSocketClient";
+import { markOnlyOfficeAutoJoinDismissed } from "@/app/lib/report/onlyOfficeAutoJoinDismiss";
 
 function formatOnlyOfficeError(event) {
   const code = event?.data?.errorCode ?? event?.data?.error ?? "?";
@@ -42,9 +46,21 @@ function ReportEditorContent() {
     const m = /shared-report-(\d{4})/.exec(sessionId);
     return m ? parseInt(m[1], 10) : new Date().getFullYear();
   }, [sessionId, meta?.year]);
+  const editorPath = useMemo(
+    () =>
+      sessionId
+        ? `/Page/report/editor?session=${encodeURIComponent(sessionId)}`
+        : null,
+    [sessionId],
+  );
   const { participants: collabParticipants, wsConnected: collabWsConnected } =
-    usePreviewCollaboration(reportYear, { location: "onlyoffice" });
+    usePreviewCollaboration(reportYear, {
+      location: "onlyoffice",
+      sessionId: sessionId || null,
+      editorPath,
+    });
   const refreshEditorFileRef = useRef(null);
+  const refreshDebounceRef = useRef(null);
   const lastPreviewSyncRevisionRef = useRef(0);
   const metaRef = useRef(null);
 
@@ -65,10 +81,32 @@ function ReportEditorContent() {
   }, [markReady]);
 
   useEffect(() => {
-    if (!sessionId || !Number.isFinite(reportYear)) return;
-    const editorPath = `/Page/report/editor?session=${encodeURIComponent(sessionId)}`;
-    pushOnlyOfficeRedirectToPeers(reportYear, { sessionId, editorPath });
-    void notifyOnlyOfficeSessionOpened(reportYear, { sessionId, editorPath });
+    const onPageHide = () => {
+      if (!Number.isFinite(reportYear)) return;
+      void fetch("/api/report/collaboration/exit-onlyoffice", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: reportYear,
+          tabId: getPreviewTabClientId(),
+          location: "report",
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, [reportYear]);
+
+  useEffect(() => {
+    if (!sessionId || !Number.isFinite(reportYear)) return undefined;
+    const unsub = subscribePreviewWebSocket(reportYear, (data) => {
+      if (data.type !== PREVIEW_WS_EVENTS.ONLYOFFICE_DOCX_REFRESH) return;
+      if (data.sessionId && data.sessionId !== sessionId) return;
+      void refreshEditorFileRef.current?.();
+    });
+    return unsub;
   }, [sessionId, reportYear]);
 
   useEffect(() => {
@@ -156,9 +194,13 @@ function ReportEditorContent() {
           onAppReady: markReady,
           onDocumentReady: markReady,
           onRequestRefreshFile: refreshEditorFile,
-          // Do not auto-refresh on outdated — that retriggers OnlyOffice "Version changed" in a loop.
           onOutdatedVersion: () => {
-            void refreshEditorFileRef.current?.();
+            if (refreshDebounceRef.current) {
+              window.clearTimeout(refreshDebounceRef.current);
+            }
+            refreshDebounceRef.current = window.setTimeout(() => {
+              void refreshEditorFileRef.current?.();
+            }, 1200);
             markReady();
           },
         };
@@ -198,6 +240,10 @@ function ReportEditorContent() {
 
     return () => {
       cancelled = true;
+      if (refreshDebounceRef.current) {
+        window.clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
       if (docEditorRef.current?.destroyEditor) {
         try {
           docEditorRef.current.destroyEditor();
@@ -250,6 +296,19 @@ function ReportEditorContent() {
   }, [meta?.year]);
 
   const handleExitToReport = useCallback(() => {
+    if (Number.isFinite(reportYear)) {
+      markOnlyOfficeAutoJoinDismissed(reportYear);
+      void fetch("/api/report/collaboration/exit-onlyoffice", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: reportYear,
+          tabId: getPreviewTabClientId(),
+          location: "report",
+        }),
+      }).catch(() => {});
+    }
     const params = new URLSearchParams();
     if (Number.isFinite(reportYear)) {
       params.set("year", String(reportYear));

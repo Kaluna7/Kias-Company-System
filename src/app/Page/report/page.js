@@ -3,13 +3,11 @@
 export const dynamic = "force-dynamic";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { markClientReportReset } from "@/app/lib/report/reportProgressStorage";
-import {
-  getReportCollaborationStatus,
-  syncReportDocxFromPreview,
-} from "@/app/lib/report/exportReportClient";
-
+import { getReportCollaborationStatus } from "@/app/lib/report/exportReportClient";
+import { usePreviewCollaboration } from "@/app/lib/report/usePreviewCollaboration";
+import { clearOnlyOfficeAutoJoinDismissed } from "@/app/lib/report/onlyOfficeAutoJoinDismiss";
 function ReportPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -21,6 +19,19 @@ function ReportPageContent() {
   const [resetting, setResetting] = useState(false);
   const [openingReport, setOpeningReport] = useState(false);
 
+  usePreviewCollaboration(year, { location: "report" });
+
+  useEffect(() => {
+    const resetUiState = () => {
+      setOpeningReport(false);
+      setResetting(false);
+    };
+    resetUiState();
+    const onPageShow = () => resetUiState();
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   const handleOpenReport = async () => {
     const params = new URLSearchParams();
     if (Number.isFinite(year)) {
@@ -30,9 +41,9 @@ function ReportPageContent() {
     setOpeningReport(true);
     try {
       const collab = await getReportCollaborationStatus(year);
-      // Join OnlyOffice only when someone is actively in the editor — not just because DOCX exists.
-      if (collab.ok && collab.onlyOfficeOpen && collab.editorPath) {
-        await syncReportDocxFromPreview(year);
+      clearOnlyOfficeAutoJoinDismissed(year);
+      // Join OnlyOffice only when someone is actively in the editor right now.
+      if (collab.ok && collab.onlyOfficeTeammateLive && collab.editorPath) {
         router.replace(collab.editorPath);
         return;
       }
@@ -100,7 +111,7 @@ function ReportPageContent() {
                 <p className="text-blue-200 mt-1 text-sm md:text-base">
                   Open the shared report for year{" "}
                   <span className="font-semibold">{year}</span> — starts in HTML Preview; joins
-                  OnlyOffice only when a teammate is already editing Word.
+                  OnlyOffice only when a teammate is actively editing Word right now.
                 </p>
               </div>
               <button

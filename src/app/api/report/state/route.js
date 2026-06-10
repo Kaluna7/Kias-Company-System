@@ -21,14 +21,12 @@ import { readMeta, writeMeta } from "@/app/lib/report/documentStore";
 import { savePreviewPayload } from "@/app/lib/report/previewPayloadStore";
 import { mergeReportStateForPersist } from "@/app/lib/report/mergeReportStateForPersist";
 import { computeModuleTablesHash } from "@/app/lib/report/moduleTablesHash";
-import {
-  mergeModuleTablesIntoHub,
-  getHubRevision,
-  HUB_CHANGE_SOURCE,
-  HUB_SYNC_MODE_MODULE_TABLES_ONLY,
-} from "@/app/lib/report/reportPreviewHub";
-import { broadcastReportStateChange } from "@/app/lib/report/reportStateHub";
 import { getReportResetGeneration } from "@/app/lib/report/reportResetGeneration";
+import { broadcastPreviewStatePush } from "@/app/lib/report/previewRealtimeHub";
+import {
+  bumpPreviewSyncRevision,
+  pickPreviewWsSyncState,
+} from "@/app/lib/report/pickPreviewWsSyncState";
 
 async function filterSavedStateForPublish(state, reportYear) {
   if (!state || typeof state !== "object") return state;
@@ -109,7 +107,7 @@ export async function POST(req) {
       } catch (err) {
         console.warn("[report/state] module reload:", err?.message || err);
       }
-      const state = {
+      const state = bumpPreviewSyncRevision({
         ...existing,
         findingSections: mergeModuleSectionsForHub(
           existing.findingSections || [],
@@ -138,7 +136,7 @@ export async function POST(req) {
         ...(typeof incoming.presidentDirectorDate === "string"
           ? { presidentDirectorDate: incoming.presidentDirectorDate }
           : {}),
-      };
+      });
       await writeReportState(year, state, user.email || user.name || user.id || "user");
     } else {
       const state = mergeReportStateForPersist(existing, incoming, {
@@ -193,19 +191,16 @@ export async function POST(req) {
       console.warn("[report/state] sync preview payload:", err?.message || err);
     }
 
-    try {
-      broadcastReportStateChange({
-        year,
-        revision: Number(state.onlyOfficeSyncRevision) || 0,
-        hubRevision: getHubRevision(state),
-        moduleTablesRevision: Number(state.moduleTablesRevision) || 0,
-        source:
-          body.syncMode === HUB_SYNC_MODE_MODULE_TABLES_ONLY
-            ? HUB_CHANGE_SOURCE.MODULE_TABLES
-            : HUB_CHANGE_SOURCE.PREVIEW,
-      });
-    } catch {
-      /* ignore */
+    if (body.syncMode !== "moduleTablesOnly") {
+      try {
+        const syncState = pickPreviewWsSyncState(state);
+        broadcastPreviewStatePush(year, syncState, {
+          senderClientId: "server",
+          previewSyncRevision: syncState.previewSyncRevision,
+        });
+      } catch {
+        /* ignore */
+      }
     }
 
     return NextResponse.json({ success: true, year, state });

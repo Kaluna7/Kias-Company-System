@@ -4,7 +4,9 @@
 
 export const PREVIEW_WS_EVENTS = {
   STATE_PUSH: "preview-state-push",
+  ONLYOFFICE_CREATING: "onlyoffice-creating",
   ONLYOFFICE_REDIRECT: "onlyoffice-redirect",
+  ONLYOFFICE_DOCX_REFRESH: "onlyoffice-docx-refresh",
   PRESENCE: "presence-update",
   REPORT_STATE: "report-state-changed",
 };
@@ -229,18 +231,19 @@ function getPool(year) {
   return pools.get(y);
 }
 
+/**
+ * Unique per browser tab. Do not use sessionStorage — it is shared across tabs
+ * on the same origin and caused duplicate tab eviction / missing collaborators.
+ */
 export function getPreviewTabClientId() {
   if (typeof window === "undefined") return "server";
-  const key = "kias-preview-client-id";
-  let id = sessionStorage.getItem(key);
-  if (!id) {
-    id =
+  if (!window.__kiasPreviewTabId) {
+    window.__kiasPreviewTabId =
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    sessionStorage.setItem(key, id);
   }
-  return id;
+  return window.__kiasPreviewTabId;
 }
 
 /** @param {number} year @param {(data: object) => void} onEvent */
@@ -278,6 +281,19 @@ export function pushPreviewStateToPeers(year, payload) {
 }
 
 /**
+ * Tell preview peers that Word creation from HTML Preview has started.
+ * @param {number} year
+ * @param {{ clientId?: string, openedByName?: string }} payload
+ */
+export function pushOnlyOfficeCreatingToPeers(year, payload) {
+  return sendPreviewWebSocketMessage(year, {
+    type: PREVIEW_WS_EVENTS.ONLYOFFICE_CREATING,
+    clientId: payload.clientId || getPreviewTabClientId(),
+    openedByName: payload.openedByName || null,
+  });
+}
+
+/**
  * Tell all HTML preview tabs to open OnlyOffice.
  * @param {number} year
  * @param {{ clientId?: string, editorPath: string, sessionId?: string }} payload
@@ -300,10 +316,12 @@ export function announcePreviewPresence(year, payload = {}) {
   if (!pool) return "";
 
   const clientId = getPreviewTabClientId();
+  const loc = String(payload.location || "preview");
   const message = {
     type: "presence-join",
     clientId,
-    location: payload.location === "onlyoffice" ? "onlyoffice" : "preview",
+    location:
+      loc === "onlyoffice" ? "onlyoffice" : loc === "report" ? "report" : "preview",
     user: payload.user || {},
     sessionId: payload.sessionId || null,
     editorPath: payload.editorPath || null,
@@ -342,6 +360,11 @@ export function leavePreviewPresence(year) {
     clientId: getPreviewTabClientId(),
   });
   pool.lastPresenceMessage = null;
+
+  if (pool.listeners.size > 0 || pool.statusListeners.size > 0) {
+    return;
+  }
+
   pool.intentionalClose = true;
 
   if (pool.reconnectTimer) {

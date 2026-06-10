@@ -7,8 +7,17 @@ import {
   storageKeyForHubChanged,
 } from "./reportPreviewSyncEvents";
 import { subscribePreviewWebSocket } from "./previewWebSocketClient";
+import { HUB_CHANGE_SOURCE } from "./reportPreviewHub";
 
 const REPORT_STATE_EVENT = "report-state-changed";
+
+/** Preview edits sync via WS `preview-state-push`; hub snapshot reload would wipe in-flight edits. */
+function isPreviewClientPersistSource(source) {
+  return (
+    source === HUB_CHANGE_SOURCE.PREVIEW ||
+    source === HUB_CHANGE_SOURCE.MODULE_TABLES
+  );
+}
 
 /**
  * WebSocket + same-tab events: saat hubRevision naik, panggil onRefresh.
@@ -20,6 +29,7 @@ export function usePreviewHubAutoRefresh(year, onRefresh) {
   const baselineSetRef = useRef(false);
   const fetchInFlightRef = useRef(false);
   const fetchDebounceRef = useRef(null);
+  const pendingRefreshSourceRef = useRef(null);
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
 
@@ -50,7 +60,9 @@ export function usePreviewHubAutoRefresh(year, onRefresh) {
 
       if (rev > hubRevisionRef.current) {
         acknowledgeHubRevision(rev);
-        await onRefreshRef.current?.(json);
+        const source = pendingRefreshSourceRef.current;
+        pendingRefreshSourceRef.current = null;
+        await onRefreshRef.current?.(json, { trigger: "auto", source: source || undefined });
       }
     } catch {
       /* ignore */
@@ -66,7 +78,7 @@ export function usePreviewHubAutoRefresh(year, onRefresh) {
     fetchDebounceRef.current = window.setTimeout(() => {
       fetchDebounceRef.current = null;
       void fetchSnapshotAndMaybeRefresh();
-    }, 500);
+    }, 120);
   }, [fetchSnapshotAndMaybeRefresh]);
 
   useEffect(() => {
@@ -81,6 +93,12 @@ export function usePreviewHubAutoRefresh(year, onRefresh) {
     const unsubWs = subscribePreviewWebSocket(year, (data) => {
       if (data.type !== REPORT_STATE_EVENT) return;
       if (data.year != null && Number(data.year) !== year) return;
+      if (isPreviewClientPersistSource(data.source)) {
+        const rev = Number(data.hubRevision) || 0;
+        if (rev > hubRevisionRef.current) acknowledgeHubRevision(rev);
+        return;
+      }
+      pendingRefreshSourceRef.current = data.source || null;
       scheduleSnapshotCheck();
     });
 
@@ -121,7 +139,7 @@ export function usePreviewHubAutoRefresh(year, onRefresh) {
       const json = await res.json().catch(() => ({}));
       if (!json.success) return null;
       acknowledgeHubRevision(Number(json.hubRevision) || 0);
-      await onRefreshRef.current?.(json);
+      await onRefreshRef.current?.(json, { trigger: "force" });
       return json;
     }, [year, acknowledgeHubRevision]),
   };

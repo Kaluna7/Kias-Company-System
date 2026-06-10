@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 function initialsFromName(name) {
   const parts = String(name || "U")
     .trim()
@@ -10,7 +12,7 @@ function initialsFromName(name) {
   return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
 }
 
-function ParticipantAvatar({ participant, size = "sm" }) {
+const ParticipantAvatar = memo(function ParticipantAvatar({ participant, size = "sm" }) {
   const dim =
     size === "xs"
       ? "w-6 h-6 text-[8px]"
@@ -41,12 +43,12 @@ function ParticipantAvatar({ participant, size = "sm" }) {
       {initialsFromName(participant.name)}
     </span>
   );
-}
+});
 
 /**
  * Live collaborators — top-right profile stack (WebSocket presence).
  */
-export default function PreviewCollaborationBar({
+function PreviewCollaborationBar({
   participants = [],
   wsConnected = false,
   maxVisible = 5,
@@ -74,17 +76,17 @@ export default function PreviewCollaborationBar({
       <span
         className={`inline-block rounded-full shrink-0 ${
           mini ? "w-1.5 h-1.5" : "w-2.5 h-2.5"
-        } ${wsConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`}
-        title={wsConnected ? "Live — WebSocket connected" : "Offline — refresh page"}
+        } ${wsConnected ? "bg-emerald-500" : "bg-slate-300"}`}
+        title={wsConnected ? "Live — connected" : "Connecting…"}
         aria-hidden="true"
       />
       {!compact && (
         <span
           className={`text-[10px] font-semibold pr-0.5 ${
-            wsConnected ? "text-emerald-700" : "text-red-600"
+            wsConnected ? "text-emerald-700" : "text-slate-400"
           }`}
         >
-          {wsConnected ? "Live" : "Offline"}
+          {wsConnected ? "Live" : "…"}
         </span>
       )}
       <div
@@ -95,7 +97,11 @@ export default function PreviewCollaborationBar({
         }
       >
         {visible.map((p) => (
-          <ParticipantAvatar key={p.clientId} participant={p} size={avatarSize} />
+          <ParticipantAvatar
+            key={String(p.userId || p.email || p.clientId || p.name)}
+            participant={p}
+            size={avatarSize}
+          />
         ))}
         {overflow > 0 && (
           <span
@@ -115,3 +121,5 @@ export default function PreviewCollaborationBar({
     </div>
   );
 }
+
+export default memo(PreviewCollaborationBar);

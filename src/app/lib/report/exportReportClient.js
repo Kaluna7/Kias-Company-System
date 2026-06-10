@@ -44,6 +44,7 @@ export async function getReportCollaborationStatus(year) {
       ok: false,
       error: data.error || `Presence check failed (${res.status})`,
       onlyOfficeOpen: false,
+      onlyOfficeTeammateLive: false,
       editorPath: null,
       participants: [],
     };
@@ -52,6 +53,8 @@ export async function getReportCollaborationStatus(year) {
     ok: true,
     year: data.year,
     onlyOfficeOpen: data.onlyOfficeOpen === true,
+    onlyOfficeLive: data.onlyOfficeLive === true,
+    onlyOfficeTeammateLive: data.onlyOfficeTeammateLive === true,
     previewOpen: data.previewOpen === true,
     hasDocxSession: data.hasDocxSession === true,
     editorPath: data.editorPath || null,
@@ -99,6 +102,37 @@ export async function getActiveReportSession(year) {
  * @param {number} year
  * @param {object} [overlay] Fields from buildReportExportPayload()
  */
+/**
+ * Wait until shared DOCX exists on disk (peers join after host finishes Create Word).
+ * @param {string} sessionId
+ * @param {{ timeoutMs?: number, intervalMs?: number }} [options]
+ */
+export async function waitForReportDocxReady(sessionId, options = {}) {
+  const id = String(sessionId || "").trim();
+  if (!id) return false;
+
+  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 45_000;
+  const intervalMs = Number(options.intervalMs) > 0 ? Number(options.intervalMs) : 400;
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(
+        `/api/report/documents/${encodeURIComponent(id)}/ready`,
+        { credentials: "include", cache: "no-store" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ready === true) return true;
+    } catch {
+      /* retry */
+    }
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, intervalMs);
+    });
+  }
+  return false;
+}
+
 export async function syncReportDocxFromPreview(year, overlay = {}) {
   const res = await fetch("/api/report/session/sync-from-preview", {
     method: "POST",
@@ -265,14 +299,24 @@ export async function openSharedReportEditor(payload, options = {}) {
   }
 
   const active = await getActiveReportSession(year);
+  if (active.ok && options.forceRegenerate !== true) {
+    return {
+      ok: true,
+      sessionId: active.sessionId,
+      editorPath: active.editorPath,
+      joined: true,
+      createdBy: active.createdBy ?? null,
+    };
+  }
+
   const rebuilt = await syncReportDocxFromPreview(year, payload);
   if (rebuilt.ok) {
     return {
       ok: true,
       sessionId: rebuilt.sessionId,
       editorPath: rebuilt.editorPath,
-      joined: active.ok,
-      createdBy: active.ok ? active.createdBy : null,
+      joined: false,
+      createdBy: null,
     };
   }
   return createReportEditorSession(payload, { forceRegenerate: true });

@@ -53,6 +53,7 @@ export async function createReportSession(payload, createdBy = {}, options = {})
   const sessionId = options?.sessionId || createSessionId();
   const existingMeta = await readMeta(sessionId);
   const bumpVersion = options.bumpVersion === true;
+  const bumpDocumentKey = options.bumpDocumentKey === true;
   const regenerateDocx = options.regenerateDocx === true || bumpVersion;
   const resetGeneration = await getReportResetGeneration(year);
   const usePayloadAsIs =
@@ -78,8 +79,12 @@ export async function createReportSession(payload, createdBy = {}, options = {})
       ? Number(existingMeta.version || 0) + 1
       : Number(existingMeta.version || 1)
     : 1;
-  /** saveCount only advances on OnlyOffice close (recordDocumentSave) — keeps co-editing key stable. */
-  const nextSaveCount = bumpVersion ? 0 : Number(existingMeta?.saveCount || 0);
+  /** saveCount advances on OnlyOffice close, or on HTML Preview → Word rebuild (new document.key). */
+  const nextSaveCount = bumpVersion
+    ? 0
+    : bumpDocumentKey
+      ? Number(existingMeta?.saveCount || 0) + 1
+      : Number(existingMeta?.saveCount || 0);
   let docxMtimeMs = Date.now();
   try {
     const stat = await fs.promises.stat(getDocxPath(sessionId));

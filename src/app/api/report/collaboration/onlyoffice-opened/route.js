@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getSharedReportSessionId } from "@/app/lib/report/reportProgressStorage";
 import { broadcastOnlyOfficeSessionOpened } from "@/app/lib/report/previewRealtimeHub";
+import { markOnlyOfficeLiveSession } from "@/app/lib/report/collabPresenceStore";
 
 function parseYear(value) {
   const y = parseInt(String(value ?? ""), 10);
@@ -35,6 +36,12 @@ export async function POST(req) {
     const editorPath =
       body.editorPath ||
       `/Page/report/editor?session=${encodeURIComponent(sessionId)}`;
+
+    await markOnlyOfficeLiveSession(year, {
+      sessionId,
+      editorPath,
+      openedBy: session.user.email || session.user.name || session.user.id,
+    });
 
     broadcastOnlyOfficeSessionOpened(year, {
       sessionId,

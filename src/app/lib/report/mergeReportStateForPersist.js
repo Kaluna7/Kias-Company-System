@@ -1,5 +1,6 @@
 import { pickNarrativeFromReportState } from "./reportStateNarrative";
 import { touchHubRevision } from "./reportPreviewHub";
+import { bumpPreviewSyncRevision } from "./pickPreviewWsSyncState";
 import { syncSystemBlocksInHub } from "./reportBlocks";
 import {
   applyAuditVisibilityToSections,
@@ -45,6 +46,10 @@ export function mergeReportStateForPersist(existing, incoming, options = {}) {
 
   if (allowNarrativeOverwrite) {
     for (const key of NARRATIVE_KEYS) {
+      if (key === "appendices" && Array.isArray(incoming.appendices)) {
+        next.appendices = incoming.appendices;
+        continue;
+      }
       if (narrativeHasContent(incoming[key], key)) {
         next[key] = incoming[key];
       }
@@ -102,7 +107,7 @@ export function mergeReportStateForPersist(existing, incoming, options = {}) {
     };
   }
 
-  return touchHubRevision(next);
+  return touchHubRevision(bumpPreviewSyncRevision(next));
 }
 
 /**

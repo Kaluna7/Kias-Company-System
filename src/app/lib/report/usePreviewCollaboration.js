@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { startCollabPresenceLoop } from "./collabPresenceClient";
+import {
+  clearOnlyOfficeAutoJoinDismissed,
+  isOnlyOfficeAutoJoinDismissed,
+} from "./onlyOfficeAutoJoinDismiss";
 import {
   announcePreviewPresence,
+  ensurePreviewWebSocketConnected,
   getPreviewTabClientId,
   leavePreviewPresence,
   PREVIEW_WS_EVENTS,
@@ -15,13 +21,20 @@ import {
 const HEARTBEAT_MS = 10000;
 
 /**
- * WebSocket-only collaboration for HTML preview / OnlyOffice.
+ * Collaboration: PostgreSQL presence (HTTP) + WebSocket for instant redirect/state.
  */
 export function usePreviewCollaboration(year, options = {}) {
   const { data: session, status } = useSession();
-  const location = options.location === "onlyoffice" ? "onlyoffice" : "preview";
+  const location =
+    options.location === "onlyoffice"
+      ? "onlyoffice"
+      : options.location === "report"
+        ? "report"
+        : "preview";
   const [participants, setParticipants] = useState([]);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+  const participantsSigRef = useRef("");
+  const liveLatchRef = useRef(false);
   const [avatarUrl, setAvatarUrl] = useState("");
   const clientIdRef = useRef(getPreviewTabClientId());
   const onStatePushRef = useRef(options.onPreviewStatePush);
@@ -73,8 +86,44 @@ export function usePreviewCollaboration(year, options = {}) {
       image: "",
     };
 
+  const applyParticipants = useCallback((list) => {
+    const next = Array.isArray(list) ? list : [];
+    const sig = JSON.stringify(
+      next.map((p) => ({
+        id: p.userId || p.email || p.clientId,
+        loc: p.location,
+        name: p.name,
+      })),
+    );
+    if (sig === participantsSigRef.current) return;
+    participantsSigRef.current = sig;
+    setParticipants(next);
+  }, []);
+
+  const markLive = useCallback(() => {
+    if (liveLatchRef.current) return;
+    liveLatchRef.current = true;
+    setIsLive(true);
+  }, []);
+
   useEffect(() => {
     if (!Number.isFinite(year) || status !== "authenticated") return undefined;
+
+    const stopHttp = startCollabPresenceLoop(year, {
+      location,
+      getUser: () => userPayloadRef.current,
+      sessionId: options.sessionId || null,
+      editorPath: options.editorPath || null,
+      onConnected: markLive,
+      onParticipants: applyParticipants,
+      onOnlyOfficeLive: ({ onlyOfficeTeammateLive, editorPath }) => {
+        if (location === "onlyoffice" || !onlyOfficeTeammateLive || !editorPath) return;
+        if (isOnlyOfficeAutoJoinDismissed(year)) return;
+        onOnlyOfficeRedirectRef.current?.({ editorPath });
+      },
+    });
+
+    ensurePreviewWebSocketConnected(year);
 
     const announce = () => {
       clientIdRef.current = announcePreviewPresence(year, {
@@ -102,7 +151,8 @@ export function usePreviewCollaboration(year, options = {}) {
       const myId = clientIdRef.current;
 
       if (data.type === PREVIEW_WS_EVENTS.PRESENCE && Array.isArray(data.participants)) {
-        setParticipants(data.participants);
+        applyParticipants(data.participants);
+        markLive();
         return;
       }
 
@@ -113,14 +163,17 @@ export function usePreviewCollaboration(year, options = {}) {
       }
 
       if (data.type === PREVIEW_WS_EVENTS.ONLYOFFICE_REDIRECT && data.editorPath) {
-        if (data.senderClientId && data.senderClientId === myId) return;
+        const sender = data.senderClientId || data.clientId;
+        if (sender && sender === myId) return;
+        clearOnlyOfficeAutoJoinDismissed(year);
         onOnlyOfficeRedirectRef.current?.(data);
         return;
       }
 
-      // Legacy server broadcast (OnlyOffice API)
       if (data.type === "onlyoffice-session-opened" && data.editorPath) {
-        if (data.initiatorClientId && data.initiatorClientId === myId) return;
+        const sender = data.initiatorClientId || data.senderClientId || data.clientId;
+        if (sender && sender === myId) return;
+        clearOnlyOfficeAutoJoinDismissed(year);
         onOnlyOfficeRedirectRef.current?.({
           editorPath: data.editorPath,
           sessionId: data.sessionId,
@@ -130,40 +183,24 @@ export function usePreviewCollaboration(year, options = {}) {
     });
 
     const unsubStatus = subscribePreviewWebSocketStatus(year, (nextStatus) => {
-      setWsConnected(nextStatus === "connected");
       if (nextStatus === "connected") {
+        markLive();
         announce();
       }
     });
 
     return () => {
       window.clearInterval(heartbeat);
+      stopHttp();
       leavePreviewPresence(year);
       unsubWs();
       unsubStatus();
+      participantsSigRef.current = "";
+      liveLatchRef.current = false;
       setParticipants([]);
+      setIsLive(false);
     };
-  }, [year, status, location, options.sessionId, options.editorPath]);
-
-  useEffect(() => {
-    if (!Number.isFinite(year) || status !== "authenticated") return;
-    sendPreviewWebSocketMessage(year, {
-      type: "presence-heartbeat",
-      clientId: clientIdRef.current,
-      location,
-      user: userPayloadRef.current,
-      sessionId: options.sessionId || null,
-      editorPath: options.editorPath || null,
-    });
-  }, [
-    year,
-    status,
-    location,
-    avatarUrl,
-    session?.user?.email,
-    options.sessionId,
-    options.editorPath,
-  ]);
+  }, [year, status, location, options.sessionId, options.editorPath, applyParticipants, markLive]);
 
   const previewParticipants = participants.filter((p) => p.location !== "onlyoffice");
   const onlyOfficeParticipants = participants.filter((p) => p.location === "onlyoffice");
@@ -172,7 +209,7 @@ export function usePreviewCollaboration(year, options = {}) {
     participants,
     previewParticipants,
     onlyOfficeParticipants,
-    wsConnected,
+    wsConnected: isLive,
     clientId: clientIdRef.current,
   };
 }

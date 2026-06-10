@@ -6,12 +6,9 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { docxExists, readMeta } from "@/app/lib/report/documentStore";
 import { getSharedReportSessionId } from "@/app/lib/report/reportProgressStorage";
 import {
-  getPresenceForYear,
-  hasOnlyOfficeParticipants,
-  isOnlyOfficeActiveForOpenReport,
-  isOnlyOfficeSessionRecentlyOpened,
-  getOnlyOfficeSessionForYear,
-} from "@/app/lib/report/previewRealtimeHub";
+  listLivePresence,
+  getOnlyOfficeLiveSession,
+} from "@/app/lib/report/collabPresenceStore";
 
 /**
  * Live collaboration presence — who is in HTML preview vs OnlyOffice right now.
@@ -30,20 +27,33 @@ export async function GET(req) {
       return NextResponse.json({ success: false, error: "Invalid year" }, { status: 400 });
     }
 
-    const participants = getPresenceForYear(year);
+    const participants = await listLivePresence(year);
     const onlyOfficeParticipants = participants.filter((p) => p.location === "onlyoffice");
-    const onlyOfficeLive = isOnlyOfficeActiveForOpenReport(year);
-    const onlyOfficeOpen = onlyOfficeLive;
-    const markedSession = getOnlyOfficeSessionForYear(year);
-
+    const liveSession = await getOnlyOfficeLiveSession(year);
     const sessionId = getSharedReportSessionId(year);
     const hasDocx = await docxExists(sessionId);
     const meta = hasDocx ? await readMeta(sessionId) : null;
+
+    const editorPathFromPresence = onlyOfficeParticipants.find((p) => p.editorPath)?.editorPath;
     const editorPath =
-      markedSession?.editorPath ||
+      editorPathFromPresence ||
+      liveSession?.editor_path ||
       (hasDocx
         ? `/Page/report/editor?session=${encodeURIComponent(sessionId)}`
         : null);
+
+    const onlyOfficeLive = onlyOfficeParticipants.length > 0;
+    /** Only true when someone is actively in the editor — not a stale DB invite. */
+    const onlyOfficeOpen = onlyOfficeLive;
+
+    const myUserKey = String(session.user.email || session.user.id || "")
+      .trim()
+      .toLowerCase();
+    const onlyOfficeTeammateParticipants = onlyOfficeParticipants.filter((p) => {
+      const peerKey = String(p.email || p.userId || "").trim().toLowerCase();
+      return peerKey && peerKey !== myUserKey;
+    });
+    const onlyOfficeTeammateLive = onlyOfficeTeammateParticipants.length > 0;
 
     return NextResponse.json({
       success: true,
@@ -52,8 +62,12 @@ export async function GET(req) {
       onlyOfficeOpen,
       onlyOfficeParticipantCount: onlyOfficeParticipants.length,
       onlyOfficeLive,
-      onlyOfficeSessionRecent: isOnlyOfficeSessionRecentlyOpened(year),
-      previewOpen: participants.some((p) => p.location === "preview"),
+      onlyOfficeTeammateLive,
+      onlyOfficeTeammateCount: onlyOfficeTeammateParticipants.length,
+      onlyOfficeSessionRecent: Boolean(liveSession?.editor_path),
+      previewOpen: participants.some(
+        (p) => p.location === "preview" || p.location === "report",
+      ),
       hasDocxSession: hasDocx,
       editorPath,
       createdBy: meta?.createdBy ?? null,
