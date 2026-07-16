@@ -41,6 +41,11 @@ function isInvalidPeriodValue(value) {
 
 function sanitizeDepartmentLabel(department) {
   return String(department || "")
+    .replace(/\b20\d{6}(?:\s*[-–]\s*20\d{6})?\b/g, "")
+    .replace(
+      /\b20\d{2}[-/]\d{2}[-/]\d{2}(?:\s*[-–]\s*20\d{2}[-/]\d{2}[-/]\d{2})?\b/g,
+      ""
+    )
     .replace(/\bno[\s_-]*period\b/gi, "")
     .replace(/#+/g, "")
     .replace(/\s+/g, " ")

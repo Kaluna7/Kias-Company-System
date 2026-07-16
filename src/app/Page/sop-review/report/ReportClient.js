@@ -682,23 +682,14 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       { header: "Reviewer Status", key: "Reviewer Status" },
       { header: "Reviewer Comments", key: "Reviewer Comments" },
     ];
-    const deptShort = group.department.length > 10 ? group.department.substring(0, 10) : group.department;
+    const deptLabel = String(group.department || "Department")
+      .replace(/[\\/:*?"<>|]/g, "")
+      .trim();
+    const sheetName = `SOP_${deptLabel}`.substring(0, 31);
     const isValidPeriodToken = (value) => {
       const v = String(value || "").trim().toLowerCase();
       return v && v !== "#####" && v !== "no-period";
     };
-    const periodStart =
-      isValidPeriodToken(group.audit_period_start)
-        ? group.audit_period_start.replace(/-/g, "")
-        : "";
-    const periodEnd =
-      isValidPeriodToken(group.audit_period_end)
-        ? group.audit_period_end.replace(/-/g, "")
-        : "";
-    let sheetName = `SOP_${deptShort}`;
-    if (periodStart && periodEnd) sheetName = `SOP_${deptShort}_${periodStart}_${periodEnd}`;
-    else if (periodStart) sheetName = `SOP_${deptShort}_${periodStart}`;
-    sheetName = sheetName.substring(0, 31);
     const auditPeriodStart =
       isValidPeriodToken(group.audit_period_start) ? group.audit_period_start : null;
     const auditPeriodEnd =
