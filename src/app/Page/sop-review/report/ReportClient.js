@@ -683,14 +683,26 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       { header: "Reviewer Comments", key: "Reviewer Comments" },
     ];
     const deptShort = group.department.length > 10 ? group.department.substring(0, 10) : group.department;
-    const periodStart = group.audit_period_start !== "#####" && group.audit_period_start ? group.audit_period_start.replace(/-/g, "") : "";
-    const periodEnd = group.audit_period_end !== "#####" && group.audit_period_end ? group.audit_period_end.replace(/-/g, "") : "";
+    const isValidPeriodToken = (value) => {
+      const v = String(value || "").trim().toLowerCase();
+      return v && v !== "#####" && v !== "no-period";
+    };
+    const periodStart =
+      isValidPeriodToken(group.audit_period_start)
+        ? group.audit_period_start.replace(/-/g, "")
+        : "";
+    const periodEnd =
+      isValidPeriodToken(group.audit_period_end)
+        ? group.audit_period_end.replace(/-/g, "")
+        : "";
     let sheetName = `SOP_${deptShort}`;
     if (periodStart && periodEnd) sheetName = `SOP_${deptShort}_${periodStart}_${periodEnd}`;
     else if (periodStart) sheetName = `SOP_${deptShort}_${periodStart}`;
     sheetName = sheetName.substring(0, 31);
-    const auditPeriodStart = group.audit_period_start && group.audit_period_start !== "#####" ? group.audit_period_start : null;
-    const auditPeriodEnd = group.audit_period_end && group.audit_period_end !== "#####" ? group.audit_period_end : null;
+    const auditPeriodStart =
+      isValidPeriodToken(group.audit_period_start) ? group.audit_period_start : null;
+    const auditPeriodEnd =
+      isValidPeriodToken(group.audit_period_end) ? group.audit_period_end : null;
     exportToStyledExcel(exportData, columns, "Published", sheetName, new Date(), auditPeriodStart, auditPeriodEnd);
   };
 

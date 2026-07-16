@@ -29,6 +29,24 @@ const COLORS = {
 
 const FONT = "Times New Roman";
 
+function isInvalidPeriodValue(value) {
+  const v = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  if (!v) return true;
+  return v === "#####" || v === "no period" || v === "noperiod" || v === "-";
+}
+
+function sanitizeDepartmentLabel(department) {
+  return String(department || "")
+    .replace(/\bno[\s_-]*period\b/gi, "")
+    .replace(/#+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Soft fills for status cells (Approve / In Review / etc.). */
 const STATUS_STYLES = {
   success: { fill: "D1FAE5", font: "065F46" }, // Approved, Complete, …
@@ -138,14 +156,17 @@ function resolveReportTitleParts(componentName, dateObj, auditPeriodStart, audit
     department = `${raw.replace(/worksheet[_ ]?/i, "").replace(/_/g, " ").toUpperCase()} DEPARTMENT`;
   }
 
-  department = department.replace(/\s+/g, " ").trim();
+  department = sanitizeDepartmentLabel(department);
   if (!department || department === "DEPARTMENT") {
-    department = `${raw.replace(/_/g, " ").toUpperCase()} DEPARTMENT`;
+    department = sanitizeDepartmentLabel(`${raw.replace(/_/g, " ").toUpperCase()} DEPARTMENT`);
+  }
+  if (!department || department === "DEPARTMENT") {
+    department = "DEPARTMENT";
   }
 
   let year = String(dateObj?.getFullYear?.() || new Date().getFullYear());
   for (const candidate of [auditPeriodEnd, auditPeriodStart]) {
-    if (!candidate) continue;
+    if (isInvalidPeriodValue(candidate)) continue;
     const m = String(candidate).match(/(20\d{2})/);
     if (m) {
       year = m[1];

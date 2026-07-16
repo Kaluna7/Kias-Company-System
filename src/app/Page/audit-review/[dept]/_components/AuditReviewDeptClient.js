@@ -999,8 +999,6 @@ export default function AuditReviewDeptClient({
       .trim();
     const statusLabel = isLocked ? "Published" : "Draft";
     const auditYear = getAuditYear();
-    const yearHint =
-      Number.isInteger(auditYear) ? String(auditYear) : String(scopeTimeframeAuditPeriod || "").trim() || null;
 
     exportToStyledExcel(
       exportData,
@@ -1008,8 +1006,8 @@ export default function AuditReviewDeptClient({
       statusLabel,
       `Audit_Review_${deptSafe}`,
       Number.isInteger(auditYear) ? new Date(auditYear, 0, 1) : new Date(),
-      yearHint,
-      yearHint,
+      Number.isInteger(auditYear) ? String(auditYear) : null,
+      Number.isInteger(auditYear) ? String(auditYear) : null,
     );
     toast.show("Excel downloaded.", "success");
   }, [
@@ -1017,7 +1015,6 @@ export default function AuditReviewDeptClient({
     deptName,
     apiPath,
     isLocked,
-    scopeTimeframeAuditPeriod,
     getAuditYear,
     toast,
   ]);
