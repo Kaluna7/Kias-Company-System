@@ -29,6 +29,60 @@ const COLORS = {
 
 const FONT = "Times New Roman";
 
+/** Soft fills for status cells (Approve / In Review / etc.). */
+const STATUS_STYLES = {
+  success: { fill: "D1FAE5", font: "065F46" }, // Approved, Complete, …
+  info: { fill: "DBEAFE", font: "1E40AF" }, // In Review, In Progress, …
+  warning: { fill: "FEF3C7", font: "92400E" }, // Draft, Pending, …
+  danger: { fill: "FEE2E2", font: "991B1B" }, // Rejected, Cancelled, …
+};
+
+/**
+ * Resolve fill/font colors for a status cell value.
+ * @returns {{ fill: string, font: string } | null}
+ */
+function resolveStatusStyle(rawValue) {
+  const v = String(rawValue ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  if (!v || v === "-") return null;
+
+  if (
+    v === "APPROVED" ||
+    v === "COMPLETE" ||
+    v === "COMPLETED" ||
+    v === "PUBLISHED" ||
+    v === "AVAILABLE" ||
+    v === "NO ACTION REQUIRED" ||
+    v.includes("REVISION COMPLETED") ||
+    v.includes("READY TO PUBLISH")
+  ) {
+    return STATUS_STYLES.success;
+  }
+  if (
+    v === "REJECTED" ||
+    v === "CANCELLED" ||
+    v === "CANCELED" ||
+    v.includes("REVISION NEEDED")
+  ) {
+    return STATUS_STYLES.danger;
+  }
+  if (
+    v === "IN REVIEW" ||
+    v === "IN PROGRESS" ||
+    v === "PENDING REVIEW" ||
+    v.includes("REVIEW")
+  ) {
+    return STATUS_STYLES.info;
+  }
+  if (v === "DRAFT" || v === "PENDING" || v.includes("PENDING")) {
+    return STATUS_STYLES.warning;
+  }
+  return null;
+}
+
 function resolveReportTitleParts(componentName, dateObj, auditPeriodStart, auditPeriodEnd) {
   const raw = String(componentName || "Data").trim();
   const lower = raw.toLowerCase();
@@ -304,18 +358,34 @@ export function exportToStyledExcel(
         maxRowHeight = Math.max(maxRowHeight, Math.min(lines * 14, 120));
       }
 
+      const isStatusCol = /status/i.test(headerName);
       const centered =
+        isStatusCol ||
         /^(no\.?)$/i.test(headerName.trim()) ||
-        /date|status|priority|^risk$/i.test(headerName);
+        /date|priority|^risk$/i.test(headerName);
 
-      worksheet[addr].s = {
+      const style = {
         ...cellStyle,
         alignment: {
-          vertical: isLong ? "top" : "center",
+          vertical: isStatusCol ? "center" : isLong ? "top" : "center",
           horizontal: centered ? "center" : "left",
           wrapText: true,
         },
       };
+
+      // Color-code status cells (Approve, In Review, Complete, …) — same font size as other cells
+      if (isStatusCol) {
+        const statusColors = resolveStatusStyle(value);
+        if (statusColors) {
+          style.fill = { fgColor: { rgb: statusColors.fill } };
+          style.font = {
+            ...style.font,
+            color: { rgb: statusColors.font },
+          };
+        }
+      }
+
+      worksheet[addr].s = style;
     }
     worksheet["!rows"][r] = { hpt: maxRowHeight };
   }
