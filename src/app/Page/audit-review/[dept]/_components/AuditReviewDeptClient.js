@@ -10,6 +10,7 @@ import { mergeReviewFindingRows } from "@/app/lib/audit-review/keyFindingRow";
 import { parseStoredJsonList } from "@/app/utils/parseStoredJsonList";
 import { notifyAuditReviewPublishChanged } from "@/app/lib/audit-review/reportPublishLockClient";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
+import { exportToStyledExcel } from "@/app/utils/exportExcel";
 
 const AUDIT_REVIEW_TABLE_WIDTH = 3276;
 const AUDIT_REVIEW_COL_GROUP = (
@@ -938,6 +939,89 @@ export default function AuditReviewDeptClient({
     return normalizeKeyFindingRows(keyFindings);
   }, [keyFindings, isTableEditMode]);
 
+  const handleExportExcel = useCallback(() => {
+    const rows = normalizeKeyFindingRows(keyFindings);
+    if (!rows.length) {
+      toast.show("No table data to export.", "error");
+      return;
+    }
+
+    const exportData = rows.map((row, idx) => ({
+      No: row.no ?? idx + 1,
+      "AP No.": row.apNo || "",
+      "Substantive Test": row.substantiveTest || "",
+      Check: row.checkYn || "",
+      Method: row.method || "",
+      RISK: row.risk || "",
+      PREPARER: row.preparer || "",
+      "FINDING RESULT": row.findingResult || "",
+      "FINDING DESCRIPTION": row.findingDescription || "",
+      RECOMMENDATION: row.recommendation || "",
+      STATUS: row.status || "",
+      "REVIEW NOTE": row.reviewNote || "",
+      "REVIEW STATUS": row.reviewStatus || "",
+      "PREPARER RESPO": row.preparerRespo || "",
+      "REFERENCE LINK": row.referenceLink || "",
+      "FOLLOW UP DUE DATE": row.followUpDueDate || "",
+      TIMELINE: row.timeline || "",
+      "FOLLOW UP STATUS": row.followUpStatus || "",
+      AUDITEE: row.auditee || "",
+      "AUDITEE COMMENT": row.auditeeComment || "",
+      "FOLLOW-UP DETAIL": row.followUpDetail || "",
+    }));
+
+    const columns = [
+      { header: "No", key: "No" },
+      { header: "AP No.", key: "AP No." },
+      { header: "Substantive Test", key: "Substantive Test" },
+      { header: "Check", key: "Check" },
+      { header: "Method", key: "Method" },
+      { header: "RISK", key: "RISK" },
+      { header: "PREPARER", key: "PREPARER" },
+      { header: "FINDING RESULT", key: "FINDING RESULT" },
+      { header: "FINDING DESCRIPTION", key: "FINDING DESCRIPTION" },
+      { header: "RECOMMENDATION", key: "RECOMMENDATION" },
+      { header: "STATUS", key: "STATUS" },
+      { header: "REVIEW NOTE", key: "REVIEW NOTE" },
+      { header: "REVIEW STATUS", key: "REVIEW STATUS" },
+      { header: "PREPARER RESPO", key: "PREPARER RESPO" },
+      { header: "REFERENCE LINK", key: "REFERENCE LINK" },
+      { header: "FOLLOW UP DUE DATE", key: "FOLLOW UP DUE DATE" },
+      { header: "TIMELINE", key: "TIMELINE" },
+      { header: "FOLLOW UP STATUS", key: "FOLLOW UP STATUS" },
+      { header: "AUDITEE", key: "AUDITEE" },
+      { header: "AUDITEE COMMENT", key: "AUDITEE COMMENT" },
+      { header: "FOLLOW-UP DETAIL", key: "FOLLOW-UP DETAIL" },
+    ];
+
+    const deptSafe = String(deptName || apiPath || "Audit")
+      .replace(/[\\/:*?"<>|]/g, "")
+      .trim();
+    const statusLabel = isLocked ? "Published" : "Draft";
+    const auditYear = getAuditYear();
+    const yearHint =
+      Number.isInteger(auditYear) ? String(auditYear) : String(scopeTimeframeAuditPeriod || "").trim() || null;
+
+    exportToStyledExcel(
+      exportData,
+      columns,
+      statusLabel,
+      `Audit_Review_${deptSafe}`,
+      Number.isInteger(auditYear) ? new Date(auditYear, 0, 1) : new Date(),
+      yearHint,
+      yearHint,
+    );
+    toast.show("Excel downloaded.", "success");
+  }, [
+    keyFindings,
+    deptName,
+    apiPath,
+    isLocked,
+    scopeTimeframeAuditPeriod,
+    getAuditYear,
+    toast,
+  ]);
+
   return (
     <>
       <style jsx>{`
@@ -1325,21 +1409,36 @@ export default function AuditReviewDeptClient({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white rounded-xl shadow-lg border border-gray-200">
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 bg-slate-50/80 shrink-0">
             <span className="text-xs font-semibold text-slate-600">Key findings</span>
-            <button
-              type="button"
-              disabled={isInteractionDisabled}
-              onClick={() => {
-                if (isTableEditMode) {
-                  void handleDoneTableEdit();
-                } else {
-                  setKeyFindings(normalizeKeyFindingRows(keyFindings));
-                  setIsTableEditMode(true);
-                }
-              }}
-              className="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading && isTableEditMode ? "Saving..." : isTableEditMode ? "Done" : "Edit"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={!keyFindings.length || loading}
+                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors ${
+                  !keyFindings.length || loading
+                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                    : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                }`}
+                title="Download key findings table as Excel"
+              >
+                Export to Excel
+              </button>
+              <button
+                type="button"
+                disabled={isInteractionDisabled}
+                onClick={() => {
+                  if (isTableEditMode) {
+                    void handleDoneTableEdit();
+                  } else {
+                    setKeyFindings(normalizeKeyFindingRows(keyFindings));
+                    setIsTableEditMode(true);
+                  }
+                }}
+                className="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading && isTableEditMode ? "Saving..." : isTableEditMode ? "Done" : "Edit"}
+              </button>
+            </div>
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <StickyHorizontalScrollTable

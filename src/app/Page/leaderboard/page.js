@@ -36,7 +36,7 @@ export default function LeaderboardPage() {
             🔧
           </div>
           <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">Leaderboard tidak tersedia</h1>
-          <p className="mt-3 text-sm text-slate-400 leading-relaxed">
+          <p className="mt-3 text-sm text-slate-400 leading-relaxed">m
             Halaman ini sedang dalam perbaikan dan disembunyikan sementara untuk semua pengguna. Silakan kembali lagi
             nanti.
           </p>
