@@ -11,6 +11,11 @@ import { parseStoredJsonList } from "@/app/utils/parseStoredJsonList";
 import { notifyAuditReviewPublishChanged } from "@/app/lib/audit-review/reportPublishLockClient";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
+import {
+  buildRiskDescriptionLookup,
+  fetchAllRiskAssessmentRows,
+  resolveRiskMetaForFindingRow,
+} from "@/app/lib/audit-review/riskDescriptionLookup";
 
 const AUDIT_REVIEW_TABLE_WIDTH = 3276;
 const AUDIT_REVIEW_COL_GROUP = (
@@ -146,7 +151,8 @@ function normalizeKeyFindingRow(finding, idx) {
   return {
     no: finding?.no ?? idx + 1,
     riskId: finding?.riskId || finding?.risk_id || "",
-    riskDetails: finding?.riskDetails || finding?.risk_details || "",
+    riskDetails:
+      finding?.riskDetails || finding?.risk_details || finding?.risk_description || "",
     apNo: finding?.apNo || finding?.ap_code || finding?.apCode || "",
     substantiveTest: finding?.substantiveTest || finding?.substantive_test || "",
     checkYn: finding?.checkYn || finding?.check_yn || "",
@@ -223,6 +229,7 @@ export default function AuditReviewDeptClient({
     Array.isArray(initialReviewedFindings) && initialReviewedFindings.length > 0,
   );
   const [isTableEditMode, setIsTableEditMode] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   const autoAuditPeriod = useMemo(() => {
     const sourceRows = Array.isArray(initialFindings) ? initialFindings : [];
@@ -939,77 +946,103 @@ export default function AuditReviewDeptClient({
     return normalizeKeyFindingRows(keyFindings);
   }, [keyFindings, isTableEditMode]);
 
-  const handleExportExcel = useCallback(() => {
+  const handleExportExcel = useCallback(async () => {
     const rows = normalizeKeyFindingRows(keyFindings);
     if (!rows.length) {
       toast.show("No table data to export.", "error");
       return;
     }
 
-    const exportData = rows.map((row, idx) => ({
-      No: row.no ?? idx + 1,
-      "AP No.": row.apNo || "",
-      "Substantive Test": row.substantiveTest || "",
-      Check: row.checkYn || "",
-      Method: row.method || "",
-      RISK: row.risk || "",
-      PREPARER: row.preparer || "",
-      "FINDING RESULT": row.findingResult || "",
-      "FINDING DESCRIPTION": row.findingDescription || "",
-      RECOMMENDATION: row.recommendation || "",
-      STATUS: row.status || "",
-      "REVIEW NOTE": row.reviewNote || "",
-      "REVIEW STATUS": row.reviewStatus || "",
-      "PREPARER RESPO": row.preparerRespo || "",
-      "REFERENCE LINK": row.referenceLink || "",
-      "FOLLOW UP DUE DATE": row.followUpDueDate || "",
-      TIMELINE: row.timeline || "",
-      "FOLLOW UP STATUS": row.followUpStatus || "",
-      AUDITEE: row.auditee || "",
-      "AUDITEE COMMENT": row.auditeeComment || "",
-      "FOLLOW-UP DETAIL": row.followUpDetail || "",
-    }));
+    setIsExportingExcel(true);
+    try {
+      let riskLookup = new Map();
+      try {
+        const riskRows = await fetchAllRiskAssessmentRows(apiPath);
+        riskLookup = buildRiskDescriptionLookup(riskRows);
+      } catch (err) {
+        console.warn("Audit review export: risk assessment lookup failed", err);
+        toast.show(
+          "Risk description lookup failed; exporting saved finding data only.",
+          "info",
+        );
+      }
 
-    const columns = [
-      { header: "No", key: "No" },
-      { header: "AP No.", key: "AP No." },
-      { header: "Substantive Test", key: "Substantive Test" },
-      { header: "Check", key: "Check" },
-      { header: "Method", key: "Method" },
-      { header: "RISK", key: "RISK" },
-      { header: "PREPARER", key: "PREPARER" },
-      { header: "FINDING RESULT", key: "FINDING RESULT" },
-      { header: "FINDING DESCRIPTION", key: "FINDING DESCRIPTION" },
-      { header: "RECOMMENDATION", key: "RECOMMENDATION" },
-      { header: "STATUS", key: "STATUS" },
-      { header: "REVIEW NOTE", key: "REVIEW NOTE" },
-      { header: "REVIEW STATUS", key: "REVIEW STATUS" },
-      { header: "PREPARER RESPO", key: "PREPARER RESPO" },
-      { header: "REFERENCE LINK", key: "REFERENCE LINK" },
-      { header: "FOLLOW UP DUE DATE", key: "FOLLOW UP DUE DATE" },
-      { header: "TIMELINE", key: "TIMELINE" },
-      { header: "FOLLOW UP STATUS", key: "FOLLOW UP STATUS" },
-      { header: "AUDITEE", key: "AUDITEE" },
-      { header: "AUDITEE COMMENT", key: "AUDITEE COMMENT" },
-      { header: "FOLLOW-UP DETAIL", key: "FOLLOW-UP DETAIL" },
-    ];
+      const exportData = rows.map((row, idx) => {
+        const riskMeta = resolveRiskMetaForFindingRow(row, riskLookup);
+        return {
+          No: row.no ?? idx + 1,
+          "AP No.": row.apNo || "",
+          "RISK ID": riskMeta.riskIdNo || "",
+          "RISK DESCRIPTION": riskMeta.riskDescription || "",
+          "Substantive Test": row.substantiveTest || "",
+          Check: row.checkYn || "",
+          Method: row.method || "",
+          RISK: row.risk || "",
+          PREPARER: row.preparer || "",
+          "FINDING RESULT": row.findingResult || "",
+          "FINDING DESCRIPTION": row.findingDescription || "",
+          RECOMMENDATION: row.recommendation || "",
+          STATUS: row.status || "",
+          "REVIEW NOTE": row.reviewNote || "",
+          "REVIEW STATUS": row.reviewStatus || "",
+          "PREPARER RESPO": row.preparerRespo || "",
+          "REFERENCE LINK": row.referenceLink || "",
+          "FOLLOW UP DUE DATE": row.followUpDueDate || "",
+          TIMELINE: row.timeline || "",
+          "FOLLOW UP STATUS": row.followUpStatus || "",
+          AUDITEE: row.auditee || "",
+          "AUDITEE COMMENT": row.auditeeComment || "",
+          "FOLLOW-UP DETAIL": row.followUpDetail || "",
+        };
+      });
 
-    const deptSafe = String(deptName || apiPath || "Audit")
-      .replace(/[\\/:*?"<>|]/g, "")
-      .trim();
-    const statusLabel = isLocked ? "Published" : "Draft";
-    const auditYear = getAuditYear();
+      const columns = [
+        { header: "No", key: "No" },
+        { header: "AP No.", key: "AP No." },
+        { header: "RISK ID", key: "RISK ID" },
+        { header: "RISK DESCRIPTION", key: "RISK DESCRIPTION" },
+        { header: "Substantive Test", key: "Substantive Test" },
+        { header: "Check", key: "Check" },
+        { header: "Method", key: "Method" },
+        { header: "RISK", key: "RISK" },
+        { header: "PREPARER", key: "PREPARER" },
+        { header: "FINDING RESULT", key: "FINDING RESULT" },
+        { header: "FINDING DESCRIPTION", key: "FINDING DESCRIPTION" },
+        { header: "RECOMMENDATION", key: "RECOMMENDATION" },
+        { header: "STATUS", key: "STATUS" },
+        { header: "REVIEW NOTE", key: "REVIEW NOTE" },
+        { header: "REVIEW STATUS", key: "REVIEW STATUS" },
+        { header: "PREPARER RESPO", key: "PREPARER RESPO" },
+        { header: "REFERENCE LINK", key: "REFERENCE LINK" },
+        { header: "FOLLOW UP DUE DATE", key: "FOLLOW UP DUE DATE" },
+        { header: "TIMELINE", key: "TIMELINE" },
+        { header: "FOLLOW UP STATUS", key: "FOLLOW UP STATUS" },
+        { header: "AUDITEE", key: "AUDITEE" },
+        { header: "AUDITEE COMMENT", key: "AUDITEE COMMENT" },
+        { header: "FOLLOW-UP DETAIL", key: "FOLLOW-UP DETAIL" },
+      ];
 
-    exportToStyledExcel(
-      exportData,
-      columns,
-      statusLabel,
-      `Audit_Review_${deptSafe}`,
-      Number.isInteger(auditYear) ? new Date(auditYear, 0, 1) : new Date(),
-      Number.isInteger(auditYear) ? String(auditYear) : null,
-      Number.isInteger(auditYear) ? String(auditYear) : null,
-    );
-    toast.show("Excel downloaded.", "success");
+      const deptSafe = String(deptName || apiPath || "Audit")
+        .replace(/[\\/:*?"<>|]/g, "")
+        .trim();
+      const statusLabel = isLocked ? "Published" : "Draft";
+      const auditYear = getAuditYear();
+
+      exportToStyledExcel(
+        exportData,
+        columns,
+        statusLabel,
+        `Audit_Review_${deptSafe}`,
+        Number.isInteger(auditYear) ? new Date(auditYear, 0, 1) : new Date(),
+        Number.isInteger(auditYear) ? String(auditYear) : null,
+        Number.isInteger(auditYear) ? String(auditYear) : null,
+      );
+      toast.show("Excel downloaded.", "success");
+    } catch (err) {
+      toast.show(err?.message || "Failed to export Excel.", "error");
+    } finally {
+      setIsExportingExcel(false);
+    }
   }, [
     keyFindings,
     deptName,
@@ -1409,16 +1442,16 @@ export default function AuditReviewDeptClient({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleExportExcel}
-                disabled={!keyFindings.length || loading}
+                onClick={() => void handleExportExcel()}
+                disabled={!keyFindings.length || loading || isExportingExcel}
                 className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors ${
-                  !keyFindings.length || loading
+                  !keyFindings.length || loading || isExportingExcel
                     ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                     : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
                 }`}
                 title="Download key findings table as Excel"
               >
-                Export to Excel
+                {isExportingExcel ? "Exporting..." : "Export to Excel"}
               </button>
               <button
                 type="button"
