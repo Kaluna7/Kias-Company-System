@@ -12,6 +12,13 @@ function toIntSafe(v, fallback) {
   return Number.isNaN(n) ? fallback : n;
 }
 
+/** users.id may be UUID (text) or integer depending on DB. */
+function normalizeUserId(v) {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
 export async function GET(req) {
   try {
     const url = req?.url ? new URL(req.url) : null;
@@ -27,7 +34,7 @@ export async function GET(req) {
     const total = countRes.rows?.[0]?.total ?? 0;
 
     const r = await pool.query(
-      `SELECT id, name, email, role, COALESCE(avatar_url, '') AS avatar_url
+      `SELECT id::text AS id, name, email, role, COALESCE(avatar_url, '') AS avatar_url
        FROM public.users
        WHERE role IS NULL
           OR LOWER(role) NOT IN ('admin', 'super_admin', 'superadmin')
@@ -100,7 +107,7 @@ export async function POST(req) {
     const created = await pool.query(
       `INSERT INTO public.users (name, email, password_hash, role)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, role, COALESCE(avatar_url, '') AS avatar_url`,
+       RETURNING id::text AS id, name, email, role, COALESCE(avatar_url, '') AS avatar_url`,
       [name, email, passwordHash, userRole]
     );
 
@@ -128,8 +135,8 @@ export async function DELETE(req) {
     }
 
     const body = await req.json().catch(() => null);
-    const id = Number(body?.id || 0);
-    if (!Number.isInteger(id) || id <= 0) {
+    const id = normalizeUserId(body?.id);
+    if (!id) {
       return NextResponse.json(
         { success: false, error: "Valid user id is required" },
         { status: 400 }
@@ -138,7 +145,10 @@ export async function DELETE(req) {
 
     // Safety: never delete admin / super_admin from this endpoint.
     const target = await pool.query(
-      `SELECT id, LOWER(COALESCE(role, '')) AS role FROM public.users WHERE id = $1 LIMIT 1`,
+      `SELECT id::text AS id, LOWER(COALESCE(role, '')) AS role
+       FROM public.users
+       WHERE id::text = $1
+       LIMIT 1`,
       [id]
     );
     const targetUser = target.rows?.[0];
@@ -155,7 +165,7 @@ export async function DELETE(req) {
       );
     }
 
-    await pool.query(`DELETE FROM public.users WHERE id = $1`, [id]);
+    await pool.query(`DELETE FROM public.users WHERE id::text = $1`, [id]);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     console.error("DELETE /api/users error:", err);
@@ -165,4 +175,3 @@ export async function DELETE(req) {
     );
   }
 }
-

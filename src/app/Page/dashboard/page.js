@@ -12,6 +12,7 @@ import {
   canCreateAccounts,
   canManageSchedule,
   isAdminLikeRole,
+  isSuperAdmin,
 } from "@/lib/roles";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -87,7 +88,7 @@ function DashboardPageContent() {
   const [newAccountEmail, setNewAccountEmail] = useState("");
   const [newAccountPassword, setNewAccountPassword] = useState("");
   const [newAccountRole, setNewAccountRole] = useState("user");
-  const [deletingUserId, setDeletingUserId] = useState(0);
+  const [deletingUserId, setDeletingUserId] = useState("");
   const [progress, setProgress] = useState({ loading: true, error: null, modules: [] });
   const [progressModuleKey, setProgressModuleKey] = useState("sop-review");
   const [expandedModuleKey, setExpandedModuleKey] = useState(null);
@@ -105,7 +106,8 @@ function DashboardPageContent() {
 
   const role = (session?.user?.role || "").toLowerCase();
   const isAdmin = isAdminLikeRole(role);
-  const canCreateEmployeeAccount = canCreateAccounts(role);
+  // Create Account menu: super_admin only (regular admin must not see it)
+  const canCreateEmployeeAccount = isSuperAdmin(role) && canCreateAccounts(role);
   const canOpenSchedule = canManageSchedule(role);
 
   const auditItems = useMemo(
@@ -677,7 +679,8 @@ function DashboardPageContent() {
 
   const handleDeleteUser = useCallback(
     async (user) => {
-      if (!user?.id) return;
+      const userId = String(user?.id || "").trim();
+      if (!userId) return;
       openConfirmDialog(
         {
           title: "Delete user?",
@@ -687,11 +690,11 @@ function DashboardPageContent() {
         },
         async () => {
           try {
-            setDeletingUserId(Number(user.id));
+            setDeletingUserId(userId);
             const res = await fetch("/api/users", {
               method: "DELETE",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: user.id }),
+              body: JSON.stringify({ id: userId }),
             });
             const json = await res.json().catch(() => null);
             if (!res.ok || !json?.success) {
@@ -699,12 +702,12 @@ function DashboardPageContent() {
               return;
             }
 
-            setProgressUsers((prev) => prev.filter((u) => Number(u?.id) !== Number(user.id)));
+            setProgressUsers((prev) => prev.filter((u) => String(u?.id) !== userId));
             toast.show("User deleted successfully.", "success");
           } catch (e) {
             toast.show(e?.message || "Failed to delete user.", "error");
           } finally {
-            setDeletingUserId(0);
+            setDeletingUserId("");
           }
         }
       );
@@ -1425,10 +1428,10 @@ function DashboardPageContent() {
                         <button
                           type="button"
                           onClick={() => handleDeleteUser(u)}
-                          disabled={deletingUserId === Number(u.id)}
+                          disabled={deletingUserId === String(u.id)}
                           className="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          {deletingUserId === Number(u.id) ? "Deleting..." : "Delete"}
+                          {deletingUserId === String(u.id) ? "Deleting..." : "Delete"}
                         </button>
                       </div>
                     ))}

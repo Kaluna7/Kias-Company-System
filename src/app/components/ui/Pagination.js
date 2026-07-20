@@ -25,7 +25,7 @@ function scrollPageToTop() {
 }
 
 /**
- * Pagination bar with Previous / page numbers / Next.
+ * Pagination bar with Previous / page numbers / Next.0
  * meta: { total, page, pageSize }
  */
 export default function Pagination({
