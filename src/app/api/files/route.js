@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { isAdminLikeRole } from "@/lib/roles";
 import {
   addFileRecord,
   createFileId,
@@ -181,7 +182,7 @@ export async function DELETE(req) {
     }
 
     const role = String(session.user.role || "").toLowerCase();
-    const isAdmin = role === "admin" || role === "reviewer";
+    const isAdmin = isAdminLikeRole(role);
     const files = await listFilesByYearAndFolder(year, folderId);
     const target = files?.find((f) => f.id === id);
     if (!target) {

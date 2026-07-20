@@ -11,6 +11,7 @@ import {
   formatScheduleRange,
 } from "@/lib/scheduleCardHelpers";
 import { worksheetStatusWpBadgeClass } from "@/lib/worksheetStatusWpDisplay";
+import { isAdminRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -99,7 +100,7 @@ async function WorksheetContent({ yearParam }) {
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
   const role = (session?.user?.role || "").toLowerCase();
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
   const isReviewer = role === "reviewer";
   
   // Get user assignments for Worksheet module

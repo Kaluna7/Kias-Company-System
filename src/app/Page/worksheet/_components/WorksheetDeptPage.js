@@ -17,6 +17,7 @@ import {
   parseWorksheetCustomAuditAreasJson,
 } from "@/app/data/worksheetAuditAreaTree";
 import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
+import { isAdminRole, isEditorRole } from "@/lib/roles";
 import {
   worksheetStatusWpAllowsPublish,
   worksheetFilePathAllowsPublish,
@@ -113,14 +114,11 @@ export default function WorksheetDeptPage({
   const canEditReviewerFields = canEditReviewerFieldsFromRole(role);
   /** Akun reviewer: hanya boleh mengisi sisi review (WP/status), bukan upload/preparer. */
   const isReviewerAccount = enableRoleRestrictions && role === "reviewer";
-  const isAdminAccount = enableRoleRestrictions && role === "admin";
-  /** Preparer: save draft only (not on Report until published). Reviewer/Admin: Publish to Report. */
+  const isAdminAccount = enableRoleRestrictions && isAdminRole(role);
+  /** Preparer can still save draft; any signed-in editor may also publish. */
   const canSaveDraft = Boolean(session?.user) && isUserRole;
-  /** Preparer (user) never sees Publish — only admin / reviewer. */
-  const canPublish =
-    Boolean(session?.user) &&
-    !isUserRole &&
-    (role === "admin" || role === "reviewer");
+  /** Publish counts toward dashboard progress for user, reviewer, and admin. */
+  const canPublish = Boolean(session?.user) && isEditorRole(role);
 
   const [preparer, setPreparer] = useState("");
   const [reviewer, setReviewer] = useState("");
@@ -654,11 +652,12 @@ export default function WorksheetDeptPage({
     setSelectedAuditPaths(new Set());
   };
 
-  /** Preparer (user): save draft — not shown on Report until Reviewer/Admin publishes. */
+  /** Preparer (user): save draft — not shown on Report until someone publishes. */
   const handleSaveDraft = async () => {
     setIsSaving(true);
     try {
       const body = await buildWorksheetPostBody();
+      body.publishToReport = false;
       const response = await fetch(apiPath, {
         method: "POST",
         credentials: "include",
@@ -679,12 +678,12 @@ export default function WorksheetDeptPage({
         return;
       }
       if (data.published_to_report) {
-        showNotification("error", "Server treated this as publish; use a preparer account for drafts.");
+        showNotification("error", "Server treated this as publish; draft was not saved.");
         return;
       }
       showNotification(
         "success",
-        "Draft saved. It will appear on the Report after a Reviewer or Admin publishes.",
+        "Draft saved. Use Publish when ready so it appears on the Report and counts toward dashboard progress.",
       );
     } catch (error) {
       console.error("Error saving draft:", error);
@@ -694,11 +693,12 @@ export default function WorksheetDeptPage({
     }
   };
 
-  /** Reviewer / Admin: publish to Report (same as legacy save behaviour). */
+  /** User / Reviewer / Admin: publish to Report (counts toward dashboard progress). */
   const handlePublish = async () => {
     setIsSaving(true);
     try {
       const body = await buildWorksheetPostBody();
+      body.publishToReport = true;
       const response = await fetch(apiPath, {
         method: "POST",
         credentials: "include",
@@ -741,7 +741,7 @@ export default function WorksheetDeptPage({
       if (!data.published_to_report) {
         showNotification(
           "error",
-          "Only a Reviewer or Admin can publish to the Report. Preparers should use Save draft.",
+          "Publish did not complete. Please try again or use Save draft first.",
         );
         return;
       }
@@ -1041,7 +1041,8 @@ export default function WorksheetDeptPage({
             <div className="mt-8 flex flex-col items-stretch sm:items-end gap-3 pt-6 border-t border-gray-200">
               {canSaveDraft && (
                 <p className="text-xs text-slate-600 sm:text-right order-2 sm:order-1">
-                  As a preparer you only <span className="font-semibold">save a draft</span>. Publishing to the Report is for Reviewers or Admins only.
+                  You can <span className="font-semibold">save a draft</span> first, then{" "}
+                  <span className="font-semibold">Publish</span> when ready — publish counts toward dashboard progress.
                 </p>
               )}
               <div className="flex flex-col sm:flex-row justify-end gap-3 order-1 sm:order-2 w-full sm:w-auto">

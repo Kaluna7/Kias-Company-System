@@ -12,11 +12,12 @@ import { DataTable } from "@/app/components/ui/Risk-Assessment/DataTable";
 import Pagination from "@/app/components/ui/Pagination";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import { compareCode } from "@/app/utils/compareCode";
+import { isAdminRole } from "@/lib/roles";
 
 export default function OpsClient({ initialData = [], initialMeta = null }) {
   const { data: session } = useSession();
   const role = session?.user?.role;
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");

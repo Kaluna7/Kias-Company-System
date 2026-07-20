@@ -10,6 +10,7 @@ import {
   notifySopReviewDataChanged,
   yearFromPublishedAt,
 } from "@/app/lib/sop-review/sopReviewNotifyClient";
+import { isEditorRole } from "@/lib/roles";
 
 const STEP_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED"];
 
@@ -31,7 +32,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     .trim()
     .toLowerCase();
   const isAdminB = role === "adminb" || userIdentity === "adminb" || userIdentity.startsWith("adminb@");
-  const canEditPublished = role === "reviewer" || role === "admin" || role === "user" || isAdminB;
+  const canEditPublished = isEditorRole(role) || isAdminB;
   const canEditReportDates = canEditPublished;
 
   const [rows, setRows] = useState(initialRows);

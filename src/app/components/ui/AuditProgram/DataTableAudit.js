@@ -1,6 +1,23 @@
-import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import React, { useMemo, useState } from "react";
 import { Pencil, X, Trash2 } from "lucide-react";
 import { compareCode } from "@/app/utils/compareCode";
+import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
+
+const COLS = {
+  no: 56,
+  riskIdNo: 100,
+  riskDescription: 180,
+  riskDetails: 200,
+  owner: 110,
+  apCode: 100,
+  substantiveTest: 150,
+  objective: 180,
+  procedures: 200,
+  method: 130,
+  description: 180,
+  application: 130,
+  action: 150,
+};
 
 export default function DataTableAudit({
   data = [],
@@ -19,62 +36,6 @@ export default function DataTableAudit({
   departmentApi,
 }) {
   const [deleting, setDeleting] = useState({});
-  const panelRef = useRef(null);
-  const bodyRef = useRef(null);
-  const headerScrollRef = useRef(null);
-  const xScrollRef = useRef(null);
-  const hBarRef = useRef(null);
-  const tableRef = useRef(null);
-  const [tableScrollWidth, setTableScrollWidth] = useState(1000);
-  const scrollSyncLock = useRef(false);
-
-  const syncHorizontalScroll = useCallback((source) => {
-    if (scrollSyncLock.current) return;
-    scrollSyncLock.current = true;
-    const left =
-      source === "bar"
-        ? (hBarRef.current?.scrollLeft ?? 0)
-        : source === "header"
-          ? (headerScrollRef.current?.scrollLeft ?? 0)
-          : (xScrollRef.current?.scrollLeft ?? 0);
-    if (xScrollRef.current) xScrollRef.current.scrollLeft = left;
-    if (hBarRef.current) hBarRef.current.scrollLeft = left;
-    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = left;
-    requestAnimationFrame(() => {
-      scrollSyncLock.current = false;
-    });
-  }, []);
-
-  const handleWheel = useCallback(
-    (e) => {
-      const scroller = xScrollRef.current;
-      if (!scroller) return;
-
-      const { deltaX, deltaY } = e;
-      const delta = e.shiftKey ? deltaY : deltaX;
-      const isHorizontalGesture =
-        e.shiftKey || (Math.abs(deltaX) > 0 && Math.abs(deltaX) >= Math.abs(deltaY));
-      if (!isHorizontalGesture || delta === 0) return;
-
-      const maxLeft = scroller.scrollWidth - scroller.clientWidth;
-      if (maxLeft <= 0) return;
-
-      const next = Math.min(maxLeft, Math.max(0, scroller.scrollLeft + delta));
-      if (next === scroller.scrollLeft) return;
-
-      scroller.scrollLeft = next;
-      syncHorizontalScroll("content");
-      e.preventDefault();
-    },
-    [syncHorizontalScroll],
-  );
-
-  useEffect(() => {
-    const root = panelRef.current;
-    if (!root) return;
-    root.addEventListener("wheel", handleWheel, { passive: false, capture: true });
-    return () => root.removeEventListener("wheel", handleWheel, { capture: true });
-  }, [handleWheel]);
 
   const handleSort = (field) => {
     if (!onChangeSort) return;
@@ -107,7 +68,6 @@ export default function DataTableAudit({
         return va === vb ? 0 : va < vb ? -1 * dir : 1 * dir;
       }
 
-      // For dotted codes like A.2.1.10 or A.2.1.2.1, do segment-aware compare
       if (sortBy === "risk_id_no" || sortBy === "ap_code") {
         const cmp = compareCode(va, vb);
         return cmp === 0 ? 0 : cmp * dir;
@@ -121,7 +81,7 @@ export default function DataTableAudit({
 
     return arr;
   }, [data, sortBy, sortDir]);
-  // Group data by risk_id supaya bagian kiri (risk) tidak berulang
+
   const grouped = useMemo(() => {
     if (!Array.isArray(sortedData) || sortedData.length === 0) return [];
 
@@ -154,31 +114,41 @@ export default function DataTableAudit({
     });
   }, [sortedData]);
 
-  useEffect(() => {
-    const table = tableRef.current;
-    if (!table) return;
-
-    const updateWidth = () => setTableScrollWidth(table.scrollWidth);
-    updateWidth();
-
-    const ro = new ResizeObserver(updateWidth);
-    ro.observe(table);
-    window.addEventListener("resize", updateWidth);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", updateWidth);
-    };
-  }, [grouped, isPlanningMode, isMoveToDraftMode, isDeleteMode, isEditMode]);
-
   const headerThClass =
-    "px-3 py-2 border border-gray-200 text-center align-top bg-gray-50";
+    "px-2 py-2 border border-gray-200 text-center align-middle bg-gray-50 whitespace-normal break-words min-w-0";
 
   const showActionCol =
     isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode;
 
+  const tableMinWidth =
+    Object.values(COLS).reduce((sum, w) => sum + w, 0) -
+    (showActionCol ? 0 : COLS.action);
+
   const tableClassName =
-    "min-w-[1000px] w-full border-collapse text-xs sm:text-sm text-gray-700";
-  const tableStyle = { tableLayout: "auto" };
+    "w-full border-collapse text-xs sm:text-sm text-gray-700";
+  const tableStyle = {
+    tableLayout: "fixed",
+    width: tableMinWidth,
+    minWidth: tableMinWidth,
+  };
+
+  const colGroup = (
+    <colgroup>
+      <col style={{ width: COLS.no }} />
+      <col style={{ width: COLS.riskIdNo }} />
+      <col style={{ width: COLS.riskDescription }} />
+      <col style={{ width: COLS.riskDetails }} />
+      <col style={{ width: COLS.owner }} />
+      <col style={{ width: COLS.apCode }} />
+      <col style={{ width: COLS.substantiveTest }} />
+      <col style={{ width: COLS.objective }} />
+      <col style={{ width: COLS.procedures }} />
+      <col style={{ width: COLS.method }} />
+      <col style={{ width: COLS.description }} />
+      <col style={{ width: COLS.application }} />
+      {showActionCol && <col style={{ width: COLS.action }} />}
+    </colgroup>
+  );
 
   const tableHeader = (
     <thead>
@@ -193,17 +163,13 @@ export default function DataTableAudit({
         <th rowSpan={2} className={headerThClass}>
           Risk ID No.
         </th>
-        <th
-          rowSpan={2}
-          className={headerThClass}
-          style={{ minWidth: "150px", maxWidth: "250px" }}
-        >
+        <th rowSpan={2} className={headerThClass}>
           Risk Description
         </th>
-        <th rowSpan={2} className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
+        <th rowSpan={2} className={headerThClass}>
           Risk Details
         </th>
-        <th rowSpan={2} className={headerThClass} style={{ minWidth: "100px", maxWidth: "150px" }}>
+        <th rowSpan={2} className={headerThClass}>
           Owner
         </th>
         <th colSpan={4} className={headerThClass}>
@@ -228,38 +194,29 @@ export default function DataTableAudit({
         <th
           className={`${headerThClass} cursor-pointer select-none`}
           onClick={() => handleSort("substantive_test")}
-          style={{ minWidth: "120px", maxWidth: "180px" }}
         >
           Substantive Test{sortIndicator("substantive_test")}
         </th>
-        <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
-          Objective
-        </th>
-        <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "300px" }}>
-          Procedures
-        </th>
-        <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
-          Method
-        </th>
-        <th className={headerThClass} style={{ minWidth: "150px", maxWidth: "250px" }}>
-          Description
-        </th>
-        <th className={headerThClass} style={{ minWidth: "120px", maxWidth: "180px" }}>
-          Application
-        </th>
+        <th className={headerThClass}>Objective</th>
+        <th className={headerThClass}>Procedures</th>
+        <th className={headerThClass}>Method</th>
+        <th className={headerThClass}>Description</th>
+        <th className={headerThClass}>Application</th>
       </tr>
     </thead>
   );
 
+  const cellClass =
+    "px-2 py-2 border border-gray-200 align-top break-words whitespace-pre-wrap min-w-0";
+  const cellCenterClass =
+    "px-2 py-2 border border-gray-200 text-center align-top min-w-0";
+
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col p-2 sm:p-4">
-      {/* Close button di pojok kanan atas */}
       {(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) && (
         <button
           onClick={() => {
-            window.dispatchEvent(
-              new CustomEvent("close-planning-mode")
-            );
+            window.dispatchEvent(new CustomEvent("close-planning-mode"));
           }}
           className="absolute top-2 sm:top-4 right-2 sm:right-4 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 shadow-lg transition-colors duration-150"
           title="Close Mode"
@@ -268,250 +225,236 @@ export default function DataTableAudit({
           <X size={16} />
         </button>
       )}
-      <div className="mb-2 px-1 md:hidden">
-        <div className="rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
-          Geser tabel ke samping untuk melihat semua kolom.
-        </div>
-      </div>
-      <div
-        ref={panelRef}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+
+      <StickyHorizontalScrollTable
+        className="min-h-0 flex-1"
+        colGroup={colGroup}
+        tableClassName={tableClassName}
+        tableStyle={tableStyle}
+        measureDeps={[
+          grouped.length,
+          isPlanningMode,
+          isMoveToDraftMode,
+          isDeleteMode,
+          isEditMode,
+          showActionCol,
+        ]}
+        header={tableHeader}
       >
-        <div
-          ref={headerScrollRef}
-          className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-gray-200 bg-gray-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-          onScroll={() => syncHorizontalScroll("header")}
-        >
-          <table className={tableClassName} style={tableStyle}>
-            {tableHeader}
-          </table>
-        </div>
+        <tbody>
+          {grouped.length > 0 ? (
+            grouped.map((group, groupIndex) => {
+              const { risk, aps } = group;
+              const rowSpan = Math.max(aps.length, 1);
 
-        <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div
-            ref={xScrollRef}
-            className="overflow-x-auto overflow-y-visible"
-            onScroll={() => syncHorizontalScroll("content")}
-          >
-            <table ref={tableRef} className={tableClassName} style={tableStyle}>
-              <tbody>
-            {grouped.length > 0 ? (
-              grouped.map((group, groupIndex) => {
-                const { risk, aps } = group;
-                const rowSpan = Math.max(aps.length, 1);
-
-                return aps.map((ap, apIndex) => (
-                  <tr
-                    key={ap.ap_id ? `${risk.risk_id}-${ap.ap_id}` : `${risk.risk_id}-${apIndex}`}
-                    className={`${groupIndex % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100 transition`}
-                  >
-                    {/* Kolom risk (kiri) hanya ditampilkan di baris pertama per risk */}
-                    {apIndex === 0 && (
-                      <>
-                        <td
-                          rowSpan={rowSpan}
-                          className="px-3 py-2 border border-gray-200 text-center align-top"
-                        >
-                          {groupIndex + 1}
-                        </td>
-                        <td
-                          rowSpan={rowSpan}
-                          className="px-3 py-2 border border-gray-200 text-center align-top"
-                        >
-                          {risk.risk_id_no}
-                        </td>
-                        <td
-                          rowSpan={rowSpan}
-                          className="px-3 py-2 border border-gray-200 align-top break-words whitespace-pre-wrap"
-                          style={{ maxWidth: "250px" }}
-                        >
-                          {risk.risk_description}
-                        </td>
-                        <td
-                          rowSpan={rowSpan}
-                          className="px-3 py-2 border border-gray-200 align-top break-words whitespace-pre-wrap"
-                          style={{ maxWidth: "300px" }}
-                        >
-                          {risk.risk_details}
-                        </td>
-                        <td
-                          rowSpan={rowSpan}
-                          className="px-3 py-2 border border-gray-200 align-top break-words"
-                          style={{ maxWidth: "150px" }}
-                        >
-                          {risk.owners}
-                        </td>
-                      </>
-                    )}
-
-                    {/* AUDIT PROGRAM */}
-                    <td className="px-3 py-2 border border-gray-200 break-words align-top">{ap.ap_code}</td>
-                    <td className="px-3 py-2 border border-gray-200 break-words align-top" style={{ maxWidth: "180px" }}>{ap.substantive_test}</td>
-                    <td className="px-3 py-2 border border-gray-200 break-words whitespace-pre-wrap align-top" style={{ maxWidth: "250px" }}>{ap.objective}</td>
-                    <td className="px-3 py-2 border border-gray-200 break-words whitespace-pre-wrap align-top" style={{ maxWidth: "300px" }}>{ap.procedures}</td>
-
-                    {/* SAMPLING */}
-                    <td className="px-3 py-2 border border-gray-200 break-words align-top" style={{ maxWidth: "180px" }}>{ap.method}</td>
-                    <td className="px-3 py-2 border border-gray-200 break-words whitespace-pre-wrap align-top" style={{ maxWidth: "250px" }}>
-                      {ap.description ?? ap.sampling_description}
-                    </td>
-                    <td className="px-3 py-2 border border-gray-200 break-words align-top" style={{ maxWidth: "180px" }}>{ap.application}</td>
-
-                    {/* ACTION: hanya muncul 1x per risk (rowSpan) */}
-                    {(isPlanningMode || isMoveToDraftMode) && apIndex === 0 && (
-                      <td
-                        rowSpan={rowSpan}
-                        className="px-3 py-2 border border-gray-200 text-center align-top"
-                      >
-                        <div className="flex flex-col items-center gap-2">
-                          {/* Add AP button - hanya muncul saat New Planning mode */}
-                          {isPlanningMode && (
-                            <button
-                              onClick={() =>
-                                window.dispatchEvent(
-                                  new CustomEvent("open-modal", { detail: { name: "add-ap", row: aps[0] } })
-                                )
-                              }
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 text-xs font-medium shadow-sm transition-colors duration-150"
-                              title={`Add Audit Program for ${risk.risk_id_no}`}
-                              aria-label={`Add Audit Program for ${risk.risk_id_no}`}
-                            >
-                              <Pencil size={14} />
-                              <span>Add AP</span>
-                            </button>
-                          )}
-
-                          {/* Move to Draft/Publish button */}
-                          {isMoveToDraftMode && onMoveToDraft && (
-                            <button
-                              type="button"
-                              onClick={() => onMoveToDraft(risk.risk_id)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 text-xs font-medium shadow-sm transition-colors duration-150"
-                            >
-                              <span>{viewDraft ? "Move to Publish" : "Move to Draft"}</span>
-                            </button>
-                          )}
-
-                        </div>
+              return aps.map((ap, apIndex) => (
+                <tr
+                  key={
+                    ap.ap_id
+                      ? `${risk.risk_id}-${ap.ap_id}`
+                      : `${risk.risk_id}-${apIndex}`
+                  }
+                  className={`${
+                    groupIndex % 2 === 0 ? "bg-white" : "bg-gray-50"
+                  } hover:bg-gray-100 transition`}
+                >
+                  {apIndex === 0 && (
+                    <>
+                      <td rowSpan={rowSpan} className={cellCenterClass}>
+                        {groupIndex + 1}
                       </td>
-                    )}
+                      <td rowSpan={rowSpan} className={cellCenterClass}>
+                        {risk.risk_id_no}
+                      </td>
+                      <td rowSpan={rowSpan} className={cellClass}>
+                        {risk.risk_description}
+                      </td>
+                      <td rowSpan={rowSpan} className={cellClass}>
+                        {risk.risk_details}
+                      </td>
+                      <td rowSpan={rowSpan} className={cellClass}>
+                        {risk.owners}
+                      </td>
+                    </>
+                  )}
 
-                    {isDeleteMode && apIndex === 0 && (
-                      <td
-                        rowSpan={rowSpan}
-                        className="px-3 py-2 border border-gray-200 text-center align-top"
-                      >
-                        <div className="flex flex-col items-center gap-2">
-                          {aps
-                            .filter((apItem) => apItem.ap_id)
-                            .map((apItem) => {
-                              const deleteKey = `ap-${departmentApi}-${apItem.ap_id}`;
-                              return (
-                                <button
-                                  key={apItem.ap_id}
-                                  type="button"
-                                  onClick={() => {
-                                    const label = apItem.ap_code || "this AP";
-                                    if (
-                                      confirm(
-                                        `Delete ${label}? AP codes after it will be renumbered automatically.`
-                                      )
-                                    ) {
-                                      setDeleting((prev) => ({ ...prev, [deleteKey]: true }));
-                                      onDeleteAp?.(apItem, departmentApi).finally(() => {
+                  <td className={cellClass}>{ap.ap_code}</td>
+                  <td className={cellClass}>{ap.substantive_test}</td>
+                  <td className={cellClass}>{ap.objective}</td>
+                  <td className={cellClass}>{ap.procedures}</td>
+                  <td className={cellClass}>{ap.method}</td>
+                  <td className={cellClass}>
+                    {ap.description ?? ap.sampling_description}
+                  </td>
+                  <td className={cellClass}>{ap.application}</td>
+
+                  {(isPlanningMode || isMoveToDraftMode) && apIndex === 0 && (
+                    <td rowSpan={rowSpan} className={cellCenterClass}>
+                      <div className="flex flex-col items-center gap-2">
+                        {isPlanningMode && (
+                          <button
+                            onClick={() =>
+                              window.dispatchEvent(
+                                new CustomEvent("open-modal", {
+                                  detail: { name: "add-ap", row: aps[0] },
+                                }),
+                              )
+                            }
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 text-xs font-medium shadow-sm transition-colors duration-150"
+                            title={`Add Audit Program for ${risk.risk_id_no}`}
+                            aria-label={`Add Audit Program for ${risk.risk_id_no}`}
+                          >
+                            <Pencil size={14} />
+                            <span>Add AP</span>
+                          </button>
+                        )}
+
+                        {isMoveToDraftMode && onMoveToDraft && (
+                          <button
+                            type="button"
+                            onClick={() => onMoveToDraft(risk.risk_id)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 text-xs font-medium shadow-sm transition-colors duration-150"
+                          >
+                            <span>
+                              {viewDraft ? "Move to Publish" : "Move to Draft"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+
+                  {isDeleteMode && apIndex === 0 && (
+                    <td rowSpan={rowSpan} className={cellCenterClass}>
+                      <div className="flex flex-col items-center gap-2">
+                        {aps
+                          .filter((apItem) => apItem.ap_id)
+                          .map((apItem) => {
+                            const deleteKey = `ap-${departmentApi}-${apItem.ap_id}`;
+                            return (
+                              <button
+                                key={apItem.ap_id}
+                                type="button"
+                                onClick={() => {
+                                  const label = apItem.ap_code || "this AP";
+                                  if (
+                                    confirm(
+                                      `Delete ${label}? AP codes after it will be renumbered automatically.`,
+                                    )
+                                  ) {
+                                    setDeleting((prev) => ({
+                                      ...prev,
+                                      [deleteKey]: true,
+                                    }));
+                                    onDeleteAp?.(apItem, departmentApi).finally(
+                                      () => {
                                         setDeleting((prev) => {
                                           const next = { ...prev };
                                           delete next[deleteKey];
                                           return next;
                                         });
-                                      });
-                                    }
-                                  }}
-                                  disabled={!onDeleteAp || !departmentApi || deleting[deleteKey]}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 text-xs font-medium shadow-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title={`Delete AP ${apItem.ap_code || ""}`}
-                                >
-                                  <Trash2 size={14} />
-                                  <span>{deleting[deleteKey] ? "Deleting..." : `Delete ${apItem.ap_code || "AP"}`}</span>
-                                </button>
-                              );
-                            })}
-                          {aps.every((apItem) => !apItem.ap_id) && onDelete && departmentApi && (
+                                      },
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  !onDeleteAp ||
+                                  !departmentApi ||
+                                  deleting[deleteKey]
+                                }
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 text-xs font-medium shadow-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={`Delete AP ${apItem.ap_code || ""}`}
+                              >
+                                <Trash2 size={14} />
+                                <span>
+                                  {deleting[deleteKey]
+                                    ? "Deleting..."
+                                    : `Delete ${apItem.ap_code || "AP"}`}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        {aps.every((apItem) => !apItem.ap_id) &&
+                          onDelete &&
+                          departmentApi && (
                             <button
                               type="button"
                               onClick={() => {
                                 const deleteKey = `risk-${departmentApi}-${risk.risk_id}`;
                                 if (
                                   confirm(
-                                    `Delete entire draft risk ${risk.risk_id_no} and all its APs?`
+                                    `Delete entire draft risk ${risk.risk_id_no} and all its APs?`,
                                   )
                                 ) {
-                                  setDeleting((prev) => ({ ...prev, [deleteKey]: true }));
-                                  onDelete(risk.risk_id, departmentApi).finally(() => {
-                                    setDeleting((prev) => {
-                                      const next = { ...prev };
-                                      delete next[deleteKey];
-                                      return next;
-                                    });
-                                  });
+                                  setDeleting((prev) => ({
+                                    ...prev,
+                                    [deleteKey]: true,
+                                  }));
+                                  onDelete(risk.risk_id, departmentApi).finally(
+                                    () => {
+                                      setDeleting((prev) => {
+                                        const next = { ...prev };
+                                        delete next[deleteKey];
+                                        return next;
+                                      });
+                                    },
+                                  );
                                 }
                               }}
-                              disabled={deleting[`risk-${departmentApi}-${risk.risk_id}`]}
+                              disabled={
+                                deleting[
+                                  `risk-${departmentApi}-${risk.risk_id}`
+                                ]
+                              }
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white hover:border-red-600 text-xs font-medium shadow-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                               title={`Delete draft risk ${risk.risk_id_no}`}
                             >
                               <Trash2 size={14} />
                               <span>
-                                {deleting[`risk-${departmentApi}-${risk.risk_id}`]
+                                {deleting[
+                                  `risk-${departmentApi}-${risk.risk_id}`
+                                ]
                                   ? "Deleting..."
                                   : "Delete Risk"}
                               </span>
                             </button>
                           )}
-                        </div>
-                      </td>
-                    )}
+                      </div>
+                    </td>
+                  )}
 
-                    {isEditMode && (
-                      <td className="px-3 py-2 border border-gray-200 text-center align-top">
-                        {ap.ap_id ? (
-                          <button
-                            type="button"
-                            onClick={() => onEditAp?.(ap)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 text-xs font-medium shadow-sm transition-colors duration-150"
-                            title={`Edit AP ${ap.ap_code || ""}`}
-                          >
-                            <Pencil size={14} />
-                            <span>Edit AP</span>
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">-</span>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ));
-              })
-            ) : (
-              <tr>
-                <td colSpan={(isPlanningMode || isMoveToDraftMode || isDeleteMode || isEditMode) ? 14 : 13} className="text-center py-6 text-gray-500 border border-gray-200">
-                  No data available
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-          </div>
-        </div>
-        <div
-          ref={hBarRef}
-          className="shrink-0 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-gray-50"
-          onScroll={() => syncHorizontalScroll("bar")}
-          aria-label="Scroll table horizontally"
-        >
-          <div style={{ width: tableScrollWidth, height: 14 }} />
-        </div>
-      </div>
+                  {isEditMode && (
+                    <td className={cellCenterClass}>
+                      {ap.ap_id ? (
+                        <button
+                          type="button"
+                          onClick={() => onEditAp?.(ap)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 text-xs font-medium shadow-sm transition-colors duration-150"
+                          title={`Edit AP ${ap.ap_code || ""}`}
+                        >
+                          <Pencil size={14} />
+                          <span>Edit AP</span>
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ));
+            })
+          ) : (
+            <tr>
+              <td
+                colSpan={showActionCol ? 13 : 12}
+                className="text-center py-6 text-gray-500 border border-gray-200"
+              >
+                No data available
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </StickyHorizontalScrollTable>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/app/lib/prisma";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 import schedulePool from "@/app/lib/db";
-import { buildWindowFromSchedule } from "@/lib/scheduleYearWindow";
+import { buildWindowFromSchedule, dateToLocalYmd } from "@/lib/scheduleYearWindow";
 import { yearCreatedAtFilter } from "@/app/api/worksheet/_shared/worksheetWhere";
 
 const DEPARTMENTS = [
@@ -117,39 +117,8 @@ const SCHEDULE_ID_BY_DEPT_KEY = Object.fromEntries(
 );
 
 /**
- * Load schedule window (start_date, end_date) per department for sop-review.
- * Returns Map(deptKey -> { start_date, end_date }) for rows where is_configured = true.
- */
-async function loadSopReviewScheduleByDept() {
-  const byDept = new Map();
-  const check = await schedulePool.query(
-    `SELECT EXISTS (
-       SELECT FROM information_schema.tables
-       WHERE table_schema='public' AND table_name='schedule_module_feedback'
-     ) AS exists`
-  );
-  if (!check?.rows?.[0]?.exists) return byDept;
-
-  const r = await schedulePool.query(
-    `SELECT department_id, start_date, end_date
-     FROM public.schedule_module_feedback
-     WHERE module_key = 'sop-review' AND is_configured = true
-     ORDER BY department_id`
-  );
-  for (const row of r.rows || []) {
-    const deptKey = DEPT_KEY_BY_SCHEDULE_ID[String(row.department_id || "").trim()];
-    if (!deptKey || !row.start_date || !row.end_date) continue;
-    byDept.set(deptKey, {
-      start_date: row.start_date,
-      end_date: row.end_date,
-    });
-  }
-  return byDept;
-}
-
-/**
- * Load schedule window (start_date, end_date) per department for a given module.
- * Returns Map(deptKey -> { start_date, end_date }) for rows where is_configured = true.
+ * Load schedule window (start_date, end_date, feedbackUpdatedAt) per department for a given module.
+ * Returns Map(deptKey -> { start_date, end_date, ... }) for rows where is_configured = true.
  */
 async function loadModuleScheduleByDept(moduleKey) {
   const byDept = new Map();
@@ -179,7 +148,7 @@ async function loadModuleScheduleByDept(moduleKey) {
       end_date: row.end_date,
       start_ymd: row.start_ymd ? String(row.start_ymd).trim() : null,
       end_ymd: row.end_ymd ? String(row.end_ymd).trim() : null,
-      /** Last save of this module row; worksheet progress only counts publishes after this (new cycle after re-schedule). */
+      /** Last save of this module row; progress only counts publishes after this (new cycle after re-schedule). */
       feedbackUpdatedAt: row.feedback_updated_at ?? row.updated_at ?? null,
     });
   }
@@ -204,9 +173,11 @@ function clipIsoYmdRangeToYear(startYmd, endYmd, year) {
 }
 
 /**
- * SOP Review "Done" = user clicked Publish in that department FOR THE CURRENT SCHEDULE only.
- * We require a publish whose published_at falls within the department's schedule window (start_date..end_date).
- * So: hanya setelah user click Publish di module/department yang dipilih di schedule, baru dianggap Done.
+ * SOP Review "Done" = someone published for that department in the selected audit year
+ * (user / reviewer / admin). Do NOT require published_at inside the schedule calendar
+ * window only — publish uses NOW(), which often falls outside start_date..end_date.
+ * Match worksheet / audit-finding: require schedule configured, year match, and
+ * published_at after last schedule save when available.
  */
 async function getSopReviewDoneSet(scheduleByDept, year) {
   const client = await pool.connect();
@@ -217,20 +188,52 @@ async function getSopReviewDoneSet(scheduleByDept, year) {
       const metaTable = `sop_report_${d.sopSlug}`;
       deptByIndex.push(d.key);
       const schedule = scheduleByDept?.get(d.key);
-      const window = buildWindowFromSchedule(schedule, year);
-      if (!window) {
+      if (!schedule?.start_date || !schedule?.end_date) {
         promises.push(Promise.resolve(false));
         continue;
       }
+
+      const params = [];
+      const conditions = ["published_at IS NOT NULL"];
+
+      const cutoffRaw = schedule.feedbackUpdatedAt;
+      const cutoff = cutoffRaw != null ? new Date(cutoffRaw) : null;
+      if (cutoff && !Number.isNaN(cutoff.getTime())) {
+        params.push(cutoff.toISOString());
+        conditions.push(`published_at >= $${params.length}::timestamptz`);
+      }
+
+      const yf = yearCreatedAtFilter(year);
+      if (yf) {
+        params.push(yf.gte.toISOString());
+        conditions.push(`published_at >= $${params.length}::timestamptz`);
+        params.push(yf.lt.toISOString());
+        conditions.push(`published_at < $${params.length}::timestamptz`);
+      } else {
+        const window = buildWindowFromSchedule(schedule, null);
+        if (!window) {
+          promises.push(Promise.resolve(false));
+          continue;
+        }
+        params.push(dateToLocalYmd(window.start) || window.start.toISOString());
+        conditions.push(`published_at::date >= $${params.length}::date`);
+        params.push(dateToLocalYmd(window.end) || window.end.toISOString());
+        conditions.push(`published_at::date <= $${params.length}::date`);
+      }
+
+      const stepsReportTable = `sops_report_${d.sopSlug}`;
+      const whereSql = conditions.join(" AND ");
+
       promises.push(
         client
           .query(
-            `SELECT 1 FROM public.${metaTable}
-             WHERE published_at IS NOT NULL
-               AND published_at::date >= $1::date
-               AND published_at::date <= $2::date
+            `SELECT 1 WHERE EXISTS (
+               SELECT 1 FROM public.${metaTable} WHERE ${whereSql}
+             ) OR EXISTS (
+               SELECT 1 FROM public.${stepsReportTable} WHERE ${whereSql}
+             )
              LIMIT 1`,
-            [window.start, window.end]
+            params
           )
           .then((r) => (r?.rowCount ?? 0) > 0)
           .catch(() => false)
@@ -629,7 +632,7 @@ export async function GET(req) {
       loadAssignmentsByUser(userName || null, year),
       loadArchive(),
       loadConfiguredModules(year),
-      loadSopReviewScheduleByDept(),
+      loadModuleScheduleByDept("sop-review"),
       loadModuleScheduleByDept("worksheet"),
       loadModuleScheduleByDept("audit-finding"),
       loadModuleScheduleByDept("evidence"),

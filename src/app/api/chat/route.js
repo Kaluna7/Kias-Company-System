@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { isAdminLikeRole } from "@/lib/roles";
 
 // Simple chat table:
 // public.schedule_chat_messages (
@@ -206,7 +207,7 @@ export async function DELETE(req) {
     await ensureChatTable(schedulePool);
     const currentName = (session.user.name || "").trim();
     const role = (session.user.role || "").toLowerCase();
-    const isAdmin = role === "admin" || role === "reviewer";
+    const isAdmin = isAdminLikeRole(role);
 
     const client = await schedulePool.connect();
     try {

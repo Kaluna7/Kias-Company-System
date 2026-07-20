@@ -5,6 +5,7 @@ import { DropDown, Search } from "../features/Button";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { Menu, X } from "lucide-react";
+import { isAdminRole } from "@/lib/roles";
 
 export default function SmallHeader({
   label,
@@ -35,7 +36,7 @@ export default function SmallHeader({
   const sortByItems = sortByItemsProp ?? [];
 
   const hasMobileMenuContent =
-    (role === "admin" && fileItems.length > 0) ||
+    (isAdminRole(role) && fileItems.length > 0) ||
     editItems.length > 0 ||
     viewItems.length > 0 ||
     sortByItems.length > 0 ||
@@ -125,7 +126,7 @@ export default function SmallHeader({
           {/* Menu (Desktop Only) */}
           <div className="hidden md:flex flex-row gap-1 md:gap-2 items-center">
             {/* File hanya untuk admin */}
-            {role === "admin" && fileItems.length > 0 && (
+            {isAdminRole(role) && fileItems.length > 0 && (
               <DropDown
                 items={fileItems}
                 label="File"
@@ -137,7 +138,7 @@ export default function SmallHeader({
             )}
 
             {/* Edit hanya untuk admin */}
-            {role === "admin" && editItems.length > 0 && (
+            {isAdminRole(role) && editItems.length > 0 && (
               <DropDown
                 items={editItems}
                 label="Edit"
@@ -194,7 +195,7 @@ export default function SmallHeader({
           <div className="absolute top-full left-0 right-0 bg-[#141D38]/95 backdrop-blur-xl border-b border-white/20 shadow-xl md:hidden max-h-[70vh] overflow-y-auto">
             <div className="px-4 py-4 space-y-2">
               {/* File hanya untuk admin */}
-              {role === "admin" && fileItems.length > 0 && (
+              {isAdminRole(role) && fileItems.length > 0 && (
                 <div className="mb-3">
                   <div className="text-white/70 text-xs font-semibold mb-2 px-2">File</div>
                   {fileItems.map((item, idx) => (

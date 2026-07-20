@@ -11,6 +11,7 @@ import {
   normalizeSopDescriptionKey,
 } from "@/app/utils/mergeSopReviewComments";
 import { notifySopReviewDataChanged } from "@/app/lib/sop-review/sopReviewNotifyClient";
+import { isAdminRole } from "@/lib/roles";
 
 
 // Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
@@ -204,7 +205,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const { data: session } = useSession();
   const role = (session?.user?.role || "").toLowerCase();
   const isReviewer = role === "reviewer";
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
   const isUser = role === "user";
   const [preparerStatus, setPreparerStatus] = useState("DRAFT");
   const [reviewerStatus, setReviewerStatus] = useState("DRAFT");
@@ -1074,19 +1075,18 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                       <span>➕</span>
                       <span className="hidden sm:inline">Add SOP Item</span>
                     </button>
-                    {!isUser && (
-                      <button
-                        onClick={openPublishModal}
-                        disabled={sopData.length === 0 || isSaving}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                          sopData.length === 0 || isSaving
-                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                            : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md"
-                        }`}
-                      >
-                        {isSaving ? "Publishing..." : "Publish"}
-                      </button>
-                    )}
+                    <button
+                      onClick={openPublishModal}
+                      disabled={sopData.length === 0 || isSaving}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        sopData.length === 0 || isSaving
+                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md"
+                      }`}
+                      title="Publish SOP review (user, reviewer, or admin)"
+                    >
+                      {isSaving ? "Publishing..." : "Publish"}
+                    </button>
                   </div>
                 </div>
               </div>

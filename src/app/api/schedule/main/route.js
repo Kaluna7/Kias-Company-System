@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { buildWindowFromSchedule, dateToLocalYmd } from "@/lib/scheduleYearWindow";
+import { requireScheduleManager } from "@/app/api/schedule/_shared/auth";
 import pkg from "pg";
 const { Pool } = pkg;
 
@@ -141,6 +142,9 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
+    const { error: authError } = await requireScheduleManager();
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const { department_name, incharge_modules, start_date, end_date, module_dates } = body || {};
 
@@ -248,6 +252,9 @@ export async function POST(req) {
 
 export async function DELETE(req) {
   try {
+    const { error: authError } = await requireScheduleManager();
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const { department_name } = body || {};
 

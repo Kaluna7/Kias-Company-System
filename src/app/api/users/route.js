@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import pool from "@/app/lib/db";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { canCreateAccounts, isAdminRole, isSuperAdmin } from "@/lib/roles";
 
 function toIntSafe(v, fallback) {
   if (v === undefined || v === null || v === "") return fallback;
@@ -19,14 +20,17 @@ export async function GET(req) {
     const offset = (page - 1) * pageSize;
 
     const countRes = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM public.users WHERE role IS NULL OR LOWER(role) <> 'admin'`
+      `SELECT COUNT(*)::int AS total FROM public.users
+       WHERE role IS NULL
+          OR LOWER(role) NOT IN ('admin', 'super_admin', 'superadmin')`
     );
     const total = countRes.rows?.[0]?.total ?? 0;
 
     const r = await pool.query(
       `SELECT id, name, email, role, COALESCE(avatar_url, '') AS avatar_url
        FROM public.users
-       WHERE role IS NULL OR LOWER(role) <> 'admin'
+       WHERE role IS NULL
+          OR LOWER(role) NOT IN ('admin', 'super_admin', 'superadmin')
        ORDER BY name ASC
        LIMIT $1 OFFSET $2`,
       [pageSize, offset]
@@ -45,10 +49,9 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-    const role = (session?.user?.role || "").toLowerCase();
-    if (role !== "admin") {
+    if (!canCreateAccounts(session?.user?.role)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: admin only" },
+        { success: false, error: "Forbidden: super admin only" },
         { status: 403 }
       );
     }
@@ -111,10 +114,9 @@ export async function POST(req) {
 export async function DELETE(req) {
   try {
     const session = await getServerSession(authOptions);
-    const role = (session?.user?.role || "").toLowerCase();
-    if (role !== "admin") {
+    if (!canCreateAccounts(session?.user?.role)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: admin only" },
+        { success: false, error: "Forbidden: super admin only" },
         { status: 403 }
       );
     }
@@ -128,7 +130,7 @@ export async function DELETE(req) {
       );
     }
 
-    // Safety: never delete admin account from this endpoint.
+    // Safety: never delete admin / super_admin from this endpoint.
     const target = await pool.query(
       `SELECT id, LOWER(COALESCE(role, '')) AS role FROM public.users WHERE id = $1 LIMIT 1`,
       [id]
@@ -140,7 +142,7 @@ export async function DELETE(req) {
         { status: 404 }
       );
     }
-    if (targetUser.role === "admin") {
+    if (isAdminRole(targetUser.role) || isSuperAdmin(targetUser.role)) {
       return NextResponse.json(
         { success: false, error: "Cannot delete admin user" },
         { status: 403 }

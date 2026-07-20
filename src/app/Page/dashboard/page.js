@@ -8,6 +8,12 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 import { exportSamplingToExcel } from "@/app/utils/exportSamplingExcel";
+import {
+  canCreateAccounts,
+  canManageSchedule,
+  isAdminLikeRole,
+} from "@/lib/roles";
+import { Eye, EyeOff } from "lucide-react";
 
 const ChatSidebar = nextDynamic(() => import("./ChatSidebar"), { ssr: false });
 
@@ -54,6 +60,12 @@ function DashboardPageContent() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isChangeEmailOpen, setIsChangeEmailOpen] = useState(false);
+  const [changeEmailStep, setChangeEmailStep] = useState(0); // 0=email, 1=password, 2=success
+  const [newEmail, setNewEmail] = useState("");
+  const [changeEmailPassword, setChangeEmailPassword] = useState("");
+  const [showChangeEmailPassword, setShowChangeEmailPassword] = useState(false);
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
   const [isHelpSupportOpen, setIsHelpSupportOpen] = useState(false);
   const [isSamplingOpen, setIsSamplingOpen] = useState(false);
@@ -92,15 +104,16 @@ function DashboardPageContent() {
   const confirmActionRef = useRef(null);
 
   const role = (session?.user?.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "reviewer";
-  const canCreateEmployeeAccount = role === "admin";
+  const isAdmin = isAdminLikeRole(role);
+  const canCreateEmployeeAccount = canCreateAccounts(role);
+  const canOpenSchedule = canManageSchedule(role);
 
   const auditItems = useMemo(
     () =>
-      isAdmin
+      canOpenSchedule
         ? [{ id: "D1", title: "Schedule", category: "planning", href: "/Page/schedule/" }, ...BASE_AUDIT_ITEMS]
         : BASE_AUDIT_ITEMS,
-    [isAdmin]
+    [canOpenSchedule]
   );
 
   const filteredItems = useMemo(
@@ -149,7 +162,7 @@ function DashboardPageContent() {
     async function loadProgress() {
       try {
         const role = (session?.user?.role || "").toLowerCase();
-        const isAdmin = role === "admin" || role === "reviewer";
+        const isAdmin = isAdminLikeRole(role);
         const userName = (session?.user?.name || "").trim();
         const effectiveUserName = isAdmin ? (progressUserName || "") : userName;
 
@@ -209,7 +222,7 @@ function DashboardPageContent() {
     async function loadUsersIfAdmin() {
       try {
         const role = (session?.user?.role || "").toLowerCase();
-        const isAdmin = role === "admin" || role === "reviewer";
+        const isAdmin = isAdminLikeRole(role);
         if (!isAdmin) {
           setProgressUsers([]);
           setProgressUserName("");
@@ -361,7 +374,7 @@ function DashboardPageContent() {
             }
             setProgress((p) => ({ ...p, loading: true }));
             const roleNow = (session?.user?.role || "").toLowerCase();
-            const isAdminNow = roleNow === "admin" || roleNow === "reviewer";
+            const isAdminNow = isAdminLikeRole(roleNow);
             const userName = (session?.user?.name || "").trim();
             const effectiveUserName = isAdminNow ? progressUserName : userName;
             const params = new URLSearchParams();
@@ -424,6 +437,71 @@ function DashboardPageContent() {
     if (isSavingProfile) return;
     setIsEditProfileOpen(false);
   }, [isSavingProfile]);
+
+  const openChangeEmail = useCallback(() => {
+    setNewEmail("");
+    setChangeEmailPassword("");
+    setShowChangeEmailPassword(false);
+    setChangeEmailStep(0);
+    setIsChangeEmailOpen(true);
+  }, []);
+
+  const closeChangeEmail = useCallback(() => {
+    if (isChangingEmail) return;
+    if (changeEmailStep === 2) return;
+    setIsChangeEmailOpen(false);
+    setNewEmail("");
+    setChangeEmailPassword("");
+    setShowChangeEmailPassword(false);
+    setChangeEmailStep(0);
+  }, [isChangingEmail, changeEmailStep]);
+
+  const handleChangeEmailContinue = useCallback(() => {
+    const email = (newEmail || "").trim().toLowerCase();
+    const current = String(session?.user?.email || "").toLowerCase();
+    if (!email) {
+      toast.show("Please enter a new email.", "warning");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.show("Please enter a valid email address.", "warning");
+      return;
+    }
+    if (email === current) {
+      toast.show("New email must be different from your current email.", "warning");
+      return;
+    }
+    setChangeEmailStep(1);
+  }, [newEmail, session?.user?.email, toast]);
+
+  const handleChangeEmailSubmit = useCallback(async () => {
+    const email = (newEmail || "").trim().toLowerCase();
+    if (!changeEmailPassword) {
+      toast.show("Please enter your password.", "warning");
+      return;
+    }
+    try {
+      setIsChangingEmail(true);
+      const res = await fetch("/api/profile/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newEmail: email, password: changeEmailPassword }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        toast.show(json?.error || `Failed to change email (HTTP ${res.status})`, "error");
+        return;
+      }
+      setChangeEmailStep(2);
+      setTimeout(() => {
+        signOut({ callbackUrl: "/" });
+      }, 1800);
+    } catch (e) {
+      toast.show(e?.message || "Failed to change email.", "error");
+    } finally {
+      setIsChangingEmail(false);
+    }
+  }, [newEmail, changeEmailPassword, toast]);
 
   const openChangePassword = useCallback(() => {
     setIsProfileOpen(false);
@@ -833,7 +911,7 @@ function DashboardPageContent() {
 
               {(() => {
                 const role = String(userRole || "").toLowerCase();
-                return role === "admin" || role === "reviewer";
+                return isAdminLikeRole(role);
               })() && (
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <div className="text-xs font-bold text-gray-600">View as user</div>
@@ -866,7 +944,7 @@ function DashboardPageContent() {
                     const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
                     const isOpen = expandedModuleKey === m.key;
                     const role = String(userRole || "").toLowerCase();
-                    const showFinish = (role === "admin" || role === "reviewer") && m.total > 0 && m.done === m.total;
+                    const showFinish = isAdminLikeRole(role) && m.total > 0 && m.done === m.total;
 
                     return (
                       <div key={m.key} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -966,7 +1044,7 @@ function DashboardPageContent() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Edit Profile</h2>
-                <p className="text-xs text-slate-500 mt-1">Update your display name and profile photo.</p>
+                <p className="text-xs text-slate-500 mt-1">Update your display name, email, and profile photo.</p>
               </div>
               <button
                 type="button"
@@ -1015,6 +1093,25 @@ function DashboardPageContent() {
                   placeholder="Your name"
                 />
               </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Email</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={session?.user?.email || ""}
+                    readOnly
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={openChangeEmail}
+                    className="shrink-0 px-3 py-2 rounded-xl text-xs font-semibold text-[#141D38] border border-slate-200 hover:bg-slate-50 whitespace-nowrap"
+                    disabled={isSavingProfile}
+                  >
+                    Change email
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -1035,6 +1132,141 @@ function DashboardPageContent() {
                 {isSavingProfile ? "Saving..." : "Save changes"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isChangeEmailOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-3 p-6 space-y-5 overflow-hidden">
+            {changeEmailStep === 2 ? (
+              <div className="py-6 text-center space-y-3">
+                <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">Email has been changed</h2>
+                <p className="text-sm text-slate-500">
+                  You will be signed out. Please log in again with your new email.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Change Email</h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {changeEmailStep === 0
+                        ? "Enter your new email address."
+                        : "Confirm with your current password."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeChangeEmail}
+                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                    disabled={isChangingEmail}
+                  >
+                    <span className="sr-only">Close</span>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="relative overflow-hidden">
+                  <div
+                    className="flex w-[200%] transition-transform duration-300 ease-out"
+                    style={{ transform: `translateX(-${changeEmailStep * 50}%)` }}
+                  >
+                    <div className="w-1/2 pr-1 space-y-3 shrink-0">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-slate-700">New Email</label>
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                          placeholder="new@email.com"
+                          autoComplete="email"
+                        />
+                      </div>
+                    </div>
+                    <div className="w-1/2 pl-1 space-y-3 shrink-0">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-slate-700">Password</label>
+                        <div className="relative">
+                          <input
+                            type={showChangeEmailPassword ? "text" : "password"}
+                            value={changeEmailPassword}
+                            onChange={(e) => setChangeEmailPassword(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                            placeholder="Current password"
+                            autoComplete="current-password"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleChangeEmailSubmit();
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowChangeEmailPassword((v) => !v)}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                            aria-label={showChangeEmailPassword ? "Hide password" : "Show password"}
+                          >
+                            {showChangeEmailPassword ? (
+                              <EyeOff className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <Eye className="h-4 w-4" aria-hidden />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between gap-2 pt-2">
+                  {changeEmailStep === 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setChangeEmailStep(0)}
+                      className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+                      disabled={isChangingEmail}
+                    >
+                      Back
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={closeChangeEmail}
+                      className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+                      disabled={isChangingEmail}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  {changeEmailStep === 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleChangeEmailContinue}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#141D38] to-[#2D3A5A] hover:shadow-md"
+                    >
+                      Continue
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleChangeEmailSubmit}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#141D38] to-[#2D3A5A] hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={isChangingEmail}
+                    >
+                      {isChangingEmail ? "Verifying..." : "Confirm"}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1113,7 +1345,7 @@ function DashboardPageContent() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Create Account for Employee</h2>
-                <p className="text-xs text-slate-500 mt-1">Admin can create employee account and set role.</p>
+                <p className="text-xs text-slate-500 mt-1">Only super admin can create employee accounts and set role.</p>
               </div>
               <button
                 type="button"

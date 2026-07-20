@@ -8,6 +8,7 @@ import DataTableAudit from "@/app/components/ui/AuditProgram/DataTableAudit";
 import SmallHeader from "@/app/components/layout/SmallHeader";
 import { GenericInputModal } from "@/app/components/ui/GenericInput";
 import { Search } from "@/app/components/features/Button";
+import { isAdminRole } from "@/lib/roles";
 
 export default function HrdClient({ initialData, initialSortBy = "risk_id_no", initialSortDir = "asc" }) {
   const {
@@ -25,7 +26,7 @@ export default function HrdClient({ initialData, initialSortBy = "risk_id_no", i
 
   const { data: session } = useSession();
   const role = session?.user?.role ?? null;
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");

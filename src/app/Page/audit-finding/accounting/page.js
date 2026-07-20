@@ -7,7 +7,7 @@ async function loadAccountingData(year) {
 
     const url = new URL(`${baseUrl}/api/audit-finding/accounting`);
     url.searchParams.set("page", "1");
-    url.searchParams.set("pageSize", "50");
+    url.searchParams.set("pageSize", "20");
     if (!Number.isNaN(year) && year) {
       url.searchParams.set("year", String(year));
     }

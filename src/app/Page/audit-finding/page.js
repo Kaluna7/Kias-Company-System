@@ -6,6 +6,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getAuditFindingMetaRecord } from "@/lib/auditFinding/getMetaRecord";
 import { getUserAllowedDepartments } from "@/lib/schedule/getUserAllowedDepartments";
 import { loadModuleScheduleRows } from "@/lib/schedule/loadModuleScheduleRows";
+import { isAdminRole } from "@/lib/roles";
 import {
   buildScheduleWindowsByDeptKey,
   formatScheduleRange,
@@ -42,7 +43,7 @@ export default async function B2AuditFinding({ searchParams }) {
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
   const role = (session?.user?.role || "").toLowerCase();
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
   const isReviewer = role === "reviewer";
   
   // Get user assignments for Audit Finding module

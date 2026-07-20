@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { requireScheduleArchiver } from "@/app/api/schedule/_shared/auth";
 import pkg from "pg";
 const { Pool } = pkg;
 
@@ -81,6 +82,9 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
+    const { error: authError } = await requireScheduleArchiver();
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const module_key = String(body?.module_key || "").trim();
     const scope = String(body?.scope || "module").trim(); // default module archive

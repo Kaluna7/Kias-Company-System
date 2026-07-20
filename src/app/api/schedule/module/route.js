@@ -5,6 +5,7 @@ import pkg from "pg";
 const { Pool } = pkg;
 import prisma from "@/app/lib/prisma";
 import { buildWindowFromSchedule, dateToLocalYmd } from "@/lib/scheduleYearWindow";
+import { requireScheduleManager } from "@/app/api/schedule/_shared/auth";
 
 // Reuse global pool to avoid too many clients in dev/serverless
 if (!global._pgPool) {
@@ -332,6 +333,9 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
+    const { error: authError } = await requireScheduleManager();
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const {
       module_key,
@@ -447,6 +451,9 @@ export async function POST(req) {
 
 export async function DELETE(req) {
   try {
+    const { error: authError } = await requireScheduleManager();
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const { module_key, department_id } = body || {};
 

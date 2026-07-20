@@ -10,6 +10,8 @@ import { mergeReviewFindingRows } from "@/app/lib/audit-review/keyFindingRow";
 import { parseStoredJsonList } from "@/app/utils/parseStoredJsonList";
 import { notifyAuditReviewPublishChanged } from "@/app/lib/audit-review/reportPublishLockClient";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
+import Pagination from "@/app/components/ui/Pagination";
+import ScrollToTopButton from "@/app/components/ui/ScrollToTopButton";
 import { exportToStyledExcel } from "@/app/utils/exportExcel";
 import {
   buildRiskDescriptionLookup,
@@ -17,30 +19,40 @@ import {
   resolveRiskMetaForFindingRow,
 } from "@/app/lib/audit-review/riskDescriptionLookup";
 
-const AUDIT_REVIEW_TABLE_WIDTH = 3276;
+const FINDINGS_PAGE_SIZE = 20;
+const AUDIT_REVIEW_TABLE_WIDTH = 3400;
 const AUDIT_REVIEW_COL_GROUP = (
   <colgroup>
-    <col style={{ width: 36 }} />
-    <col style={{ width: 140 }} />
-    <col style={{ width: 220 }} />
-    <col style={{ width: 100 }} />
-    <col style={{ width: 160 }} />
+    <col style={{ width: 48 }} />
+    <col style={{ width: 150 }} />
+    <col style={{ width: 240 }} />
+    <col style={{ width: 90 }} />
+    <col style={{ width: 150 }} />
     <col style={{ width: 160 }} />
     <col style={{ width: 280 }} />
     <col style={{ width: 280 }} />
-    <col style={{ width: 160 }} />
+    <col style={{ width: 140 }} />
     <col style={{ width: 220 }} />
+    <col style={{ width: 170 }} />
     <col style={{ width: 160 }} />
     <col style={{ width: 160 }} />
-    <col style={{ width: 160 }} />
-    <col style={{ width: 160 }} />
+    <col style={{ width: 170 }} />
     <col style={{ width: 140 }} />
     <col style={{ width: 160 }} />
-    <col style={{ width: 160 }} />
-    <col style={{ width: 200 }} />
-    <col style={{ width: 200 }} />
+    <col style={{ width: 150 }} />
+    <col style={{ width: 210 }} />
+    <col style={{ width: 210 }} />
   </colgroup>
 );
+
+const TH_BASE =
+  "px-3 py-3 text-center text-[13px] leading-snug font-semibold tracking-wide text-white border border-slate-600/80 align-middle whitespace-normal";
+const TH_CLASS = `${TH_BASE} bg-slate-800`;
+const TH_REVIEW_CLASS = `${TH_BASE} bg-blue-800`;
+const TH_AUDITEE_CLASS = `${TH_BASE} bg-amber-800`;
+const TD_CLASS =
+  "p-2.5 text-[13px] leading-snug text-slate-800 border border-slate-200 align-top";
+const TD_MUTED_CLASS = `${TD_CLASS} bg-slate-50/80`;
 
 // Default options for SELECT fields based on Executive Summary template
 const OBJECTIVE_OPTIONS = [
@@ -149,7 +161,7 @@ function normalizeKeyFindingRows(findings) {
 
 function normalizeKeyFindingRow(finding, idx) {
   return {
-    no: finding?.no ?? idx + 1,
+    no: idx + 1,
     riskId: finding?.riskId || finding?.risk_id || "",
     riskDetails:
       finding?.riskDetails || finding?.risk_details || finding?.risk_description || "",
@@ -230,6 +242,7 @@ export default function AuditReviewDeptClient({
   );
   const [isTableEditMode, setIsTableEditMode] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [findingsPage, setFindingsPage] = useState(1);
 
   const autoAuditPeriod = useMemo(() => {
     const sourceRows = Array.isArray(initialFindings) ? initialFindings : [];
@@ -937,14 +950,35 @@ export default function AuditReviewDeptClient({
   }, [selectedYear]);
 
   const tableFieldClass =
-    "w-full min-w-0 text-[11px] leading-tight border border-slate-300 rounded px-1 py-0.5 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+    "w-full min-w-0 text-[13px] leading-snug border border-slate-300 rounded px-1.5 py-1 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
   const tableAreaClass =
-    "w-full min-w-0 text-[11px] leading-tight border border-slate-300 rounded px-1 py-0.5 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[2.5rem] disabled:opacity-50 disabled:cursor-not-allowed";
+    "w-full min-w-0 text-[13px] leading-snug border border-slate-300 rounded px-1.5 py-1 bg-white text-gray-800 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[2.5rem] disabled:opacity-50 disabled:cursor-not-allowed";
 
-  const displayFindings = useMemo(() => {
+  const allFindings = useMemo(() => {
     if (isTableEditMode) return keyFindings;
     return normalizeKeyFindingRows(keyFindings);
   }, [keyFindings, isTableEditMode]);
+
+  const findingsMeta = useMemo(
+    () => ({
+      total: allFindings.length,
+      page: findingsPage,
+      pageSize: FINDINGS_PAGE_SIZE,
+    }),
+    [allFindings.length, findingsPage],
+  );
+
+  const displayFindings = useMemo(() => {
+    const start = (findingsPage - 1) * FINDINGS_PAGE_SIZE;
+    return allFindings.slice(start, start + FINDINGS_PAGE_SIZE);
+  }, [allFindings, findingsPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(allFindings.length / FINDINGS_PAGE_SIZE) || 1);
+    if (findingsPage > totalPages) setFindingsPage(totalPages);
+  }, [allFindings.length, findingsPage]);
+
+  const findingsPageOffset = (findingsPage - 1) * FINDINGS_PAGE_SIZE;
 
   const handleExportExcel = useCallback(async () => {
     const rows = normalizeKeyFindingRows(keyFindings);
@@ -1070,73 +1104,113 @@ export default function AuditReviewDeptClient({
           background: #94a3b8;
         }
       `}</style>
-      <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-gradient-to-br from-gray-50 via-slate-50/95 to-blue-50/80">
-      <div className="fixed top-2 left-2 sm:top-4 sm:left-4 z-40">
-        <button
-          onClick={handleBack}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full shadow-md hover:shadow-lg border border-slate-300 bg-white/95 text-xs sm:text-sm font-semibold text-slate-700 transition-all duration-300"
-          title="Back"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
-      </div>
-
-      {/* Header */}
-      <header
-        className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl transition-all duration-700 ease-out max-h-[90vh] overflow-y-auto overscroll-contain ${
-          isHeaderCollapsed ? "transform -translate-y-full opacity-0 scale-95" : "transform translate-y-0 opacity-100 scale-100"
-        }`}
-        style={{
-          scrollbarWidth: 'thin',
-          scrollbarColor: '#cbd5e1 #f1f5f9',
-        }}
-      >
-        <div className="max-w-7xl mx-auto">
-          <div
-            className={`px-3 sm:px-6 py-3 sm:py-4 transition-all duration-500 delay-200 ${
-              isHeaderCollapsed ? "opacity-0 transform translate-y-2" : "opacity-100 transform translate-y-0"
-            }`}
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 via-slate-50/95 to-blue-50/80">
+      {/* Unified top bar — always visible */}
+      <div className="fixed top-0 left-0 right-0 z-40 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-3 py-2.5 sm:gap-4 sm:px-5 sm:py-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:text-sm"
+            title="Back"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 sm:gap-4 flex-1">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg flex items-center justify-center flex-shrink-0">
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-1">
-                    <h1 className="text-base sm:text-xl md:text-2xl font-bold text-slate-900 tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text">
-                      {titleCode} AUDIT REVIEW
-                    </h1>
-                    <span className="px-2 py-0.5 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 text-[10px] sm:text-xs font-bold rounded-full border border-blue-200">
-                      {deptName}
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-600 font-medium">Internal Audit Review Executive Summary</p>
-                </div>
-              </div>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+                {titleCode} AUDIT REVIEW
+              </span>
+              <span className="hidden h-3 w-px bg-slate-300 sm:inline-block" aria-hidden="true" />
+              <h1 className="truncate text-sm font-bold text-slate-900 sm:text-base md:text-lg">
+                {deptName}
+              </h1>
             </div>
+            <p className="truncate text-[11px] text-slate-600 sm:text-xs">
+              Internal Audit Review Executive Summary
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <span
+              className={`hidden items-center rounded-full px-2.5 py-1 text-[10px] font-semibold sm:inline-flex sm:text-xs ${
+                isLocked
+                  ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border border-slate-200 bg-slate-100 text-slate-600"
+              }`}
+            >
+              {isLocked ? "Locked for Report" : "Unlocked"}
+            </span>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => (isLocked ? handleToggleUnlock() : handleSaveAll(true))}
+              className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-3 sm:py-2 sm:text-xs ${
+                isLocked
+                  ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {loading ? "Saving..." : isLocked ? "Unlock" : "Lock"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:h-10 sm:w-10"
+              title={isHeaderCollapsed ? "Show executive summary" : "Hide executive summary"}
+              aria-expanded={!isHeaderCollapsed}
+            >
+              {isHeaderCollapsed ? (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Executive Summary Section in Header */}
-        <div className="max-w-7xl mx-auto">
-          <div className="px-4 sm:px-6 pb-4">
-            <div className="bg-white/70 backdrop-blur-sm rounded-xl p-3 sm:p-4 border border-slate-200/50 shadow-md">
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-200/50">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Collapsible Executive Summary panel */}
+      <header
+        className={`fixed left-0 right-0 z-30 max-h-[min(70vh,640px)] overflow-y-auto overscroll-contain border-b border-slate-200/60 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 shadow-lg backdrop-blur-xl transition-all duration-300 ease-out ${
+          isHeaderCollapsed
+            ? "pointer-events-none top-14 -translate-y-2 opacity-0 sm:top-[3.75rem]"
+            : "top-14 translate-y-0 opacity-100 sm:top-[3.75rem]"
+        }`}
+        style={{
+          scrollbarWidth: "thin",
+          scrollbarColor: "#cbd5e1 #f1f5f9",
+        }}
+      >
+        <div className="mx-auto max-w-[1600px] px-3 pb-4 pt-3 sm:px-5">
+            <div className="rounded-xl border border-slate-200/50 bg-white/70 p-3 shadow-md backdrop-blur-sm sm:p-4">
+              <div className="mb-3 flex items-center gap-2 border-b border-slate-200/50 pb-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm">
+                  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
                 <h3 className="text-sm font-bold text-slate-800">Executive Summary</h3>
+                <span
+                  className={`ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold sm:hidden ${
+                    isLocked
+                      ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border border-slate-200 bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {isLocked ? "Locked for Report" : "Unlocked"}
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {/* Objective of the Audit */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
@@ -1367,78 +1441,29 @@ export default function AuditReviewDeptClient({
                 </div>
               </div>
             </div>
-          </div>
         </div>
       </header>
 
-      {/* Toggle Header Button */}
-      <button
-        onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-        className="fixed top-2 right-2 sm:top-4 sm:right-4 z-40 w-9 h-8 sm:w-11 sm:h-9 flex items-center justify-center rounded-full shadow-md hover:shadow-lg border border-slate-300 bg-white/95 text-xs sm:text-sm font-semibold text-slate-700 transition-all duration-300 transform hover:scale-110 active:scale-95"
-        title={isHeaderCollapsed ? "Show header" : "Hide header"}
-      >
-        {isHeaderCollapsed ? (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
-          </svg>
-        ) : (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        )}
-      </button>
-
       {/* Content */}
-      <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden w-full px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
-          isHeaderCollapsed ? "pt-14 sm:pt-16" : "pt-24 sm:pt-28 md:pt-32"
-        }`}
-      >
+      <div className="w-full pb-4 pt-16 sm:pt-[4.25rem]">
         {/* Error Message */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mx-3 mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mx-4">
             {error}
           </div>
         )}
 
-        {/* Header Card */}
-        <div className="mb-4 shrink-0">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold text-slate-500 tracking-wide">{titleCode} AUDIT REVIEW</div>
-                <div className="text-lg font-bold text-slate-900">{deptName}</div>
-                <div className="text-sm text-slate-600">Internal Audit Review Executive Summary</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                  isLocked
-                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                    : "bg-slate-100 text-slate-600 border border-slate-200"
-                }`}>
-                  {isLocked ? "Locked for Report" : "Unlocked"}
+        {/* Table — full bleed */}
+        <div className="mb-4 border-y border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2.5 sm:px-4">
+            <span className="text-sm font-semibold text-slate-700">
+              Key findings
+              {findingsMeta.total > 0 ? (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  · {findingsMeta.total} · max {FINDINGS_PAGE_SIZE}/page
                 </span>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => (isLocked ? handleToggleUnlock() : handleSaveAll(true))}
-                  className={`inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
-                    isLocked
-                      ? "bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
-                  } disabled:opacity-60 disabled:cursor-not-allowed`}
-                >
-                  {loading ? "Saving..." : isLocked ? "Unlock" : "Lock"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Table - responsive: horizontal scroll when narrow */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white rounded-xl shadow-lg border border-gray-200">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 bg-slate-50/80 shrink-0">
-            <span className="text-xs font-semibold text-slate-600">Key findings</span>
+              ) : null}
+            </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -1464,41 +1489,45 @@ export default function AuditReviewDeptClient({
                     setIsTableEditMode(true);
                   }
                 }}
-                className="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading && isTableEditMode ? "Saving..." : isTableEditMode ? "Done" : "Edit"}
               </button>
             </div>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <StickyHorizontalScrollTable
-              className="min-h-0 flex-1"
+          <StickyHorizontalScrollTable
+              className="w-full"
               colGroup={AUDIT_REVIEW_COL_GROUP}
-              tableClassName="border-collapse text-xs"
+              tableClassName="border-collapse text-[13px]"
               tableStyle={{ tableLayout: "fixed", width: AUDIT_REVIEW_TABLE_WIDTH, minWidth: AUDIT_REVIEW_TABLE_WIDTH }}
-              measureDeps={[displayFindings.length, isTableEditMode, loading]}
+              measureDeps={[displayFindings.length, isTableEditMode, loading, findingsPage]}
+              internalVerticalScroll={false}
+              bodyMinHeight="calc(100vh - 280px)"
+              stickyHeader
+              stickyHeaderTopClass="top-14 sm:top-[3.75rem]"
+              stickyHeaderClassName="bg-slate-800 border-b border-slate-700"
               header={
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">No.</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AP No.</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">Substantive Test & Testing Status</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RISK</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PREPARER</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING RESULT</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FINDING DESCRIPTION</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">RECOMMENDATION</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">STATUS</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">REVIEW NOTE</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-blue-50 align-top">REVIEW STATUS</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">PREPARER RESPO</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">REFERENCE LIN</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FOLLOW UP DUE DATE</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">TIMELINE</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">FOLLOW UP STATUS</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 align-top">AUDITEE</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-amber-50 align-top">AUDITEE COMMENT</th>
-                    <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-amber-50 align-top">FOLLOW-UP DETAIL</th>
+                  <tr>
+                    <th className={TH_CLASS}>No.</th>
+                    <th className={TH_CLASS}>AP No.</th>
+                    <th className={TH_CLASS}>Substantive Test &amp; Testing Status</th>
+                    <th className={TH_CLASS}>Risk</th>
+                    <th className={TH_CLASS}>Preparer</th>
+                    <th className={TH_CLASS}>Finding Result</th>
+                    <th className={TH_CLASS}>Finding Description</th>
+                    <th className={TH_CLASS}>Recommendation</th>
+                    <th className={TH_CLASS}>Status</th>
+                    <th className={TH_CLASS}>Review Note</th>
+                    <th className={TH_REVIEW_CLASS}>Review Status</th>
+                    <th className={TH_CLASS}>Preparer Respo</th>
+                    <th className={TH_CLASS}>Reference Link</th>
+                    <th className={TH_CLASS}>Follow Up Due Date</th>
+                    <th className={TH_CLASS}>Timeline</th>
+                    <th className={TH_CLASS}>Follow Up Status</th>
+                    <th className={TH_CLASS}>Auditee</th>
+                    <th className={TH_AUDITEE_CLASS}>Auditee Comment</th>
+                    <th className={TH_AUDITEE_CLASS}>Follow-up Detail</th>
                   </tr>
                 </thead>
               }
@@ -1514,23 +1543,25 @@ export default function AuditReviewDeptClient({
                     </td>
                   </tr>
                 ) : (
-                  displayFindings.map((finding, idx) => (
-                    <tr key={idx} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{finding.no}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                  displayFindings.map((finding, idx) => {
+                    const globalIdx = findingsPageOffset + idx;
+                    return (
+                    <tr key={`${finding.apNo || "row"}-${globalIdx}`} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"} hover:bg-blue-50/40`}>
+                      <td className={`${TD_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{globalIdx + 1}</td>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.apNo ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "apNo", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "apNo", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.apNo || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                         {isTableEditMode ? (
                           <div className="space-y-1">
                             <div className="flex flex-col gap-0.5">
@@ -1539,7 +1570,7 @@ export default function AuditReviewDeptClient({
                                 type="text"
                                 value={finding.substantiveTest ?? ""}
                                 disabled={isInteractionDisabled}
-                                onChange={(e) => handleUpdateFinding(idx, "substantiveTest", e.target.value)}
+                                onChange={(e) => handleUpdateFinding(globalIdx, "substantiveTest", e.target.value)}
                                 className={tableFieldClass}
                               />
                             </div>
@@ -1548,7 +1579,7 @@ export default function AuditReviewDeptClient({
                               <select
                                 value={finding.checkYn ?? ""}
                                 disabled={isInteractionDisabled}
-                                onChange={(e) => handleUpdateFinding(idx, "checkYn", e.target.value)}
+                                onChange={(e) => handleUpdateFinding(globalIdx, "checkYn", e.target.value)}
                                 className={tableFieldClass}
                               >
                                 <option value="">—</option>
@@ -1563,7 +1594,7 @@ export default function AuditReviewDeptClient({
                                 type="text"
                                 value={finding.method ?? ""}
                                 disabled={isInteractionDisabled}
-                                onChange={(e) => handleUpdateFinding(idx, "method", e.target.value)}
+                                onChange={(e) => handleUpdateFinding(globalIdx, "method", e.target.value)}
                                 className={tableFieldClass}
                               />
                             </div>
@@ -1576,51 +1607,51 @@ export default function AuditReviewDeptClient({
                           </div>
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.risk ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "risk", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "risk", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.risk || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.preparer ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "preparer", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "preparer", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.preparer || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.findingResult ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "findingResult", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "findingResult", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.findingResult || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                         {isTableEditMode ? (
                           <textarea
                             value={finding.findingDescription ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "findingDescription", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "findingDescription", e.target.value)}
                             className={tableAreaClass}
                             rows={3}
                           />
@@ -1628,12 +1659,12 @@ export default function AuditReviewDeptClient({
                           finding.findingDescription || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                         {isTableEditMode ? (
                           <textarea
                             value={finding.recommendation ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "recommendation", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "recommendation", e.target.value)}
                             className={tableAreaClass}
                             rows={3}
                           />
@@ -1641,25 +1672,25 @@ export default function AuditReviewDeptClient({
                           finding.recommendation || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.status ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "status", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "status", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.status || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                         {isTableEditMode ? (
                           <textarea
                             value={finding.reviewNote ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "reviewNote", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "reviewNote", e.target.value)}
                             className={tableAreaClass}
                             rows={3}
                           />
@@ -1667,12 +1698,12 @@ export default function AuditReviewDeptClient({
                           finding.reviewNote || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center bg-blue-50 align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_CLASS} text-center bg-blue-50`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <select
                             value={normalizeReviewStatus(finding.reviewStatus)}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "reviewStatus", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "reviewStatus", e.target.value)}
                             className={tableFieldClass}
                           >
                             {REVIEW_STATUS_OPTIONS.map((opt) => (
@@ -1685,64 +1716,64 @@ export default function AuditReviewDeptClient({
                           normalizeReviewStatus(finding.reviewStatus)
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.preparerRespo ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "preparerRespo", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "preparerRespo", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.preparerRespo || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.referenceLink ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "referenceLink", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "referenceLink", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.referenceLink || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="date"
                             value={finding.followUpDueDate ? String(finding.followUpDueDate).slice(0, 10) : ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "followUpDueDate", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "followUpDueDate", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.followUpDueDate || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.timeline ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "timeline", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "timeline", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.timeline || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <select
                             value={normalizeFollowUpStatus(finding.followUpStatus)}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "followUpStatus", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "followUpStatus", e.target.value)}
                             className={tableFieldClass}
                           >
                             <option value={FOLLOW_UP_STATUS_IN_PROGRESS}>{FOLLOW_UP_STATUS_IN_PROGRESS}</option>
@@ -1752,25 +1783,25 @@ export default function AuditReviewDeptClient({
                           normalizeFollowUpStatus(finding.followUpStatus)
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {isTableEditMode ? (
                           <input
                             type="text"
                             value={finding.auditee ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "auditee", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "auditee", e.target.value)}
                             className={tableFieldClass}
                           />
                         ) : (
                           finding.auditee || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                         {isTableEditMode ? (
                           <textarea
                             value={finding.auditeeComment ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "auditeeComment", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "auditeeComment", e.target.value)}
                             className={`${tableFieldClass} resize-y min-h-[48px]`}
                             rows={2}
                             placeholder="Auditee comment for report..."
@@ -1779,12 +1810,12 @@ export default function AuditReviewDeptClient({
                           finding.auditeeComment || "-"
                         )}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
                         {isTableEditMode ? (
                           <textarea
                             value={finding.followUpDetail ?? ""}
                             disabled={isInteractionDisabled}
-                            onChange={(e) => handleUpdateFinding(idx, "followUpDetail", e.target.value)}
+                            onChange={(e) => handleUpdateFinding(globalIdx, "followUpDetail", e.target.value)}
                             className={`${tableFieldClass} resize-y min-h-[48px]`}
                             rows={2}
                             placeholder="Follow-up detail for report..."
@@ -1794,11 +1825,19 @@ export default function AuditReviewDeptClient({
                         )}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </StickyHorizontalScrollTable>
-          </div>
+          <Pagination
+            className="rounded-none border-0 border-t border-gray-200 bg-gray-50"
+            meta={findingsMeta}
+            onPageChange={(p) => {
+              setFindingsPage(p);
+            }}
+            loading={loading}
+          />
         </div>
 
         {/* Select Modal */}
@@ -1991,6 +2030,7 @@ export default function AuditReviewDeptClient({
         )}
 
       </div>
+      <ScrollToTopButton />
     </div>
     </>
   );

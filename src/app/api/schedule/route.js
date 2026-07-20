@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { requireScheduleManager } from "@/app/api/schedule/_shared/auth";
 import pkg from "pg";
 const { Pool } = pkg;
 
@@ -142,6 +143,9 @@ export async function GET() {
 // POST: insert or update schedule data
 export async function POST(req) {
   try {
+    const { error: authError } = await requireScheduleManager();
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const {
       department_id,

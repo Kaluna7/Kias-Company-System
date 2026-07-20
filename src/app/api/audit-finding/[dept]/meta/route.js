@@ -160,7 +160,7 @@ export async function POST(req, { params }) {
 
     const session = await getServerSession(authOptions);
     const role = (session?.user?.role || "").toLowerCase();
-    const canEditFinalStatus = role === "admin" || role === "reviewer";
+    const canEditFinalStatus = role === "admin" || role === "reviewer" || role === "super_admin" || role === "superadmin";
     const canEditReviewer = canEditReviewerFields(role);
 
     const client = await pool.connect();

@@ -5,39 +5,48 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/app/components/ui/Pagination";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
+import ScrollToTopButton from "@/app/components/ui/ScrollToTopButton";
 import { useToast } from "@/app/contexts/ToastContext";
 import { isAuditFindingCheckYes } from "@/lib/auditFindingCheckYn";
 import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
+import { isAdminRole, isEditorRole } from "@/lib/roles";
 
-const AUDIT_FINDING_TABLE_WIDTH = 2490;
+const AUDIT_FINDING_TABLE_WIDTH = 2600;
 const AUDIT_FINDING_COL_GROUP = (
   <colgroup>
-    <col style={{ width: 36 }} />
-    <col style={{ width: 80 }} />
-    <col style={{ width: 150 }} />
-    <col style={{ width: 180 }} />
-    <col style={{ width: 100 }} />
+    <col style={{ width: 48 }} />
     <col style={{ width: 90 }} />
-    <col style={{ width: 130 }} />
+    <col style={{ width: 160 }} />
+    <col style={{ width: 180 }} />
+    <col style={{ width: 110 }} />
+    <col style={{ width: 100 }} />
+    <col style={{ width: 140 }} />
     <col style={{ width: 180 }} />
     <col style={{ width: 200 }} />
     <col style={{ width: 130 }} />
     <col style={{ width: 180 }} />
     <col style={{ width: 120 }} />
-    <col style={{ width: 60 }} />
-    <col style={{ width: 80 }} />
-    <col style={{ width: 100 }} />
+    <col style={{ width: 70 }} />
+    <col style={{ width: 90 }} />
+    <col style={{ width: 110 }} />
+    <col style={{ width: 140 }} />
+    <col style={{ width: 200 }} />
+    <col style={{ width: 200 }} />
+    <col style={{ width: 110 }} />
+    <col style={{ width: 140 }} />
     <col style={{ width: 130 }} />
-    <col style={{ width: 200 }} />
-    <col style={{ width: 200 }} />
-    <col style={{ width: 100 }} />
-    <col style={{ width: 120 }} />
-    <col style={{ width: 120 }} />
   </colgroup>
 );
 
-/** Preparer Status / Final Status must be COMPLETE (or Complete) before publish — same as dropdown value COMPLETED. */
+const TH_BASE =
+  "px-3 py-3 text-center text-[13px] leading-snug font-semibold tracking-wide text-white border border-slate-600/80 align-middle whitespace-normal";
+const TH_CLASS = `${TH_BASE} bg-slate-800`;
+const TD_CLASS =
+  "p-2.5 text-[13px] leading-snug text-slate-800 border border-slate-200 align-top";
+const TD_MUTED_CLASS = `${TD_CLASS} bg-slate-50/80`;
+
+/** Preparer Status / Final Status must be Complete before publish. */
 function isAuditFindingHeaderStatusComplete(raw) {
   const s = String(raw ?? "").trim().toUpperCase();
   return s === "COMPLETED" || s === "COMPLETE";
@@ -163,10 +172,11 @@ export default function AuditFindingDeptClient({
   const toast = useToast();
   const role = (session?.user?.role || "").toLowerCase();
   const isReviewer = role === "reviewer";
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
   const isUser = role === "user";
-  const canPublish = isAdmin || isReviewer;
-  const canEditFinalStatus = isAdmin || isReviewer;
+  /** Any role may publish; dashboard progress counts every successful publish. */
+  const canPublish = isEditorRole(role);
+  const canEditFinalStatus = isEditorRole(role);
   const canEditReviewerFields = canEditReviewerFieldsFromRole(role);
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
@@ -195,7 +205,9 @@ export default function AuditFindingDeptClient({
 
   const [tableData, setTableData] = useState(() => normalizeRows(initialData));
   const deferredTableData = useDeferredValue(tableData);
-  const [findingMeta, setFindingMeta] = useState(initialMeta);
+  const [findingMeta, setFindingMeta] = useState(
+    initialMeta || { total: Array.isArray(initialData) ? initialData.length : 0, page: 1, pageSize: 20 },
+  );
   const [isEditMode, setIsEditMode] = useState(false); // Global edit mode for all rows
   const displayTableData = useMemo(() => {
     if (isEditMode) return deferredTableData;
@@ -221,10 +233,7 @@ export default function AuditFindingDeptClient({
     () => [
       { value: "", label: "- Select -" },
       { value: "Draft", label: "Draft" },
-      { value: "Ready to Publish", label: "Ready to Publish" },
-      { value: "COMPLETED", label: "COMPLETED" },
-      { value: "IN PROGRESS", label: "IN PROGRESS" },
-      { value: "PENDING REVIEW", label: "PENDING REVIEW" },
+      { value: "Complete", label: "Complete" },
     ],
     [],
   );
@@ -562,7 +571,7 @@ export default function AuditFindingDeptClient({
 
   async function fetchData(page) {
     const pageNum = page ?? findingMeta?.page ?? 1;
-    const pageSize = findingMeta?.pageSize ?? 50;
+    const pageSize = findingMeta?.pageSize ?? 20;
     try {
       setLoading(true);
       setError(null);
@@ -586,7 +595,15 @@ export default function AuditFindingDeptClient({
       // - auto-save tidak menimpa perubahan yang baru saja di-load
       lastSavedTableDataRef.current = JSON.parse(JSON.stringify(normalized));
       isTableDirtyRef.current = false;
-      if (json.meta) setFindingMeta(json.meta);
+      if (json.meta) {
+        setFindingMeta({
+          total: json.meta.total ?? normalized.length,
+          page: json.meta.page ?? pageNum,
+          pageSize: json.meta.pageSize ?? pageSize,
+        });
+      } else {
+        setFindingMeta({ total: normalized.length, page: pageNum, pageSize });
+      }
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -1110,229 +1127,254 @@ export default function AuditFindingDeptClient({
     window.location.href = "/Page/audit-finding";
   }, []);
 
+  const pageOffset =
+    ((findingMeta?.page ?? 1) - 1) * (findingMeta?.pageSize ?? 20);
+
   return (
-    <main className="flex h-dvh min-h-screen w-full flex-col overflow-hidden bg-[#E6F0FA]">
-      <div className="fixed z-40 top-3 left-4">
-        <button
-          onClick={handleBack}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full shadow-md border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-          title="Back"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
+    <main className="min-h-screen w-full bg-gradient-to-br from-gray-50 via-slate-50/95 to-blue-50/80">
+      {/* Unified top bar — always visible */}
+      <div className="fixed top-0 left-0 right-0 z-40 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-3 py-2.5 sm:gap-4 sm:px-5 sm:py-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:text-sm"
+            title="Back"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+                {titleCode} AUDIT FINDING
+              </span>
+              <span className="hidden h-3 w-px bg-slate-300 sm:inline-block" aria-hidden="true" />
+              <h1 className="truncate text-sm font-bold text-slate-900 sm:text-base md:text-lg">
+                {departmentLabel}
+              </h1>
+            </div>
+            <p className="truncate text-[11px] text-slate-600 sm:text-xs">{description}</p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {isEditMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={loading}
+                  className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:py-2 sm:text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAllChanges}
+                  disabled={loading}
+                  className="inline-flex items-center rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:py-2 sm:text-xs"
+                >
+                  {loading ? "Saving..." : "Save & Done"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleToggleEditMode}
+                  disabled={isReviewer}
+                  className="inline-flex items-center rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:py-2 sm:text-xs"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={openPublishModal}
+                  disabled={loading || !canOpenPublishModal}
+                  className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-[10px] font-semibold sm:px-3 sm:py-2 sm:text-xs ${
+                    loading || !canOpenPublishModal
+                      ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                      : "bg-purple-600 text-white hover:bg-purple-700"
+                  }`}
+                >
+                  Publish
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsHeaderCollapsed((v) => !v)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:h-10 sm:w-10"
+              title={isHeaderCollapsed ? "Show header details" : "Hide header details"}
+              aria-expanded={!isHeaderCollapsed}
+            >
+              {isHeaderCollapsed ? (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Header collapse toggle */}
-      <div className="fixed z-40 top-3 right-4">
-        <button
-          onClick={() => setIsHeaderCollapsed((v) => !v)}
-          className="w-11 h-9 flex items-center justify-center rounded-full shadow-md border border-slate-300 bg-white/95 text-sm font-semibold text-slate-700"
-          title={isHeaderCollapsed ? "Show header" : "Hide header"}
-        >
-          {isHeaderCollapsed ? "▼" : "▲"}
-        </button>
-      </div>
-
-      {/* Fixed Header */}
+      {/* Collapsible status / finding details panel */}
       <header
-        className={`fixed top-0 left-0 right-0 z-30 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 backdrop-blur-xl border-b border-slate-200/60 shadow-xl ${
-          isHeaderCollapsed ? "hidden" : ""
+        className={`fixed left-0 right-0 z-30 max-h-[min(70vh,640px)] overflow-y-auto overscroll-contain border-b border-slate-200/60 bg-gradient-to-br from-white via-slate-50/95 to-blue-50/80 shadow-lg backdrop-blur-xl transition-all duration-300 ease-out ${
+          isHeaderCollapsed
+            ? "pointer-events-none top-14 -translate-y-2 opacity-0 sm:top-[3.75rem]"
+            : "top-14 translate-y-0 opacity-100 sm:top-[3.75rem]"
         }`}
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 #f1f5f9" }}
       >
-        <div className="max-w-7xl mx-auto">
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
+        <div className="mx-auto max-w-[1600px] space-y-3 px-3 pb-4 pt-3 sm:px-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200/50 bg-white/70 p-4 shadow-md backdrop-blur-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm">
+                  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text">
-                      {titleCode} AUDIT FINDING
-                    </h1>
-                    <span className="px-2.5 py-0.5 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200">
-                      {departmentLabel}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600 font-medium">{description}</p>
+                <span className="text-sm font-bold text-slate-800">PREPARER STATUS</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={preparerStatus}
+                  onChange={(e) => setPreparerStatus(e.target.value)}
+                  disabled={isReviewer}
+                  className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                >
+                  {preparerStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="rounded-lg border border-gray-300 bg-gradient-to-r from-gray-100 to-gray-50 px-3 py-2 text-xs font-bold text-gray-700 shadow-sm">
+                  {preparerStatus || "Not Set"}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200/50 bg-white/70 p-4 shadow-md backdrop-blur-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 shadow-sm">
+                  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                 </div>
+                <span className="text-sm font-bold text-slate-800">FINAL STATUS</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={finalStatus}
+                  onChange={(e) => setFinalStatus(e.target.value)}
+                  disabled={!canEditFinalStatus}
+                  title={!canEditFinalStatus ? "Sign in to change Final Status" : undefined}
+                  className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                >
+                  {finalStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="rounded-lg border border-gray-300 bg-gradient-to-r from-gray-100 to-gray-50 px-3 py-2 text-xs font-bold text-gray-700 shadow-sm">
+                  {finalStatus || "Not Set"}
+                </span>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Header inputs section (restored) */}
-        <div className="max-w-7xl mx-auto">
-          <div className="px-6 pb-5">
-            <div className="space-y-4">
-              {/* Status cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-md">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-bold text-slate-800">PREPARER STATUS</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={preparerStatus}
-                      onChange={(e) => setPreparerStatus(e.target.value)}
-                      disabled={isReviewer}
-                      className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      {preparerStatusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="px-3 py-2 text-xs font-bold rounded-lg shadow-sm bg-gradient-to-r from-gray-100 to-gray-50 text-gray-700 border border-gray-300">
-                      {preparerStatus || "Not Set"}
-                    </span>
-                  </div>
+          <div className="rounded-xl border border-slate-200/50 bg-white/70 p-4 shadow-md backdrop-blur-sm sm:p-5">
+            <div className="mb-4 flex items-center gap-3 border-b border-slate-200/50 pb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
+                <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-slate-800">Finding Details</h3>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-700">FINDING RESULT</label>
+                <input
+                  type="text"
+                  value={findingResult}
+                  onChange={(e) => setFindingResult(e.target.value)}
+                  disabled={isReviewer}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  placeholder="Enter finding result"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-2 block text-xs font-semibold text-slate-700">PREPARE</label>
+                  <input
+                    type="text"
+                    value={prepare}
+                    onChange={(e) => setPrepare(e.target.value)}
+                    disabled={isReviewer || (isUser && schedulePreparerName)}
+                    readOnly={isUser && schedulePreparerName}
+                    suppressHydrationWarning
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                    placeholder="Name"
+                  />
                 </div>
-
-                <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-md">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-bold text-slate-800">FINAL STATUS</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={finalStatus}
-                      onChange={(e) => setFinalStatus(e.target.value)}
-                      disabled={!canEditFinalStatus}
-                      title={
-                        !canEditFinalStatus
-                          ? "Only admin or reviewer can change Final Status"
-                          : undefined
+                <div>
+                  <label className="mb-2 block text-xs font-semibold text-slate-700">DATE</label>
+                  <input
+                    type="date"
+                    value={prepareDate}
+                    onChange={(e) => {
+                      if (schedulePreparerDate && isUser) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }
-                      className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      {finalStatusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="px-3 py-2 text-xs font-bold rounded-lg shadow-sm bg-gradient-to-r from-gray-100 to-gray-50 text-gray-700 border border-gray-300">
-                      {finalStatus || "Not Set"}
-                    </span>
-                  </div>
+                      setPrepareDate(e.target.value);
+                    }}
+                    disabled={isReviewer || (isUser && schedulePreparerDate)}
+                    readOnly={isUser && schedulePreparerDate}
+                    suppressHydrationWarning
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  />
                 </div>
               </div>
 
-              {/* Finding details */}
-              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-5 border border-slate-200/50 shadow-md">
-                <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200/50">
-                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-base font-bold text-slate-800">Finding Details</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-2 block text-xs font-semibold text-slate-700">REVIEW</label>
+                  <input
+                    type="text"
+                    value={review}
+                    onChange={(e) => setReview(e.target.value)}
+                    disabled={!canEditReviewerFields}
+                    title={!canEditReviewerFields ? "Only admin or reviewer can edit Review" : undefined}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                    placeholder="Name"
+                  />
                 </div>
-
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2">FINDING RESULT</label>
-                    <input
-                      type="text"
-                      value={findingResult}
-                      onChange={(e) => setFindingResult(e.target.value)}
-                      disabled={isReviewer}
-                      className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder="Enter finding result"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-2">PREPARE</label>
-                      <input
-                        type="text"
-                        value={prepare}
-                        onChange={(e) => setPrepare(e.target.value)}
-                        disabled={isReviewer || (isUser && schedulePreparerName)}
-                        readOnly={isUser && schedulePreparerName}
-                        suppressHydrationWarning
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-2">DATE</label>
-                      <input
-                        type="date"
-                        value={prepareDate}
-                        onChange={(e) => {
-                          // Prevent changes if schedule date is set and user is regular user
-                          if (schedulePreparerDate && isUser) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return false;
-                          }
-                          setPrepareDate(e.target.value);
-                        }}
-                        disabled={isReviewer || (isUser && schedulePreparerDate)}
-                        readOnly={isUser && schedulePreparerDate}
-                        suppressHydrationWarning
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-2">REVIEW</label>
-                      <input
-                        type="text"
-                        value={review}
-                        onChange={(e) => setReview(e.target.value)}
-                        disabled={!canEditReviewerFields}
-                        title={
-                          !canEditReviewerFields
-                            ? "Only admin or reviewer can edit Review"
-                            : undefined
-                        }
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-2">DATE</label>
-                      <input
-                        type="date"
-                        value={reviewDate}
-                        onChange={(e) => setReviewDate(e.target.value)}
-                        disabled={!canEditReviewerFields}
-                        title={
-                          !canEditReviewerFields
-                            ? "Only admin or reviewer can edit Review date"
-                            : undefined
-                        }
-                        className="w-full border border-slate-300 bg-white px-4 py-2.5 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <label className="mb-2 block text-xs font-semibold text-slate-700">DATE</label>
+                  <input
+                    type="date"
+                    value={reviewDate}
+                    onChange={(e) => setReviewDate(e.target.value)}
+                    disabled={!canEditReviewerFields}
+                    title={!canEditReviewerFields ? "Only admin or reviewer can edit Review date" : undefined}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  />
                 </div>
               </div>
             </div>
@@ -1341,128 +1383,58 @@ export default function AuditFindingDeptClient({
       </header>
 
       {/* Content */}
-      <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden px-3 sm:px-4 pb-4 transition-all duration-500 ease-in-out ${
-          isHeaderCollapsed ? "pt-16" : "pt-32"
-        }`}
-      >
-        {/* Header above table (requested) */}
-        <div className="mb-4 shrink-0">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4">
-            <div className="text-xs font-semibold text-slate-500 tracking-wide">{titleCode} AUDIT FINDING</div>
-            <div className="text-lg font-bold text-slate-900">{departmentLabel}</div>
-            <div className="text-sm text-slate-600">{description}</div>
-          </div>
-        </div>
-
-        {/* Toolbar above table */}
-        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-          <div className="text-sm text-slate-600">
-            Total: <span className="font-semibold text-slate-900">{tableData.length}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {isEditMode ? (
-              <>
-                <button
-                  onClick={handleCancelEdit}
-                  disabled={loading}
-                  className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                    loading ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700 text-white"
-                  }`}
-                  title="Cancel Edit"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveAllChanges}
-                  disabled={loading}
-                  className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                    loading ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  }`}
-                  title="Save all changes and exit edit mode"
-                >
-                  {loading ? "Saving..." : "Save & Done"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={handleToggleEditMode}
-                  disabled={isReviewer}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Edit Mode"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={openPublishModal}
-                  disabled={loading || !canOpenPublishModal}
-                  className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md ${
-                    loading || !canOpenPublishModal
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                      : "bg-purple-600 hover:bg-purple-700 text-white"
-                  }`}
-                  title={
-                    !isScheduleConfigured && !isAdmin
-                      ? "Schedule not configured"
-                      : !canPublish
-                        ? "Only admins and reviewers can publish"
-                        : "Review and publish findings"
-                  }
-                >
-                  Publish
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {canOpenPublishModal && !isMetaReadyForPublish && (
-          <div className="mb-3 shrink-0 text-xs text-amber-800 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
-            To publish, set both <span className="font-semibold">Preparer Status</span> and{" "}
-            <span className="font-semibold">Final Status</span> to <span className="font-semibold">Complete</span> in
-            the header above (they save automatically). Admin and reviewer only.
-          </div>
-        )}
-
+      <div className="w-full pb-8 pt-16 sm:pt-[4.25rem]">
         {error && (
-          <div className="mb-3 shrink-0 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mx-3 mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mx-4">
             {error}
           </div>
         )}
 
-        <div className="mb-4 flex min-h-0 flex-1 flex-col">
+        <div className="mb-4 border-y border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2.5 sm:px-4">
+            <span className="text-sm font-semibold text-slate-700">
+              Findings
+              <span className="ml-2 text-xs font-normal text-slate-400">
+                · {findingMeta?.total ?? tableData.length}
+                {findingMeta?.pageSize ? ` · max ${findingMeta.pageSize}/page` : ""}
+              </span>
+            </span>
+          </div>
           <StickyHorizontalScrollTable
-            className="min-h-0 w-full flex-1"
+            className="w-full"
             colGroup={AUDIT_FINDING_COL_GROUP}
-            tableClassName="border-collapse text-xs"
+            tableClassName="border-collapse text-[13px]"
             tableStyle={{ tableLayout: "fixed", width: AUDIT_FINDING_TABLE_WIDTH, minWidth: AUDIT_FINDING_TABLE_WIDTH }}
-            measureDeps={[displayTableData.length, isEditMode, loading]}
+            measureDeps={[displayTableData.length, isEditMode, loading, findingMeta?.page]}
+            internalVerticalScroll={false}
+            bodyMinHeight="calc(100vh - 280px)"
+            stickyHeader
+            stickyHeaderTopClass="top-14 sm:top-[3.75rem]"
+            stickyHeaderClassName="bg-slate-800 border-b border-slate-700"
             header={
               <thead>
-                <tr className="bg-gray-100">
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">NO</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK ID</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK DETAILS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">OWNER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">AP CODE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">SUBSTANTIVE TEST</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">OBJECTIVE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">PROCEDURES</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">METHOD</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">APPLICATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RISK</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">CHECK (Y/N)</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">PREPARER</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">FINDING RESULT</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">FINDING DESCRIPTION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">RECOMMENDATION</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">AUDITEE</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">COMPLETION STATUS</th>
-                  <th className="p-2 text-center text-xs font-semibold text-gray-700 border border-gray-200 bg-gray-100 align-top">COMPLETION DATE</th>
+                <tr>
+                  <th className={TH_CLASS}>No.</th>
+                  <th className={TH_CLASS}>Risk ID</th>
+                  <th className={TH_CLASS}>Risk Description</th>
+                  <th className={TH_CLASS}>Risk Details</th>
+                  <th className={TH_CLASS}>Owner</th>
+                  <th className={TH_CLASS}>AP Code</th>
+                  <th className={TH_CLASS}>Substantive Test</th>
+                  <th className={TH_CLASS}>Objective</th>
+                  <th className={TH_CLASS}>Procedures</th>
+                  <th className={TH_CLASS}>Method</th>
+                  <th className={TH_CLASS}>Description</th>
+                  <th className={TH_CLASS}>Application</th>
+                  <th className={TH_CLASS}>Risk</th>
+                  <th className={TH_CLASS}>Check (Y/N)</th>
+                  <th className={TH_CLASS}>Preparer</th>
+                  <th className={TH_CLASS}>Finding Result</th>
+                  <th className={TH_CLASS}>Finding Description</th>
+                  <th className={TH_CLASS}>Recommendation</th>
+                  <th className={TH_CLASS}>Auditee</th>
+                  <th className={TH_CLASS}>Completion Status</th>
+                  <th className={TH_CLASS}>Completion Date</th>
                 </tr>
               </thead>
             }
@@ -1470,10 +1442,10 @@ export default function AuditFindingDeptClient({
             <tbody>
                 {displayTableData.length === 0 ? (
                   <tr>
-                    <td colSpan={21} className="p-8 text-center text-gray-500">
-                      <div className="flex flex-col items-center justify-center">
-                        <p className="text-lg font-semibold text-gray-600">No Data</p>
-                        <p className="text-sm text-gray-400 mt-1">No findings available</p>
+                    <td colSpan={21} className="p-4 text-center text-gray-500">
+                      <div className="flex flex-col items-center justify-center py-2">
+                        <p className="text-sm font-semibold text-gray-600">No Data</p>
+                        <p className="text-xs text-gray-400 mt-0.5">No findings available</p>
                       </div>
                     </td>
                   </tr>
@@ -1481,43 +1453,44 @@ export default function AuditFindingDeptClient({
                   displayTableData.map((row, index) => {
                     const isFromAuditProgram = !row.id && !isEditMode; // Data from audit-program doesn't have id, but can be edited if in edit mode
                     const isEditing = isEditMode; // All rows can be edited when edit mode is on
+                    const rowNo = pageOffset + index + 1;
                     return (
-                    <tr key={row.id || `new-${index}`} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.no}</td>
+                    <tr key={row.id || `new-${index}`} className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50/70"} hover:bg-blue-50/40`}>
+                      <td className={`${TD_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{rowNo}</td>
                       {/* RISK ID - Always read-only */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.riskId || "-"}</td>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.riskId || "-"}</td>
                       {/* RISK DESCRIPTION - Always read-only */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.riskDescription || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.riskDescription || undefined}>
                         {row.riskDescription || "-"}
                       </td>
                       {/* RISK DETAILS - Always read-only */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.riskDetails || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.riskDetails || undefined}>
                         {row.riskDetails || "-"}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} title={row.owners || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }} title={row.owners || undefined}>
                         {row.owners || "-"}
                       </td>
                       {/* AP CODE - Always read-only */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.apCode || "-"}</td>
+                      <td className={`${TD_MUTED_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.apCode || "-"}</td>
                       {/* SUBSTANTIVE TEST - Always read-only */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.substantiveTest || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.objective || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.substantiveTest || "-"}</td>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.objective || undefined}>
                         {row.objective || "-"}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.procedures || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.procedures || undefined}>
                         {row.procedures || "-"}
                       </td>
                       {/* METHOD - Always read-only */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.method || "-"}</td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.description || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.method || "-"}</td>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.description || undefined}>
                         {row.description || "-"}
                       </td>
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} title={row.application || undefined}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }} title={row.application || undefined}>
                         {row.application || "-"}
                       </td>
                       {/* RISK — from Risk Assessment / snapshot; not editable by anyone */}
                       <td
-                        className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top bg-gray-50"
+                        className={`${TD_MUTED_CLASS} text-center`}
                         style={{ overflowWrap: "break-word", wordBreak: "break-word" }}
                         title="Risk level comes from Risk Assessment; cannot be edited here."
                       >
@@ -1525,11 +1498,11 @@ export default function AuditFindingDeptClient({
                       </td>
                       {/* CHECK (Y/N) - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <select
                             value={row.checkYN || ""}
                             onChange={(e) => handleCellEdit(index, "checkYN", e.target.value)}
-                            className="w-full p-1 text-xs text-center border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full p-1.5 text-[13px] text-center border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                           >
                             {yesNoOptions.map((option) => (
                               <option key={option.value} value={option.value}>
@@ -1539,99 +1512,99 @@ export default function AuditFindingDeptClient({
                           </select>
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-center align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.checkYN || "-"}</td>
+                        <td className={`${TD_CLASS} text-center`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.checkYN || "-"}</td>
                       )}
                       {/* PREPARER - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <input
                             type="text"
                             value={row.preparer || ""}
                             onChange={(e) => handleCellEdit(index, "preparer", e.target.value)}
                             disabled={isReviewer}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            className="w-full p-1.5 text-[13px] text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                             placeholder="-"
                           />
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.preparer || "-"}</td>
+                        <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.preparer || "-"}</td>
                       )}
                       {/* FINDING RESULT - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <input
                             type="text"
                             value={row.findingResult || ""}
                             onChange={(e) => handleCellEdit(index, "findingResult", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full p-1.5 text-[13px] text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                             placeholder="-"
                           />
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.findingResult || "-"}</td>
+                        <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.findingResult || "-"}</td>
                       )}
                       {/* FINDING DESCRIPTION - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <textarea
                             value={row.findingDescription || ""}
                             onChange={(e) => handleCellEdit(index, "findingDescription", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                            className="w-full p-1.5 text-[13px] text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
                             rows={2}
                             placeholder="-"
                           />
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.findingDescription || undefined}>
+                        <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.findingDescription || undefined}>
                           {row.findingDescription || "-"}
                         </td>
                       )}
                       {/* RECOMMENDATION - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <textarea
                             value={row.recommendation || ""}
                             onChange={(e) => handleCellEdit(index, "recommendation", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                            className="w-full p-1.5 text-[13px] text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
                             rows={2}
                             placeholder="-"
                           />
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.recommendation || undefined}>
+                        <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word", whiteSpace: "pre-wrap" }} title={row.recommendation || undefined}>
                           {row.recommendation || "-"}
                         </td>
                       )}
                       {/* AUDITEE - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <input
                             type="text"
                             value={row.auditee || ""}
                             onChange={(e) => handleCellEdit(index, "auditee", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full p-1.5 text-[13px] text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                             placeholder="-"
                           />
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.auditee || "-"}</td>
+                        <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.auditee || "-"}</td>
                       )}
                       {/* COMPLETION STATUS — from CHECK (Y/N): Yes => Ready to Publish; system-managed, not directly editable */}
-                      <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top bg-gray-50" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                      <td className={`${TD_MUTED_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                         {row.completionStatus || "-"}
                       </td>
                       {/* COMPLETION DATE - Editable when in edit mode */}
                       {isEditing ? (
-                        <td className="p-1 border border-gray-200 align-top">
+                        <td className="p-2.5 border border-slate-200 align-top">
                           <input
                             type="date"
                             value={row.completionDate || ""}
                             onChange={(e) => handleCellEdit(index, "completionDate", e.target.value)}
-                            className="w-full p-1 text-xs text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full p-1.5 text-[13px] text-left border-0 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </td>
                       ) : (
-                        <td className="p-1 text-xs text-gray-800 border border-gray-200 text-left align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.completionDate || "-"}</td>
+                        <td className={`${TD_CLASS} text-left`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{row.completionDate || "-"}</td>
                       )}
                     </tr>
                     );
@@ -1640,9 +1613,11 @@ export default function AuditFindingDeptClient({
             </tbody>
           </StickyHorizontalScrollTable>
           <Pagination
-            className="shrink-0 border-t border-gray-200 bg-white px-2 py-2"
+            className="rounded-none border-0 border-t border-gray-200 bg-gray-50"
             meta={findingMeta}
-            onPageChange={(p) => fetchData(p)}
+            onPageChange={(p) => {
+              void fetchData(p);
+            }}
             loading={loading}
           />
         </div>
@@ -1704,10 +1679,10 @@ export default function AuditFindingDeptClient({
                 <p className="text-sm text-slate-600 mt-2">
                   Publish is only allowed when both <span className="font-semibold">Preparer Status</span> and{" "}
                   <span className="font-semibold">Final Status</span> are{" "}
-                  <span className="font-semibold">Complete</span> (saved in the header). Only{" "}
-                  <span className="font-semibold">admin</span> or <span className="font-semibold">reviewer</span> can
-                  publish. Findings with <span className="font-semibold">CHECK (Y/N) = Yes</span> are published to Audit
-                  Review.
+                  <span className="font-semibold">Complete</span> (saved in the header).{" "}
+                  <span className="font-semibold">User</span>, <span className="font-semibold">reviewer</span>, or{" "}
+                  <span className="font-semibold">admin</span> can publish. Findings with{" "}
+                  <span className="font-semibold">CHECK (Y/N) = Yes</span> are published to Audit Review.
                 </p>
               </div>
             </div>
@@ -1737,6 +1712,7 @@ export default function AuditFindingDeptClient({
           </div>
         </div>
       )}
+      <ScrollToTopButton />
     </main>
   );
 }

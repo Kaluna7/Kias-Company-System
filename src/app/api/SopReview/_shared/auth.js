@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { isAdminRole } from "@/lib/roles";
 
-function isAdminLike(session) {
-  const role = (session?.user?.role || "").toLowerCase();
+function isAdminBLike(session) {
   const identity = String(
     session?.user?.username || session?.user?.name || session?.user?.email || "",
   )
     .trim()
     .toLowerCase();
-  return (
-    role === "admin" ||
-    role === "adminb" ||
-    identity === "adminb" ||
-    identity.startsWith("adminb@")
-  );
+  return identity === "adminb" || identity.startsWith("adminb@");
+}
+
+function isAdminLike(session) {
+  return isAdminRole(session?.user?.role) || isAdminBLike(session);
 }
 
 /**
@@ -57,7 +56,8 @@ export async function requireReviewer() {
 }
 
 /**
- * Publish SOP Review to the report: reviewer or admin only.
+ * Publish SOP Review to the report: preparer (user), reviewer, or admin.
+ * Dashboard progress counts any successful publish regardless of role.
  */
 export async function requireSopPublisher() {
   try {
@@ -71,9 +71,9 @@ export async function requireSopPublisher() {
       );
     }
 
-    if (role !== "reviewer" && !isAdminLike(session)) {
+    if (role !== "user" && role !== "reviewer" && !isAdminLike(session)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: only reviewer or admin can publish" },
+        { success: false, error: "Forbidden: only user, reviewer, or admin can publish" },
         { status: 403 },
       );
     }

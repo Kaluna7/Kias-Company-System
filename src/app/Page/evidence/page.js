@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getInternalFetchBaseUrl } from '@/lib/getInternalFetchBaseUrl';
+import { isAdminRole } from "@/lib/roles";
 import {
   buildScheduleWindowsByUpperDeptName,
   formatScheduleRange,
@@ -41,7 +42,7 @@ export default async function Evidence({ searchParams }) {
   const session = await getServerSession(authOptions);
   const userName = session?.user?.name || "";
   const role = (session?.user?.role || "").toLowerCase();
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
   const isReviewer = role === "reviewer";
   
   // Get user assignments for Evidence module

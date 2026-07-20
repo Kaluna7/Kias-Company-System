@@ -3,6 +3,7 @@ import { buildWorksheetFindManyWhere } from "../_shared/worksheetWhere";
 import {
   requireWorksheetEditorSession,
   isWorksheetPublisherRole,
+  wantsWorksheetPublish,
   canEditWorksheetReviewerFields,
 } from "../_shared/worksheetAuth";
 import { executeWorksheetPost } from "../_shared/executeWorksheetPost";
@@ -49,7 +50,7 @@ export async function POST(req) {
     const { error, role } = await requireWorksheetEditorSession();
     if (error) return error;
     const body = await req.json();
-    const publish = isWorksheetPublisherRole(role);
+    const publish = isWorksheetPublisherRole(role) && wantsWorksheetPublish(body);
     if (publish && !worksheetFilePathAllowsPublish(body.filePath)) {
       return new Response(
         JSON.stringify({ success: false, error: WORKSHEET_PUBLISH_REQUIRES_FILE_MESSAGE }),

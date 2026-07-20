@@ -47,7 +47,7 @@ export default function ChatSidebar({ currentUser }) {
   const [selectedConversation, setSelectedConversation] = useState("all"); // 'all' or sender name
 
   const role = (currentUser?.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "reviewer";
+  const isAdmin = role === "admin" || role === "reviewer" || role === "super_admin" || role === "superadmin";
   const currentName = (currentUser?.name || "").trim();
 
   // Ref untuk container chat messages

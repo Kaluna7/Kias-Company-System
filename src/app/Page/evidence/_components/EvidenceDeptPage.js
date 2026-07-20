@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
 import { getEvidenceApiUrl, uploadEvidenceFile } from "./uploadEvidenceWithProgress";
+import { isAdminRole } from "@/lib/roles";
 
 const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
 const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
@@ -36,8 +37,10 @@ export default function EvidenceDeptPage({
   const { data: session } = useSession();
   const role = String(session?.user?.role || "").trim().toLowerCase();
   const isReviewer = role === "reviewer";
-  const isAdmin = role === "admin";
-  const canPublish = isAdmin || isReviewer;
+  const isAdmin = isAdminRole(role);
+  const isUser = role === "user";
+  /** Any role may publish; dashboard progress counts every successful publish. */
+  const canPublish = isAdmin || isReviewer || isUser;
   const [preparer, setPreparer] = useState("");
   const [apData, setApData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -539,7 +542,7 @@ export default function EvidenceDeptPage({
             >
               <option value="DRAFT">DRAFT</option>
               <option value="INCOMPLETE">INCOMPLETE</option>
-              {(isAdmin || isReviewer) ? (
+              {(isAdmin || isReviewer || isUser) ? (
                 <option value="COMPLETE">COMPLETE</option>
               ) : overallStatus === "COMPLETE" ? (
                 <option value="COMPLETE">COMPLETE</option>
@@ -549,7 +552,7 @@ export default function EvidenceDeptPage({
               onClick={handleSave}
               disabled={saving || loading || overallStatus !== "COMPLETE" || !canPublish}
               className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!canPublish ? "Only admins and reviewers can publish" : "Publish"}
+              title={!canPublish ? "Sign in to publish" : "Publish"}
             >
               {saving ? "Publishing..." : "Publish"}
             </button>
@@ -558,7 +561,7 @@ export default function EvidenceDeptPage({
         {(overallStatus !== "COMPLETE" || !canPublish) && (
           <div className="mb-3 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-md border border-amber-200 font-medium">
             {!canPublish
-              ? "Only admins and reviewers can publish."
+              ? "Sign in as user, reviewer, or admin to publish."
               : "Status must be COMPLETE to publish."}
           </div>
         )}

@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 import { formatBytes, formatDate } from "./filesUtils";
+import { isAdminLikeRole } from "@/lib/roles";
 
 function isImageFile(file) {
   return String(file?.type || "").startsWith("image/");
@@ -57,7 +58,7 @@ export default function FilesFolderClient() {
   const [previewEntries, setPreviewEntries] = useState(null);
 
   const role = String(session?.user?.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "reviewer";
+  const isAdmin = isAdminLikeRole(role);
   const currentUserId = session?.user?.id || session?.user?.email || "";
   const isLegacyFolder = folder?.isLegacy === true;
 

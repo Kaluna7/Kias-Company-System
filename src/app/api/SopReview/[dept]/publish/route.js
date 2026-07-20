@@ -258,32 +258,31 @@ export async function POST(req, { params }) {
       // Get schedule data for audit fieldwork dates
       const scheduleData = await getScheduleDataForDepartment(slug);
       const auditFieldworkStartDate = scheduleData?.start_date || null;
-      const auditFieldworkEndDate = new Date().toISOString().split('T')[0]; // Today's date (publish date)
+      const auditFieldworkEndDate = new Date().toISOString().split("T")[0]; // Today's date (publish date)
 
-      // Insert meta first, then steps with report_meta_id (agar setiap publish punya baris terpisah)
-      let reportMetaId = null;
-      if (meta) {
-        const metaInsert = await client.query(
-          `INSERT INTO ${reportMeta}
-            (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
-           RETURNING id`,
-          [
-            meta.department_name || resolved.departmentName,
-            "AVAILABLE",
-            meta.preparer_status || "DRAFT",
-            meta.preparer_name || null,
-            meta.preparer_date || null,
-            meta.reviewer_comment || null,
-            meta.reviewer_status || "DRAFT",
-            meta.reviewer_name || null,
-            meta.reviewer_date || null,
-            auditFieldworkStartDate,
-            auditFieldworkEndDate,
-          ]
-        );
-        reportMetaId = metaInsert?.rows?.[0]?.id ?? null;
-      }
+      // Always insert report meta — dashboard progress reads sop_report_* (published_at).
+      // Missing meta previously left only step rows, so progress stayed 0/N.
+      const metaRow = meta && typeof meta === "object" ? meta : {};
+      const metaInsert = await client.query(
+        `INSERT INTO ${reportMeta}
+          (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+         RETURNING id`,
+        [
+          metaRow.department_name || resolved.departmentName,
+          "AVAILABLE",
+          metaRow.preparer_status || "DRAFT",
+          metaRow.preparer_name || null,
+          metaRow.preparer_date || null,
+          metaRow.reviewer_comment || null,
+          metaRow.reviewer_status || "DRAFT",
+          metaRow.reviewer_name || null,
+          metaRow.reviewer_date || null,
+          auditFieldworkStartDate,
+          auditFieldworkEndDate,
+        ]
+      );
+      const reportMetaId = metaInsert?.rows?.[0]?.id ?? null;
 
       // Batch insert all steps in one query (prevents double rows from any race)
       if (steps.length > 0) {

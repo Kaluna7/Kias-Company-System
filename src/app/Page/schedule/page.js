@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
+import { canManageSchedule } from "@/lib/roles";
 
 const BASE_DEPT_ROWS = [
   { id: "A1.1", department_id: "A1.1", department: "Sec. Finance", startDate: "06-Jan-25", endDate: "08-Jan-25", days: 3, user: "" },
@@ -366,17 +367,22 @@ function SchedulePageContent() {
       return;
     }
     if (status === "authenticated") {
+      if (!canManageSchedule(session?.user?.role)) {
+        router.replace("/Page/dashboard");
+        return;
+      }
       loadUsers();
       loadArchive();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, router]);
+  }, [status, router, session?.user?.role]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
+    if (!canManageSchedule(session?.user?.role)) return;
     loadMainSchedule();
     loadAllModuleSchedules();
-  }, [status, selectedYear, loadMainSchedule, loadAllModuleSchedules]);
+  }, [status, selectedYear, loadMainSchedule, loadAllModuleSchedules, session?.user?.role]);
 
   useEffect(() => {
     const qs =

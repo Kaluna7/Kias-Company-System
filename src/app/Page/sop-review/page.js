@@ -6,6 +6,7 @@ import { buildScheduleWindowsByDeptKey, formatScheduleRange } from "@/lib/schedu
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { buttonSopReview } from "@/app/data/sopReviewConfig";
+import { isAdminRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -130,7 +131,7 @@ async function SopReviewGrid({ yearParam }) {
   const userName = (session?.user?.name || "").trim();
   const role = (session?.user?.role || "").toLowerCase();
   // Sama seperti dashboard: admin & reviewer buka semua department tanpa cek penugasan.
-  const isAdmin = role === "admin";
+  const isAdmin = isAdminRole(role);
   const isReviewer = role === "reviewer";
   const isPrivileged = isAdmin || isReviewer;
 
