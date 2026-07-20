@@ -804,7 +804,7 @@ function DashboardPageContent() {
                         onClick={openCreateAccount}
                         className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
                       >
-                        <span className="font-medium">Create Account for Employee</span>
+                        <span className="font-medium">Create Account</span>
                       </button>
                     )}
                     <button
@@ -1344,8 +1344,8 @@ function DashboardPageContent() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-3 p-6 space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Create Account for Employee</h2>
-                <p className="text-xs text-slate-500 mt-1">Only super admin can create employee accounts and set role.</p>
+                <h2 className="text-lg font-semibold text-slate-900">Create Account</h2>
+                <p className="text-xs text-slate-500 mt-1">Super admin can create user, reviewer, admin, and super admin accounts.</p>
               </div>
               <button
                 type="button"
@@ -1400,6 +1400,8 @@ function DashboardPageContent() {
                 >
                   <option value="user">User</option>
                   <option value="reviewer">Reviewer</option>
+                  <option value="admin">Admin</option>
+                  <option value="super_admin">Super Admin</option>
                 </select>
               </div>
             </div>

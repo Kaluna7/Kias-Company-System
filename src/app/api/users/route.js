@@ -61,8 +61,14 @@ export async function POST(req) {
     const email = (body?.email || "").toLowerCase().trim();
     const password = String(body?.password || "");
     const rawRole = (body?.role || "user").toLowerCase().trim();
-    const allowedRoles = new Set(["user", "reviewer"]);
-    const userRole = allowedRoles.has(rawRole) ? rawRole : "user";
+    const allowedRoles = new Set(["user", "reviewer", "admin", "super_admin"]);
+    if (!allowedRoles.has(rawRole)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid role. Allowed: user, reviewer, admin, super_admin" },
+        { status: 400 }
+      );
+    }
+    const userRole = rawRole;
 
     if (!name || !email || !password) {
       return NextResponse.json(
