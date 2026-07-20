@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import pool from "@/app/lib/db";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { canCreateAccounts, isAdminRole, isSuperAdmin } from "@/lib/roles";
+import { canCreateAccounts } from "@/lib/roles";
 
 function toIntSafe(v, fallback) {
   if (v === undefined || v === null || v === "") return fallback;
@@ -23,22 +23,24 @@ export async function GET(req) {
   try {
     const url = req?.url ? new URL(req.url) : null;
     const page = url ? Math.max(1, toIntSafe(url.searchParams.get("page"), 1)) : 1;
-    const pageSize = url ? Math.max(1, Math.min(100, toIntSafe(url.searchParams.get("pageSize"), 50))) : 50;
+    const pageSize = url ? Math.max(1, Math.min(500, toIntSafe(url.searchParams.get("pageSize"), 200))) : 200;
     const offset = (page - 1) * pageSize;
 
-    const countRes = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM public.users
-       WHERE role IS NULL
-          OR LOWER(role) NOT IN ('admin', 'super_admin', 'superadmin')`
-    );
+    const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM public.users`);
     const total = countRes.rows?.[0]?.total ?? 0;
 
     const r = await pool.query(
       `SELECT id::text AS id, name, email, role, COALESCE(avatar_url, '') AS avatar_url
        FROM public.users
-       WHERE role IS NULL
-          OR LOWER(role) NOT IN ('admin', 'super_admin', 'superadmin')
-       ORDER BY name ASC
+       ORDER BY
+         CASE LOWER(COALESCE(role, 'user'))
+           WHEN 'super_admin' THEN 0
+           WHEN 'superadmin' THEN 0
+           WHEN 'admin' THEN 1
+           WHEN 'reviewer' THEN 2
+           ELSE 3
+         END,
+         name ASC
        LIMIT $1 OFFSET $2`,
       [pageSize, offset]
     );
@@ -143,9 +145,8 @@ export async function DELETE(req) {
       );
     }
 
-    // Safety: never delete admin / super_admin from this endpoint.
     const target = await pool.query(
-      `SELECT id::text AS id, LOWER(COALESCE(role, '')) AS role
+      `SELECT id::text AS id, email, LOWER(COALESCE(role, '')) AS role
        FROM public.users
        WHERE id::text = $1
        LIMIT 1`,
@@ -158,9 +159,16 @@ export async function DELETE(req) {
         { status: 404 }
       );
     }
-    if (isAdminRole(targetUser.role) || isSuperAdmin(targetUser.role)) {
+
+    const sessionUserId = normalizeUserId(session?.user?.id);
+    const sessionEmail = String(session?.user?.email || "").toLowerCase().trim();
+    const targetEmail = String(targetUser.email || "").toLowerCase().trim();
+    if (
+      (sessionUserId && sessionUserId === targetUser.id) ||
+      (sessionEmail && targetEmail && sessionEmail === targetEmail)
+    ) {
       return NextResponse.json(
-        { success: false, error: "Cannot delete admin user" },
+        { success: false, error: "You cannot delete your own account." },
         { status: 403 }
       );
     }

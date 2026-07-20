@@ -230,7 +230,7 @@ function DashboardPageContent() {
           setProgressUserName("");
           return;
         }
-        const res = await fetch("/api/users", { cache: "no-store" });
+        const res = await fetch("/api/users?page=1&pageSize=500", { cache: "no-store" });
         const json = await res.json().catch(() => null);
         if (!mounted) return;
         if (res.ok && json?.success && Array.isArray(json.users)) {
@@ -1411,30 +1411,45 @@ function DashboardPageContent() {
 
             <div className="border-t border-slate-200 pt-4">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-slate-800">Employee Accounts</h3>
-                <span className="text-xs text-slate-500">{progressUsers.length} user(s)</span>
+                <h3 className="text-sm font-semibold text-slate-800">All Accounts</h3>
+                <span className="text-xs text-slate-500">{progressUsers.length} account(s)</span>
               </div>
-              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200">
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200">
                 {progressUsers.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-slate-500">No employee users found.</div>
+                  <div className="px-3 py-3 text-xs text-slate-500">No accounts found.</div>
                 ) : (
                   <div className="divide-y divide-slate-100">
-                    {progressUsers.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-slate-800 truncate">{u.name}</div>
-                          <div className="text-xs text-slate-500 truncate">{u.email} · {(u.role || "user").toLowerCase()}</div>
+                    {progressUsers.map((u) => {
+                      const uRole = String(u.role || "user").toLowerCase();
+                      const isSelf =
+                        String(u.email || "").toLowerCase() ===
+                        String(session?.user?.email || "").toLowerCase();
+                      return (
+                        <div key={u.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-slate-800 truncate">{u.name}</div>
+                            <div className="text-xs text-slate-500 truncate">
+                              {u.email} · {uRole}
+                              {isSelf ? " · you" : ""}
+                            </div>
+                          </div>
+                          {isSelf ? (
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold text-slate-400 bg-slate-50 whitespace-nowrap">
+                              You
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={deletingUserId === String(u.id)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {deletingUserId === String(u.id) ? "Deleting..." : "Delete"}
+                            </button>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(u)}
-                          disabled={deletingUserId === String(u.id)}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          {deletingUserId === String(u.id) ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
