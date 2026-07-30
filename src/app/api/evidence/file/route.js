@@ -4,7 +4,12 @@ export const maxDuration = 300;
 import { NextResponse } from "next/server";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, normalize, basename } from "path";
-import { guessContentType } from "@/app/lib/minio";
+import {
+  getObjectStream,
+  guessContentType,
+  isMinioEnabled,
+  resolveExistingMinioKey,
+} from "@/app/lib/minio";
 import { safeDownloadFileName } from "@/lib/evidenceFileUrl";
 
 const UPLOADS_EVIDENCE_ROOT = join(process.cwd(), "public", "uploads", "evidence");
@@ -17,7 +22,7 @@ function safeDecode(value) {
   }
 }
 
-/** Map any stored evidence URL to a relative key: dept/filename */
+/** Map stored URL → relative key dept/filename */
 function evidenceRelativeKeyFromPath(pathParam) {
   let url = String(pathParam || "").trim().split("?")[0].split("#")[0];
   if (!url) return null;
@@ -62,7 +67,6 @@ function evidenceRelativeKeyFromPath(pathParam) {
     }
   }
 
-  // Bare key: hrd/file.xlsx
   if (!url.startsWith("/") && url.includes("/")) {
     return url
       .split("/")
@@ -91,70 +95,48 @@ function findLocalEvidenceFile(relativeKey, preferredName = "") {
   const exact = resolveUnderEvidenceRoot(relativeKey);
   if (exact && existsSync(exact)) return exact;
 
-  // Try alternate folder casing / preferred original filename in same folder
   const parts = String(relativeKey || "")
     .split("/")
     .filter(Boolean);
-  if (parts.length < 2) return null;
+  if (parts.length < 1) return null;
 
   const folderName = parts[0];
   const storedFileName = parts.slice(1).join("/");
-  const folderPath = resolveUnderEvidenceRoot(folderName);
-  if (!folderPath || !existsSync(folderPath)) {
-    // try lowercase / uppercase folder
-    for (const alt of [folderName.toLowerCase(), folderName.toUpperCase()]) {
-      const altFolder = resolveUnderEvidenceRoot(alt);
-      if (altFolder && existsSync(altFolder)) {
-        const candidate = join(altFolder, storedFileName);
-        if (existsSync(candidate)) return candidate;
-        const byPreferred = preferredName ? join(altFolder, basename(preferredName)) : null;
-        if (byPreferred && existsSync(byPreferred)) return byPreferred;
-        // scan folder for closest name match
-        try {
-          const files = readdirSync(altFolder);
-          const want = [
-            storedFileName.toLowerCase(),
-            basename(preferredName || "").toLowerCase(),
-          ].filter(Boolean);
-          const hit = files.find((f) => {
-            const lower = f.toLowerCase();
-            return want.some((w) => w && (lower === w || lower.includes(w) || w.includes(lower)));
-          });
-          if (hit) return join(altFolder, hit);
-        } catch {
-          // ignore
-        }
-      }
+
+  for (const alt of [folderName, folderName.toLowerCase(), folderName.toUpperCase()]) {
+    const folderPath = resolveUnderEvidenceRoot(alt);
+    if (!folderPath || !existsSync(folderPath)) continue;
+
+    if (storedFileName) {
+      const candidate = join(folderPath, storedFileName);
+      if (existsSync(candidate)) return candidate;
     }
-    return null;
-  }
-
-  if (preferredName) {
-    const byPreferred = join(folderPath, basename(preferredName));
-    if (existsSync(byPreferred)) return byPreferred;
-  }
-
-  try {
-    const files = readdirSync(folderPath);
-    const want = [
-      storedFileName.toLowerCase(),
-      basename(preferredName || "").toLowerCase(),
-    ].filter(Boolean);
-    const hit = files.find((f) => {
-      const lower = f.toLowerCase();
-      return want.some((w) => w && (lower === w || lower.includes(w) || w.includes(lower)));
-    });
-    if (hit) return join(folderPath, hit);
-  } catch {
-    // ignore
+    if (preferredName) {
+      const byPreferred = join(folderPath, basename(preferredName));
+      if (existsSync(byPreferred)) return byPreferred;
+    }
+    try {
+      const files = readdirSync(folderPath);
+      const want = [
+        storedFileName.toLowerCase(),
+        basename(preferredName || "").toLowerCase(),
+      ].filter(Boolean);
+      const hit = files.find((f) => {
+        const lower = f.toLowerCase();
+        return want.some((w) => w && (lower === w || lower.includes(w) || w.includes(lower)));
+      });
+      if (hit) return join(folderPath, hit);
+    } catch {
+      // ignore
+    }
   }
 
   return null;
 }
 
-function fileResponse(buffer, fileName, forceDownload) {
+function fileResponse(buffer, fileName, contentType, forceDownload) {
   const headers = new Headers();
-  headers.set("Content-Type", guessContentType(fileName));
+  headers.set("Content-Type", contentType || guessContentType(fileName));
   headers.set("Content-Length", String(buffer.length));
   headers.set(
     "Content-Disposition",
@@ -181,9 +163,21 @@ function decodePathParam(searchParams) {
   return pathParam;
 }
 
+async function readMinioBuffer(objectKey) {
+  const result = await getObjectStream(objectKey);
+  if (result.Body && typeof result.Body.transformToByteArray === "function") {
+    return {
+      buffer: Buffer.from(await result.Body.transformToByteArray()),
+      contentType: result.ContentType || null,
+    };
+  }
+  return null;
+}
+
 /**
- * Evidence download from local disk only (public/uploads/evidence).
- * Does NOT use MinIO — published legacy files live on disk.
+ * Evidence download:
+ * 1) local disk public/uploads/evidence (legacy)
+ * 2) MinIO bucket (current production files)
  */
 export async function GET(req) {
   try {
@@ -196,44 +190,72 @@ export async function GET(req) {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
 
-    // Absolute http(s) that is actually our uploads path
     let normalizedPath = pathParam;
     if (/^https?:\/\//i.test(pathParam)) {
       try {
         normalizedPath = new URL(pathParam).pathname;
       } catch {
-        return NextResponse.json(
-          { error: "External URL download is disabled for evidence files." },
-          { status: 400 },
-        );
+        normalizedPath = pathParam;
       }
     }
 
     const relativeKey = evidenceRelativeKeyFromPath(normalizedPath);
-    if (!relativeKey) {
-      return NextResponse.json(
-        {
-          error:
-            "Unsupported evidence file path. Expected /uploads/evidence/... or /api/evidence/storage/...",
-        },
-        { status: 400 },
-      );
+
+    // 1) Local disk first
+    if (relativeKey) {
+      const fullPath = findLocalEvidenceFile(relativeKey, preferredName);
+      if (fullPath && existsSync(fullPath)) {
+        const fileName = safeDownloadFileName(
+          preferredName || basename(fullPath) || "download",
+        );
+        return fileResponse(
+          readFileSync(fullPath),
+          fileName,
+          guessContentType(fileName),
+          forceDownload,
+        );
+      }
     }
 
-    const fullPath = findLocalEvidenceFile(relativeKey, preferredName);
-    if (!fullPath || !existsSync(fullPath)) {
-      return NextResponse.json(
-        {
-          error: `File not found on disk (uploads/evidence/${relativeKey}). Re-upload the file if it was never saved locally.`,
-        },
-        { status: 404 },
-      );
+    // 2) MinIO
+    if (isMinioEnabled()) {
+      try {
+        const objectKey = await resolveExistingMinioKey(
+          normalizedPath.startsWith("/") ? normalizedPath : `/api/evidence/storage/${relativeKey || normalizedPath}`,
+          preferredName,
+        );
+        const loaded = await readMinioBuffer(objectKey);
+        if (loaded) {
+          const fileName = safeDownloadFileName(
+            preferredName || objectKey.split("/").pop() || "download",
+          );
+          return fileResponse(
+            loaded.buffer,
+            fileName,
+            loaded.contentType || guessContentType(fileName),
+            forceDownload,
+          );
+        }
+      } catch (e) {
+        return NextResponse.json(
+          {
+            error:
+              e?.message ||
+              `File not found on disk or MinIO${relativeKey ? ` (key: ${relativeKey})` : ""}.`,
+          },
+          { status: 404 },
+        );
+      }
     }
 
-    const fileName = safeDownloadFileName(
-      preferredName || basename(fullPath) || "download",
+    return NextResponse.json(
+      {
+        error: relativeKey
+          ? `File not found on disk (uploads/evidence/${relativeKey}) and MinIO is not available.`
+          : "Unsupported evidence file path.",
+      },
+      { status: 404 },
     );
-    return fileResponse(readFileSync(fullPath), fileName, forceDownload);
   } catch (error) {
     console.error("GET /api/evidence/file:", error);
     return NextResponse.json(

@@ -5,9 +5,24 @@ import { NextResponse } from "next/server";
 import { createReadStream, existsSync, readdirSync, statSync } from "fs";
 import { join, normalize, basename } from "path";
 import { Readable } from "node:stream";
-import { guessContentType } from "@/app/lib/minio";
+import {
+  getObjectStream,
+  guessContentType,
+  isMinioEnabled,
+  resolveExistingMinioKey,
+} from "@/app/lib/minio";
 
 const UPLOADS_EVIDENCE_ROOT = join(process.cwd(), "public", "uploads", "evidence");
+
+function toWebStream(body) {
+  if (!body) return null;
+  if (typeof body.transformToWebStream === "function") {
+    return body.transformToWebStream();
+  }
+  if (body instanceof ReadableStream) return body;
+  if (body instanceof Readable) return Readable.toWeb(body);
+  return body;
+}
 
 function tryLocalEvidenceFile(objectKey, preferredName = "") {
   const parts = String(objectKey || "")
@@ -56,7 +71,7 @@ function tryLocalEvidenceFile(objectKey, preferredName = "") {
 }
 
 /**
- * Serve evidence files from local disk only (no MinIO).
+ * Serve evidence: local disk first, then MinIO.
  */
 export async function GET(req, { params }) {
   try {
@@ -66,34 +81,64 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: "Invalid path" }, { status: 400 });
     }
 
-    const objectKey = segments.map((s) => decodeURIComponent(s)).join("/");
+    const objectKeyRaw = segments.map((s) => decodeURIComponent(s)).join("/");
     const preferredName = new URL(req.url).searchParams.get("name") || "";
     const forceDownload = new URL(req.url).searchParams.get("download") === "1";
 
-    const localPath = tryLocalEvidenceFile(objectKey, preferredName);
-    if (!localPath) {
-      return NextResponse.json(
-        {
-          error: `File not found on disk (uploads/evidence/${objectKey})`,
-        },
-        { status: 404 },
+    const localPath = tryLocalEvidenceFile(objectKeyRaw, preferredName);
+    if (localPath) {
+      const fileName = basename(localPath) || "file";
+      const stat = statSync(localPath);
+      const headers = new Headers();
+      headers.set("Content-Type", guessContentType(fileName));
+      headers.set("Content-Length", String(stat.size));
+      headers.set(
+        "Content-Disposition",
+        `${forceDownload ? "attachment" : "inline"}; filename="${fileName.replace(/"/g, "")}"`,
       );
+      return new NextResponse(Readable.toWeb(createReadStream(localPath)), {
+        status: 200,
+        headers,
+      });
     }
 
-    const fileName = basename(localPath) || "file";
-    const stat = statSync(localPath);
-    const headers = new Headers();
-    headers.set("Content-Type", guessContentType(fileName));
-    headers.set("Content-Length", String(stat.size));
-    headers.set(
-      "Content-Disposition",
-      `${forceDownload ? "attachment" : "inline"}; filename="${fileName.replace(/"/g, "")}"`,
-    );
+    if (isMinioEnabled()) {
+      try {
+        const objectKey = await resolveExistingMinioKey(
+          `/api/evidence/storage/${objectKeyRaw
+            .split("/")
+            .map((s) => encodeURIComponent(s))
+            .join("/")}`,
+          preferredName,
+        );
+        const result = await getObjectStream(objectKey);
+        const webBody = toWebStream(result.Body);
+        if (!webBody) {
+          return NextResponse.json({ error: "Empty object" }, { status: 404 });
+        }
+        const fileName = objectKey.split("/").pop() || "file";
+        const headers = new Headers();
+        headers.set("Content-Type", result.ContentType || guessContentType(fileName));
+        if (result.ContentLength != null) {
+          headers.set("Content-Length", String(result.ContentLength));
+        }
+        headers.set(
+          "Content-Disposition",
+          `${forceDownload ? "attachment" : "inline"}; filename="${fileName.replace(/"/g, "")}"`,
+        );
+        return new NextResponse(webBody, { status: 200, headers });
+      } catch (e) {
+        return NextResponse.json(
+          { error: e?.message || `File not found (uploads or MinIO: ${objectKeyRaw})` },
+          { status: 404 },
+        );
+      }
+    }
 
-    return new NextResponse(Readable.toWeb(createReadStream(localPath)), {
-      status: 200,
-      headers,
-    });
+    return NextResponse.json(
+      { error: `File not found on disk (uploads/evidence/${objectKeyRaw})` },
+      { status: 404 },
+    );
   } catch (error) {
     console.error("GET /api/evidence/storage:", error);
     return NextResponse.json({ error: "File not found" }, { status: 404 });
