@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { createReadStream, existsSync, statSync } from "fs";
 import { join, normalize } from "path";
 import { Readable } from "node:stream";
-import { getObjectStream, guessContentType, isMinioEnabled } from "@/app/lib/minio";
+import { getObjectStream, guessContentType, isMinioEnabled, resolveExistingMinioKey } from "@/app/lib/minio";
 
 function toWebStream(body) {
   if (!body) return null;
@@ -37,7 +37,22 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: "Invalid path" }, { status: 400 });
     }
 
-    const objectKey = segments.map((s) => decodeURIComponent(s)).join("/");
+    const objectKeyRaw = segments.map((s) => decodeURIComponent(s)).join("/");
+    const preferredName = new URL(req.url).searchParams.get("name") || "";
+    let objectKey = objectKeyRaw;
+    if (isMinioEnabled()) {
+      try {
+        objectKey = await resolveExistingMinioKey(
+          `/api/evidence/storage/${objectKeyRaw
+            .split("/")
+            .map((s) => encodeURIComponent(s))
+            .join("/")}`,
+          preferredName,
+        );
+      } catch {
+        objectKey = objectKeyRaw;
+      }
+    }
     const fileName = objectKey.split("/").pop() || "file";
     const forceDownload = new URL(req.url).searchParams.get("download") === "1";
     const disposition = `${forceDownload ? "attachment" : "inline"}; filename="${fileName.replace(/"/g, "")}"`;

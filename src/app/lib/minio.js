@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -133,21 +134,111 @@ export function getStorageProxyUrl(objectKey) {
   return `${STORAGE_PREFIX}${encoded}`;
 }
 
+function safeDecodeURIComponent(value) {
+  const s = String(value ?? "");
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/**
+ * Extract object key from stored attachment URL / path.
+ * Handles proxy URLs, legacy uploads paths, and public MinIO URLs.
+ */
 export function objectKeyFromFileUrl(fileUrl) {
   if (!fileUrl || typeof fileUrl !== "string") return null;
-  if (fileUrl.startsWith(STORAGE_PREFIX)) {
-    const raw = fileUrl.slice(STORAGE_PREFIX.length);
+  let url = fileUrl.trim();
+  if (!url) return null;
+
+  // Strip origin if absolute app URL accidentally stored
+  try {
+    if (/^https?:\/\//i.test(url)) {
+      const u = new URL(url);
+      url = `${u.pathname}${u.search || ""}`;
+    }
+  } catch {
+    // keep raw
+  }
+
+  // Drop query/hash from path-only values
+  url = url.split("?")[0].split("#")[0];
+
+  if (url.startsWith(STORAGE_PREFIX)) {
+    const raw = url.slice(STORAGE_PREFIX.length);
     return raw
       .split("/")
-      .map((s) => decodeURIComponent(s))
+      .filter(Boolean)
+      .map((s) => safeDecodeURIComponent(s))
       .join("/");
   }
+
+  // Legacy disk path → same relative key used in MinIO folder layout
+  if (url.startsWith("/uploads/evidence/")) {
+    const raw = url.slice("/uploads/evidence/".length);
+    return raw
+      .split("/")
+      .filter(Boolean)
+      .map((s) => safeDecodeURIComponent(s))
+      .join("/");
+  }
+
   const publicBase = (process.env.MINIO_PUBLIC_URL || "").replace(/\/$/, "");
   const bucket = getMinioBucket();
   if (publicBase && fileUrl.startsWith(`${publicBase}/${bucket}/`)) {
-    return fileUrl.slice(`${publicBase}/${bucket}/`.length);
+    return fileUrl
+      .slice(`${publicBase}/${bucket}/`.length)
+      .split("?")[0]
+      .split("/")
+      .filter(Boolean)
+      .map((s) => safeDecodeURIComponent(s))
+      .join("/");
   }
+
+  // Path-style MinIO: http://host:9000/bucket/key...
+  const bucketPrefix = `/${bucket}/`;
+  const bucketIdx = url.indexOf(bucketPrefix);
+  if (bucketIdx >= 0) {
+    return url
+      .slice(bucketIdx + bucketPrefix.length)
+      .split("/")
+      .filter(Boolean)
+      .map((s) => safeDecodeURIComponent(s))
+      .join("/");
+  }
+
   return null;
+}
+
+/** Build candidate keys to try when the exact stored key is missing. */
+export function buildMinioKeyCandidates(fileUrl, preferredName = "") {
+  const primary = objectKeyFromFileUrl(fileUrl);
+  const candidates = [];
+  const push = (k) => {
+    const key = String(k || "").replace(/^\/+/, "").trim();
+    if (!key) return;
+    if (!candidates.includes(key)) candidates.push(key);
+  };
+
+  push(primary);
+  if (primary) {
+    push(safeDecodeURIComponent(primary));
+    // If bucket name was wrongly included in key: evidence/hrd/file.xlsx
+    const bucket = getMinioBucket();
+    if (primary.startsWith(`${bucket}/`)) {
+      push(primary.slice(bucket.length + 1));
+    }
+  }
+
+  // Preferred original filename under same folder
+  if (primary && preferredName) {
+    const folder = primary.includes("/") ? primary.slice(0, primary.lastIndexOf("/")) : "";
+    const safeName = String(preferredName).replace(/[/\\]/g, "_").trim();
+    if (folder && safeName) push(`${folder}/${safeName}`);
+  }
+
+  return candidates;
 }
 
 export async function createPresignedPutUrl(objectKey, contentType, expiresInSeconds = 86400) {
@@ -170,6 +261,65 @@ export async function headMinioObject(objectKey) {
       Key: objectKey,
     }),
   );
+}
+
+/**
+ * Resolve a working MinIO object key: try candidates, then list by folder prefix.
+ */
+export async function resolveExistingMinioKey(fileUrl, preferredName = "") {
+  const candidates = buildMinioKeyCandidates(fileUrl, preferredName);
+  for (const key of candidates) {
+    try {
+      await headMinioObject(key);
+      return key;
+    } catch {
+      // try next
+    }
+  }
+
+  // Fallback: list objects under folder and match by basename / preferred name
+  const primary = candidates[0] || "";
+  const folder = primary.includes("/") ? primary.slice(0, primary.lastIndexOf("/") + 1) : "";
+  const baseName = primary.includes("/") ? primary.slice(primary.lastIndexOf("/") + 1) : primary;
+  const wantNames = [baseName, preferredName]
+    .map((n) => String(n || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!folder && !wantNames.length) {
+    const err = new Error("The specified key does not exist.");
+    err.code = "NoSuchKey";
+    throw err;
+  }
+
+  const client = getInternalS3Client();
+  const listed = await client.send(
+    new ListObjectsV2Command({
+      Bucket: getMinioBucket(),
+      Prefix: folder || undefined,
+      MaxKeys: 200,
+    }),
+  );
+
+  const contents = listed.Contents || [];
+  for (const obj of contents) {
+    const key = obj.Key || "";
+    const name = key.includes("/") ? key.slice(key.lastIndexOf("/") + 1) : key;
+    const lower = name.toLowerCase();
+    if (wantNames.some((w) => lower === w || lower.includes(w) || w.includes(lower))) {
+      return key;
+    }
+  }
+
+  // Last resort: if only one object in folder, use it
+  if (folder && contents.length === 1 && contents[0].Key) {
+    return contents[0].Key;
+  }
+
+  const err = new Error(
+    `File not found in storage (tried key: ${primary || "unknown"}). The object may have been deleted or uploaded to a different path.`,
+  );
+  err.code = "NoSuchKey";
+  throw err;
 }
 
 export async function getObjectStream(objectKey) {
