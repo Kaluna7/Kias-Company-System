@@ -41,6 +41,62 @@ export function isMinioEnabled() {
   );
 }
 
+/** Shown to users when MinIO is configured but unreachable — file was not saved. */
+export const MINIO_DOWN_MESSAGE =
+  "Storage MinIO sedang mati / tidak dapat dihubungi. File TIDAK tersimpan. Hubungi admin untuk menyalakan MinIO, lalu upload ulang.";
+
+export const MINIO_DISABLED_MESSAGE =
+  "Storage MinIO belum dikonfigurasi. Upload dibatalkan — file tidak tersimpan. Hubungi admin.";
+
+/**
+ * Verify MinIO is reachable before creating upload URLs.
+ * Throws an Error with statusCode 503 and code MINIO_DOWN / MINIO_DISABLED.
+ */
+export async function assertMinioHealthy(timeoutMs = 5000) {
+  if (!isMinioEnabled()) {
+    const err = new Error(MINIO_DISABLED_MESSAGE);
+    err.statusCode = 503;
+    err.code = "MINIO_DISABLED";
+    throw err;
+  }
+
+  try {
+    await Promise.race([
+      ensureMinioBucket(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("MinIO health check timed out")), timeoutMs);
+      }),
+    ]);
+  } catch (cause) {
+    const err = new Error(MINIO_DOWN_MESSAGE);
+    err.statusCode = 503;
+    err.code = "MINIO_DOWN";
+    err.cause = cause;
+    throw err;
+  }
+}
+
+export function isMinioConnectionError(error) {
+  const msg = String(error?.message || error || "").toLowerCase();
+  const code = String(error?.code || error?.name || "").toLowerCase();
+  return (
+    code === "minio_down" ||
+    code === "minio_disabled" ||
+    code === "econnrefused" ||
+    code === "enotfound" ||
+    code === "etimedout" ||
+    code === "econnreset" ||
+    code === "networkingerror" ||
+    code === "timeouterror" ||
+    (msg.includes("minio") &&
+      (msg.includes("mati") || msg.includes("tidak dapat") || msg.includes("timed out"))) ||
+    msg.includes("econnrefused") ||
+    msg.includes("connect econnrefused") ||
+    msg.includes("getaddrinfo") ||
+    (msg.includes("network") && msg.includes("unreachable"))
+  );
+}
+
 function getCredentials() {
   return {
     accessKeyId: process.env.MINIO_ACCESS_KEY,

@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import Pagination from "@/app/components/ui/Pagination";
 import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
 import { getEvidenceApiUrl, uploadEvidenceFile } from "./uploadEvidenceWithProgress";
+import { downloadEvidenceWithProgress } from "./downloadEvidenceWithProgress";
 import { isAdminRole } from "@/lib/roles";
 import { buildEvidenceDownloadHref } from "@/lib/evidenceFileUrl";
 
@@ -48,11 +49,13 @@ export default function EvidenceDeptPage({
   const [overallStatus, setOverallStatus] = useState("DRAFT");
   const [uploadingIndex, setUploadingIndex] = useState(null);
   const [uploadOverlay, setUploadOverlay] = useState(null);
+  const [downloadOverlay, setDownloadOverlay] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [evidenceMeta, setEvidenceMeta] = useState(null);
   const uploadAbortRef = useRef(null);
+  const downloadAbortRef = useRef(null);
   const searchParams = useSearchParams();
   const yearParam = searchParams?.get("year");
   const effectiveYear = useMemo(() => {
@@ -376,6 +379,72 @@ export default function EvidenceDeptPage({
     e.target.value = "";
   };
 
+  const handleDownloadAttachment = useCallback(async (file) => {
+    const url = file?.url;
+    const name = file?.name || "download";
+    if (!url || !buildEvidenceDownloadHref(url, name)) {
+      setError("URL file tidak valid.");
+      return;
+    }
+    if (downloadAbortRef.current) {
+      downloadAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    downloadAbortRef.current = abortController;
+
+    setError("");
+    setDownloadOverlay({
+      phase: "uploading",
+      progress: 0,
+      currentFile: name,
+      errorMessage: "",
+    });
+
+    try {
+      await downloadEvidenceWithProgress(
+        url,
+        name,
+        (loaded, total) => {
+          const t = total > 0 ? total : Math.max(loaded, 1);
+          const pct = Math.min(99, Math.round((loaded / t) * 100));
+          setDownloadOverlay((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: "uploading",
+                  progress: pct > 0 ? pct : Math.max(prev.progress || 0, 5),
+                }
+              : prev,
+          );
+        },
+        { signal: abortController.signal },
+      );
+      setDownloadOverlay({
+        phase: "success",
+        progress: 100,
+        currentFile: name,
+        errorMessage: "",
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      setDownloadOverlay(null);
+    } catch (e) {
+      if (abortController.signal.aborted || /dibatalkan/i.test(String(e?.message || ""))) {
+        setDownloadOverlay(null);
+        return;
+      }
+      setDownloadOverlay({
+        phase: "error",
+        progress: 0,
+        currentFile: name,
+        errorMessage: e?.message || "Download gagal",
+      });
+    } finally {
+      if (downloadAbortRef.current === abortController) {
+        downloadAbortRef.current = null;
+      }
+    }
+  }, []);
+
   const handleDeleteAttachment = async (rowIndex, fileUrl) => {
     const row = apData[rowIndex];
     if (!row || !fileUrl) return;
@@ -617,15 +686,11 @@ export default function EvidenceDeptPage({
                                 >
                                   <a
                                     href={buildEvidenceDownloadHref(file.url, file.name) || "#"}
-                                    download={file.name || true}
                                     className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs truncate max-w-[150px] sm:max-w-[220px]"
                                     title={file.name}
                                     onClick={(e) => {
-                                      const href = buildEvidenceDownloadHref(file.url, file.name);
-                                      if (!href) {
-                                        e.preventDefault();
-                                        return;
-                                      }
+                                      e.preventDefault();
+                                      handleDownloadAttachment(file);
                                     }}
                                   >
                                     {file.name || `Document ${fileIdx + 1}`}
@@ -711,6 +776,7 @@ export default function EvidenceDeptPage({
         totalFiles={uploadOverlay?.totalFiles ?? 0}
         completedFiles={uploadOverlay?.completedFiles ?? 0}
         errorMessage={uploadOverlay?.errorMessage ?? ""}
+        mode="upload"
         onCancel={
           uploadOverlay?.phase === "uploading"
             ? () => {
@@ -721,6 +787,24 @@ export default function EvidenceDeptPage({
             : undefined
         }
         onClose={() => setUploadOverlay(null)}
+      />
+      <EvidenceUploadProgressOverlay
+        open={Boolean(downloadOverlay)}
+        phase={downloadOverlay?.phase ?? "uploading"}
+        progress={downloadOverlay?.progress ?? 0}
+        currentFile={downloadOverlay?.currentFile ?? ""}
+        errorMessage={downloadOverlay?.errorMessage ?? ""}
+        mode="download"
+        onCancel={
+          downloadOverlay?.phase === "uploading"
+            ? () => {
+                if (downloadAbortRef.current) {
+                  downloadAbortRef.current.abort();
+                }
+              }
+            : undefined
+        }
+        onClose={() => setDownloadOverlay(null)}
       />
     </main>
   );

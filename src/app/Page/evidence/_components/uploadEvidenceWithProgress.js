@@ -99,17 +99,37 @@ export async function uploadEvidenceFile(
   }
 
   if (!presignRes.ok) {
-    throw new Error(presign.error || `Presign gagal (HTTP ${presignRes.status})`);
+    const err = new Error(
+      presign.error ||
+        (presignRes.status === 503
+          ? "Storage MinIO sedang mati / tidak dapat dihubungi. File TIDAK tersimpan. Hubungi admin untuk menyalakan MinIO, lalu upload ulang."
+          : `Presign gagal (HTTP ${presignRes.status})`),
+    );
+    err.code = presign.code;
+    throw err;
   }
 
   if (presign.uploadMode === "minio" && presign.uploadUrl) {
-    await putFileToPresignedUrl(
-      presign.uploadUrl,
-      file,
-      presign.contentType || file.type,
-      onProgress,
-      signal,
-    );
+    try {
+      await putFileToPresignedUrl(
+        presign.uploadUrl,
+        file,
+        presign.contentType || file.type,
+        onProgress,
+        signal,
+      );
+    } catch (putErr) {
+      const msg = String(putErr?.message || "");
+      if (/minio|cors|koneksi|storage|9000/i.test(msg)) {
+        const err = new Error(
+          "Upload ke MinIO gagal. File TIDAK tersimpan. Pastikan MinIO hidup (port 9000) lalu coba lagi.",
+        );
+        err.code = "MINIO_DOWN";
+        err.cause = putErr;
+        throw err;
+      }
+      throw putErr;
+    }
 
     const completeRes = await fetch("/api/evidence/upload/complete", {
       method: "POST",
@@ -130,7 +150,14 @@ export async function uploadEvidenceFile(
     }
 
     if (!completeRes.ok || complete.success === false) {
-      throw new Error(complete.error || `Complete gagal (HTTP ${completeRes.status})`);
+      const err = new Error(
+        complete.error ||
+          (completeRes.status === 503
+            ? "Storage MinIO sedang mati / tidak dapat dihubungi. File TIDAK tersimpan."
+            : `Complete gagal (HTTP ${completeRes.status})`),
+      );
+      err.code = complete.code;
+      throw err;
     }
 
     return {

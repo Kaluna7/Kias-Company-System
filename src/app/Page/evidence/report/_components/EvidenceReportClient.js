@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import { isSuperAdmin } from "@/lib/roles";
 import { buildEvidenceDownloadHref } from "@/lib/evidenceFileUrl";
 import { uploadEvidenceFile } from "@/app/Page/evidence/_components/uploadEvidenceWithProgress";
+import { downloadEvidenceWithProgress } from "@/app/Page/evidence/_components/downloadEvidenceWithProgress";
+import EvidenceUploadProgressOverlay from "@/app/Page/evidence/_components/EvidenceUploadProgressOverlay";
 
 const DEPT_TO_SLUG = {
   FINANCE: "finance",
@@ -73,6 +75,8 @@ export default function EvidenceReportClient({ initialData }) {
   const [isUploading, setIsUploading] = useState(false);
   const [actionError, setActionError] = useState("");
   const [downloadMsg, setDownloadMsg] = useState("");
+  const [uploadOverlay, setUploadOverlay] = useState(null);
+  const [downloadOverlay, setDownloadOverlay] = useState(null);
 
   useEffect(() => {
     setRows(initialData || []);
@@ -291,14 +295,36 @@ export default function EvidenceReportClient({ initialData }) {
     try {
       setIsUploading(true);
       setActionError("");
-      const slug = deptApiSlug(item.department || selectedGroup?.department);
-      const result = await uploadEvidenceFile({
-        evidenceApiSlug: slug,
-        departmentLabel: item.department || selectedGroup?.department,
-        effectiveYear: year,
-        row: { ap_id: item.ap_id, ap_code: item.ap_code },
-        file,
+      setUploadOverlay({
+        phase: "uploading",
+        progress: 0,
+        currentFile: file.name || "",
+        totalFiles: 1,
+        completedFiles: 0,
+        errorMessage: "",
       });
+      const slug = deptApiSlug(item.department || selectedGroup?.department);
+      const result = await uploadEvidenceFile(
+        {
+          evidenceApiSlug: slug,
+          departmentLabel: item.department || selectedGroup?.department,
+          effectiveYear: year,
+          row: { ap_id: item.ap_id, ap_code: item.ap_code },
+          file,
+        },
+        (loaded, total) => {
+          const t = total > 0 ? total : file.size || 1;
+          setUploadOverlay((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: "uploading",
+                  progress: Math.min(99, Math.round((loaded / t) * 100)),
+                }
+              : prev,
+          );
+        },
+      );
       if (!result?.success && !result?.fileUrl) {
         throw new Error(result?.error || "Upload failed");
       }
@@ -323,8 +349,27 @@ export default function EvidenceReportClient({ initialData }) {
           };
         })
       );
+      setUploadOverlay({
+        phase: "success",
+        progress: 100,
+        currentFile: file.name || "",
+        totalFiles: 1,
+        completedFiles: 1,
+        errorMessage: "",
+      });
+      await new Promise((r) => setTimeout(r, 1200));
+      setUploadOverlay(null);
     } catch (e) {
-      setActionError(e?.message || "Failed to upload file.");
+      const msg = e?.message || "Failed to upload file.";
+      setActionError(msg);
+      setUploadOverlay({
+        phase: "error",
+        progress: 0,
+        currentFile: file?.name || "",
+        totalFiles: 1,
+        completedFiles: 0,
+        errorMessage: msg,
+      });
     } finally {
       setIsUploading(false);
     }
@@ -351,44 +396,51 @@ export default function EvidenceReportClient({ initialData }) {
 
   const downloadFile = useCallback(async (url, name) => {
     setDownloadMsg("");
-    const href = buildEvidenceDownloadHref(url, name);
-    if (!href) {
+    const fileName = name || "download";
+    if (!buildEvidenceDownloadHref(url, fileName)) {
       setDownloadMsg("Invalid file URL.");
       return;
     }
+
+    setDownloadOverlay({
+      phase: "uploading",
+      progress: 0,
+      currentFile: fileName,
+      errorMessage: "",
+    });
+
     try {
-      const res = await fetch(href, { credentials: "same-origin" });
-      const contentType = res.headers.get("content-type") || "";
-      if (!res.ok) {
-        let errText = `Download failed (HTTP ${res.status})`;
-        if (contentType.includes("application/json")) {
-          const json = await res.json().catch(() => null);
-          if (json?.error) errText = json.error;
-        }
-        setDownloadMsg(errText);
-        return;
-      }
-      if (contentType.includes("application/json")) {
-        const json = await res.json().catch(() => null);
-        setDownloadMsg(json?.error || "Server returned an error instead of a file.");
-        return;
-      }
-      const blob = await res.blob();
-      if (!blob || blob.size === 0) {
-        setDownloadMsg("File is empty or missing on the server.");
-        return;
-      }
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = name || "download";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(objectUrl);
+      await downloadEvidenceWithProgress(url, fileName, (loaded, total) => {
+        const t = total > 0 ? total : Math.max(loaded, 1);
+        const pct = Math.min(99, Math.round((loaded / t) * 100));
+        setDownloadOverlay((prev) =>
+          prev
+            ? {
+                ...prev,
+                phase: "uploading",
+                progress: pct > 0 ? pct : Math.max(prev.progress || 0, 5),
+              }
+            : prev,
+        );
+      });
+      setDownloadOverlay({
+        phase: "success",
+        progress: 100,
+        currentFile: fileName,
+        errorMessage: "",
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      setDownloadOverlay(null);
       setDownloadMsg("");
     } catch (e) {
-      setDownloadMsg(e?.message || "Couldn't download the file.");
+      const msg = e?.message || "Couldn't download the file.";
+      setDownloadMsg(msg);
+      setDownloadOverlay({
+        phase: "error",
+        progress: 0,
+        currentFile: fileName,
+        errorMessage: msg,
+      });
     }
   }, []);
 
@@ -852,6 +904,26 @@ export default function EvidenceReportClient({ initialData }) {
           </div>
         </div>
       )}
+      <EvidenceUploadProgressOverlay
+        open={Boolean(uploadOverlay)}
+        phase={uploadOverlay?.phase || "uploading"}
+        progress={uploadOverlay?.progress || 0}
+        currentFile={uploadOverlay?.currentFile || ""}
+        totalFiles={uploadOverlay?.totalFiles || 0}
+        completedFiles={uploadOverlay?.completedFiles || 0}
+        errorMessage={uploadOverlay?.errorMessage || ""}
+        mode="upload"
+        onClose={() => setUploadOverlay(null)}
+      />
+      <EvidenceUploadProgressOverlay
+        open={Boolean(downloadOverlay)}
+        phase={downloadOverlay?.phase || "uploading"}
+        progress={downloadOverlay?.progress || 0}
+        currentFile={downloadOverlay?.currentFile || ""}
+        errorMessage={downloadOverlay?.errorMessage || ""}
+        mode="download"
+        onClose={() => setDownloadOverlay(null)}
+      />
     </main>
   );
 }

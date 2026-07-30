@@ -8,6 +8,7 @@ const LOADING_JSON_URL = "/animation/loading.json";
 
 /**
  * @param {"uploading"|"success"|"error"} phase
+ * @param {"upload"|"download"} mode
  */
 export default function EvidenceUploadProgressOverlay({
   open,
@@ -17,6 +18,7 @@ export default function EvidenceUploadProgressOverlay({
   totalFiles = 0,
   completedFiles = 0,
   errorMessage = "",
+  mode = "upload",
   onCancel,
   onClose,
 }) {
@@ -47,9 +49,42 @@ export default function EvidenceUploadProgressOverlay({
   if (!mounted || !open) return null;
 
   const pct = Math.min(100, Math.max(0, Math.round(progress)));
-  const isUploading = phase === "uploading";
+  const isBusy = phase === "uploading";
   const isSuccess = phase === "success";
   const isError = phase === "error";
+  const isDownload = mode === "download";
+  const isStorageDown =
+    isError &&
+    !isDownload &&
+    /minio|storage.*mati|tidak tersimpan/i.test(String(errorMessage || ""));
+
+  const title = isError
+    ? isDownload
+      ? "Download gagal"
+      : isStorageDown
+        ? "Storage MinIO bermasalah"
+        : "Upload gagal"
+    : isSuccess
+      ? isDownload
+        ? "Download selesai"
+        : "Upload selesai"
+      : isDownload
+        ? "Mengunduh evidence"
+        : "Mengunggah evidence";
+
+  const subtitle = isError
+    ? isDownload
+      ? "File tidak terunduh. Periksa pesan di bawah lalu coba lagi."
+      : isStorageDown
+        ? "File TIDAK tersimpan di server. Nyalakan MinIO dulu, lalu upload ulang."
+        : "File tidak tersimpan. Periksa pesan di bawah lalu coba lagi."
+    : isSuccess
+      ? isDownload
+        ? "File siap di perangkat Anda."
+        : "File berhasil diunggah."
+      : isDownload
+        ? "Mohon tunggu — file sedang diambil dari storage."
+        : "Jangan tutup halaman hingga proses selesai.";
 
   const modal = (
     <div
@@ -57,22 +92,16 @@ export default function EvidenceUploadProgressOverlay({
       role="dialog"
       aria-modal="true"
       aria-labelledby="evidence-upload-progress-title"
-      aria-busy={isUploading}
+      aria-busy={isBusy}
       onClick={isError && onClose ? (e) => e.target === e.currentTarget && onClose() : undefined}
     >
       <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 text-center">
         <h2 id="evidence-upload-progress-title" className="text-base font-semibold text-slate-900 mb-1">
-          {isError ? "Upload gagal" : isSuccess ? "Upload selesai" : "Mengunggah evidence"}
+          {title}
         </h2>
-        <p className="text-xs text-slate-500 mb-4">
-          {isError
-            ? "File tidak tersimpan. Periksa pesan di bawah lalu coba lagi."
-            : isSuccess
-              ? "File berhasil diunggah."
-              : "Jangan tutup halaman hingga proses selesai."}
-        </p>
+        <p className="text-xs text-slate-500 mb-4">{subtitle}</p>
 
-        {isUploading && (
+        {isBusy && (
           <div className="mx-auto mb-4 flex h-36 w-36 items-center justify-center">
             {animationData ? (
               <Lottie animationData={animationData} loop autoplay className="h-full w-full" />
@@ -98,7 +127,7 @@ export default function EvidenceUploadProgressOverlay({
           </div>
         )}
 
-        {totalFiles > 1 && isUploading && (
+        {totalFiles > 1 && isBusy && !isDownload && (
           <p className="text-xs text-slate-600 mb-2">
             File {Math.min(completedFiles + 1, totalFiles)} dari {totalFiles}
           </p>
@@ -116,7 +145,7 @@ export default function EvidenceUploadProgressOverlay({
           </p>
         ) : null}
 
-        {isUploading && (
+        {isBusy && (
           <>
             <div className="w-full h-2.5 rounded-full bg-slate-200 overflow-hidden mb-2">
               <div
@@ -124,7 +153,9 @@ export default function EvidenceUploadProgressOverlay({
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <p className="text-sm font-bold text-[#141D38] tabular-nums">{pct}%</p>
+            <p className="text-sm font-bold text-[#141D38] tabular-nums">
+              {pct > 0 ? `${pct}%` : isDownload ? "Menyiapkan…" : "0%"}
+            </p>
             {onCancel && (
               <button
                 type="button"

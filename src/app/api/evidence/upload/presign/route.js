@@ -8,9 +8,13 @@ import {
   isMinioEnabled,
 } from "@/app/api/evidence/_shared/evidenceUpload";
 import {
+  assertMinioHealthy,
   createPresignedPutUrl,
   EVIDENCE_MAX_BYTES,
   guessContentType,
+  isMinioConnectionError,
+  MINIO_DISABLED_MESSAGE,
+  MINIO_DOWN_MESSAGE,
 } from "@/app/lib/minio";
 
 const ALLOWED_EXT = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
@@ -56,6 +60,8 @@ export async function POST(req) {
       );
     }
 
+    // MinIO not configured (e.g. local): allow legacy multipart upload.
+    // When MinIO IS configured but down, fail below — never pretend upload worked.
     if (!isMinioEnabled()) {
       return NextResponse.json({
         success: true,
@@ -64,6 +70,7 @@ export async function POST(req) {
       });
     }
 
+    await assertMinioHealthy();
     await assertEvidenceUploadAllowed({ department, ap_code, year });
 
     const { objectKey, fileUrl } = prepareMinioUpload({
@@ -73,7 +80,18 @@ export async function POST(req) {
     });
 
     const mime = contentType || guessContentType(safeName);
-    const uploadUrl = await createPresignedPutUrl(objectKey, mime, 86400);
+    let uploadUrl;
+    try {
+      uploadUrl = await createPresignedPutUrl(objectKey, mime, 86400);
+    } catch (presignErr) {
+      if (isMinioConnectionError(presignErr)) {
+        const err = new Error(MINIO_DOWN_MESSAGE);
+        err.statusCode = 503;
+        err.code = "MINIO_DOWN";
+        throw err;
+      }
+      throw presignErr;
+    }
 
     return NextResponse.json({
       success: true,
@@ -85,10 +103,20 @@ export async function POST(req) {
       contentType: mime,
     });
   } catch (error) {
-    const status = error.statusCode || 500;
+    const status = error.statusCode || (isMinioConnectionError(error) ? 503 : 500);
     if (status >= 500) console.error("POST /api/evidence/upload/presign:", error);
+    const message =
+      error.code === "MINIO_DOWN" || isMinioConnectionError(error)
+        ? MINIO_DOWN_MESSAGE
+        : error.code === "MINIO_DISABLED"
+          ? MINIO_DISABLED_MESSAGE
+          : error.message || "Failed to create upload URL";
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to create upload URL" },
+      {
+        success: false,
+        error: message,
+        code: error.code || (status === 503 ? "MINIO_DOWN" : undefined),
+      },
       { status },
     );
   }

@@ -9,7 +9,13 @@ import {
   parseSelectedYear,
   isMinioEnabled,
 } from "@/app/api/evidence/_shared/evidenceUpload";
-import { getStorageProxyUrl, headMinioObject } from "@/app/lib/minio";
+import {
+  assertMinioHealthy,
+  getStorageProxyUrl,
+  headMinioObject,
+  isMinioConnectionError,
+  MINIO_DOWN_MESSAGE,
+} from "@/app/lib/minio";
 
 export async function POST(req) {
   try {
@@ -19,6 +25,8 @@ export async function POST(req) {
         { status: 503 },
       );
     }
+
+    await assertMinioHealthy();
 
     const body = await req.json();
     const { department, ap_id, ap_code, year, objectKey, fileName } = body || {};
@@ -35,7 +43,13 @@ export async function POST(req) {
     // Verify object exists in MinIO before saving metadata
     try {
       await headMinioObject(key);
-    } catch {
+    } catch (headErr) {
+      if (isMinioConnectionError(headErr)) {
+        return NextResponse.json(
+          { success: false, error: MINIO_DOWN_MESSAGE, code: "MINIO_DOWN" },
+          { status: 503 },
+        );
+      }
       return NextResponse.json(
         {
           success: false,
@@ -64,10 +78,18 @@ export async function POST(req) {
       message: "File uploaded successfully",
     });
   } catch (error) {
-    const status = error.statusCode || 500;
+    const status = error.statusCode || (isMinioConnectionError(error) ? 503 : 500);
     if (status >= 500) console.error("POST /api/evidence/upload/complete:", error);
+    const message =
+      error.code === "MINIO_DOWN" || isMinioConnectionError(error)
+        ? MINIO_DOWN_MESSAGE
+        : error.message || "Failed to complete upload";
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to complete upload" },
+      {
+        success: false,
+        error: message,
+        code: error.code || (status === 503 ? "MINIO_DOWN" : undefined),
+      },
       { status },
     );
   }
