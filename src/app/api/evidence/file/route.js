@@ -71,9 +71,23 @@ export async function GET(req) {
     const b64 = String(searchParams.get("p") || "").trim();
     if (!pathParam && b64) {
       try {
-        pathParam = Buffer.from(b64, "base64url").toString("utf8").trim();
+        // Accept base64url (preferred) and standard base64
+        const normalized = b64.replace(/-/g, "+").replace(/_/g, "/");
+        const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+        pathParam = Buffer.from(normalized + pad, "base64").toString("utf8").trim();
       } catch {
         pathParam = "";
+      }
+    }
+    // If both present, prefer decoded `p` (safer for & in paths)
+    if (b64) {
+      try {
+        const normalized = b64.replace(/-/g, "+").replace(/_/g, "/");
+        const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+        const fromP = Buffer.from(normalized + pad, "base64").toString("utf8").trim();
+        if (fromP) pathParam = fromP;
+      } catch {
+        // keep pathParam
       }
     }
 
