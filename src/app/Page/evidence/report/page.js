@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import EvidenceReportClient from "./_components/EvidenceReportClient";
 
@@ -9,6 +10,8 @@ async function loadEvidenceReportData(year) {
     if (year) {
       params.set("year", String(year));
     }
+    // Load enough published rows for the report view
+    params.set("pageSize", "500");
 
     const res = await fetch(`${baseUrl}/api/evidence/report?${params.toString()}`, {
       cache: "no-store",
@@ -26,13 +29,11 @@ async function loadEvidenceReportData(year) {
 
     const rows = json.data.map((row) => ({
       ...row,
-      // Pastikan field yang dipakai di client selalu ada
       department: row.department || "",
       created_at: row.created_at || row.published_at || null,
       overall_status: row.overall_status || "COMPLETE",
     }));
 
-    // Sort by department and created_at (published_at)
     rows.sort((a, b) => {
       if (a.department !== b.department) {
         return a.department.localeCompare(b.department);
@@ -53,6 +54,9 @@ export default async function EvidenceReport({ searchParams }) {
   const year = yearParam ? parseInt(yearParam, 10) : null;
   const data = await loadEvidenceReportData(year);
 
-  return <EvidenceReportClient initialData={data} />;
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-600">Loading evidence report...</div>}>
+      <EvidenceReportClient initialData={data} />
+    </Suspense>
+  );
 }
-

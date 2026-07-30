@@ -147,3 +147,70 @@ export async function PATCH(req) {
     );
   }
 }
+
+/** Super admin only — delete one evidence row (and best-effort remove files). */
+export async function DELETE(req) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (!isSuperAdmin(session?.user?.role)) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: super admin only" },
+        { status: 403 },
+      );
+    }
+
+    const body = await req.json().catch(() => null);
+    const id = Number(body?.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return NextResponse.json(
+        { success: false, error: "Valid evidence id is required" },
+        { status: 400 },
+      );
+    }
+
+    const existing = await prisma.evidence.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Evidence not found" }, { status: 404 });
+    }
+
+    // Best-effort cleanup of stored files
+    try {
+      const { objectKeyFromFileUrl, deleteMinioObject } = await import("@/app/lib/minio");
+      const { unlink } = await import("fs/promises");
+      const { join } = await import("path");
+      const { existsSync } = await import("fs");
+      let attachments = [];
+      try {
+        const parsed = JSON.parse(existing.file_url || "[]");
+        if (Array.isArray(parsed)) attachments = parsed;
+      } catch {
+        if (existing.file_url) attachments = [{ url: existing.file_url }];
+      }
+      for (const att of attachments) {
+        const url = String(att?.url || "");
+        if (!url) continue;
+        const key = objectKeyFromFileUrl(url);
+        if (key) {
+          await deleteMinioObject(key).catch(() => {});
+        } else if (url.startsWith("/uploads/")) {
+          const full = join(process.cwd(), "public", url.replace(/^\//, ""));
+          if (existsSync(full)) await unlink(full).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("Evidence file cleanup failed:", e);
+    }
+
+    await prisma.evidence.delete({ where: { id } });
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (err) {
+    console.error("DELETE /api/evidence/report error:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message ?? "Server error" },
+      { status: 500 },
+    );
+  }
+}

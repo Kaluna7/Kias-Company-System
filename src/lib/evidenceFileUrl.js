@@ -10,11 +10,6 @@ export function buildEvidenceDownloadHref(fileUrl, fileName = "") {
   const raw = String(fileUrl || "").trim();
   if (!raw || raw.startsWith("[{") || raw.startsWith("[")) return "";
 
-  // Absolute external URL — use as-is
-  if (/^https?:\/\//i.test(raw)) {
-    return raw;
-  }
-
   const name = String(fileName || "").trim();
   const params = new URLSearchParams();
   params.set("path", raw);
