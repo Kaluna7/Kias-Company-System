@@ -1,6 +1,15 @@
 # Fixed Compose project — Jenkins workspace folder must not change volume/container grouping.
 name: kias
 
+# ---------------------------------------------------------------------------
+# SAFETY — database
+# - Postgres is EXTERNAL (container postgres_db / kias-db). This file does NOT
+#   define a postgres service and must NEVER create/replace DB volumes.
+# - Do NOT run: docker compose down -v   (that can delete named volumes)
+# - Safe redeploy: docker compose up -d --build
+# - MinIO data is in named volume kias_minio_data only (separate from Postgres).
+# ---------------------------------------------------------------------------
+
 services:
   app:
     build:
@@ -18,6 +27,7 @@ services:
       - "3001:3000"
 
     environment:
+      # External Postgres — do not change host/db unless intentionally migrating
       DATABASE_URL: postgresql://postgres:12345@postgres_db:5432/kias
       NEXTAUTH_SECRET: supersecret_kias_2026
       NEXTAUTH_URL: http://76.13.20.134:3001
@@ -65,7 +75,7 @@ services:
 
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
       onlyoffice:
         condition: service_healthy
 
@@ -93,24 +103,28 @@ services:
       retries: 8
       start_period: 180s
 
+  # Object storage for evidence uploads — always restart; data in kias_minio_data only
   minio:
     image: minio/minio:latest
     container_name: minio_storage
     restart: always
-
     ports:
       - "9000:9000"
       # Console: do not expose publicly; use SSH tunnel: ssh -L 9001:localhost:9001 root@VPS
       - "127.0.0.1:9001:9001"
-
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-
     command: server /data --console-address ":9001"
-
     volumes:
+      # Named volume — persists across redeploys. Never remove with `docker compose down -v`.
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 networks:
   default:
@@ -118,6 +132,7 @@ networks:
     name: kias-company-system_default
 
 volumes:
+  # MinIO object data only — NOT the Postgres database
   minio_data:
     name: kias_minio_data
   kias_report_docs:
