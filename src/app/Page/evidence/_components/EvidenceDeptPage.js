@@ -7,6 +7,7 @@ import Pagination from "@/app/components/ui/Pagination";
 import EvidenceUploadProgressOverlay from "./EvidenceUploadProgressOverlay";
 import { getEvidenceApiUrl, uploadEvidenceFile } from "./uploadEvidenceWithProgress";
 import { isAdminRole } from "@/lib/roles";
+import { buildEvidenceDownloadHref } from "@/lib/evidenceFileUrl";
 
 const ALLOWED_EVIDENCE_EXTENSIONS = new Set(["pdf", "zip", "doc", "docx", "xlsx", "xls"]);
 const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
@@ -615,11 +616,17 @@ export default function EvidenceDeptPage({
                                   className="flex items-center justify-between gap-2"
                                 >
                                   <a
-                                    href={file.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                    href={buildEvidenceDownloadHref(file.url, file.name) || "#"}
+                                    download={file.name || true}
                                     className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs truncate max-w-[150px] sm:max-w-[220px]"
                                     title={file.name}
+                                    onClick={(e) => {
+                                      const href = buildEvidenceDownloadHref(file.url, file.name);
+                                      if (!href) {
+                                        e.preventDefault();
+                                        return;
+                                      }
+                                    }}
                                   >
                                     {file.name || `Document ${fileIdx + 1}`}
                                   </a>

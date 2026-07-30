@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import prisma from "@/app/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { isSuperAdmin } from "@/lib/roles";
 
 function toIntSafe(v, fallback) {
   if (v === undefined || v === null || v === "") return fallback;
@@ -68,3 +71,79 @@ export async function GET(req) {
   }
 }
 
+/** Super admin only — update one evidence row from the report UI. */
+export async function PATCH(req) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (!isSuperAdmin(session?.user?.role)) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: super admin only" },
+        { status: 403 },
+      );
+    }
+
+    const body = await req.json().catch(() => null);
+    const id = Number(body?.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return NextResponse.json(
+        { success: false, error: "Valid evidence id is required" },
+        { status: 400 },
+      );
+    }
+
+    const existing = await prisma.evidence.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Evidence not found" }, { status: 404 });
+    }
+
+    const data = {};
+    if (body.ap_code !== undefined) {
+      data.ap_code = String(body.ap_code || "").trim() || null;
+    }
+    if (body.substantive_test !== undefined) {
+      data.substantive_test = String(body.substantive_test || "").trim() || null;
+    }
+    if (body.preparer !== undefined) {
+      data.preparer = String(body.preparer || "").trim() || null;
+    }
+    if (body.overall_status !== undefined) {
+      const status = String(body.overall_status || "").toUpperCase().trim();
+      const allowed = new Set(["COMPLETE", "INCOMPLETE", "IN PROGRESS"]);
+      if (!allowed.has(status)) {
+        return NextResponse.json(
+          { success: false, error: "Invalid overall_status" },
+          { status: 400 },
+        );
+      }
+      data.overall_status = status;
+    }
+    if (body.status !== undefined) {
+      data.status = String(body.status || "").trim() || existing.status;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        { success: false, error: "No fields to update" },
+        { status: 400 },
+      );
+    }
+
+    data.updated_at = new Date();
+
+    const updated = await prisma.evidence.update({
+      where: { id },
+      data,
+    });
+
+    return NextResponse.json({ success: true, data: updated }, { status: 200 });
+  } catch (err) {
+    console.error("PATCH /api/evidence/report error:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message ?? "Server error" },
+      { status: 500 },
+    );
+  }
+}

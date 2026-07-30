@@ -403,23 +403,52 @@ async function getAuditFindingDoneSet(scheduleByDept, year) {
 }
 
 async function getEvidenceDoneSet(scheduleByDept, year) {
-  // "Done" = current scheduled evidence has been published (COMPLETE + file) in the active schedule window.
+  // Same idea as worksheet / audit-finding: published COMPLETE + file in the audit year,
+  // and updated_at after last schedule save when available.
+  // Do NOT require updated_at inside the schedule calendar window only — publish uses
+  // alignDateToSelectedYear(NOW()), which often falls outside start_date..end_date
+  // (admin / super_admin publish outside assigned windows especially).
   const checks = await Promise.all(
     DEPARTMENTS.map(async (d) => {
-      const window = buildWindowFromSchedule(scheduleByDept?.get(d.key), year);
-      if (!window) return { key: d.key, done: false };
+      const sched = scheduleByDept?.get(d.key);
+      if (!sched?.start_date || !sched?.end_date) return { key: d.key, done: false };
 
-      const count = await prisma.evidence.count({
-        where: {
-          department: d.evidenceDept,
-          file_url: { not: null },
-          overall_status: { equals: "COMPLETE", mode: "insensitive" },
-          updated_at: { gte: window.start, lte: window.end },
-        },
-      });
+      const cutoffRaw = sched.feedbackUpdatedAt;
+      const cutoff = cutoffRaw != null ? new Date(cutoffRaw) : null;
+      const cutoffOk = cutoff && !Number.isNaN(cutoff.getTime());
 
+      const yf = yearCreatedAtFilter(year);
+      const andParts = [
+        { department: d.evidenceDept },
+        { file_url: { not: null } },
+        { overall_status: { equals: "COMPLETE", mode: "insensitive" } },
+      ];
+
+      if (cutoffOk) {
+        andParts.push({ updated_at: { gte: cutoff } });
+      }
+
+      if (yf) {
+        andParts.push({
+          OR: [
+            { created_at: { gte: yf.gte, lt: yf.lt } },
+            { updated_at: { gte: yf.gte, lt: yf.lt } },
+          ],
+        });
+      } else {
+        const window = buildWindowFromSchedule(sched, null);
+        if (!window) return { key: d.key, done: false };
+        andParts.push({
+          OR: [
+            { created_at: { gte: window.start, lte: window.end } },
+            { updated_at: { gte: window.start, lte: window.end } },
+          ],
+        });
+      }
+
+      const count = await prisma.evidence.count({ where: { AND: andParts } });
       return { key: d.key, done: count > 0 };
-    })
+    }),
   );
   const done = new Set();
   for (const row of checks) {
