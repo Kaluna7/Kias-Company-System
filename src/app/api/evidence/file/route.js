@@ -2,44 +2,159 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
-import { existsSync, readFileSync } from "fs";
-import { join, normalize } from "path";
-import {
-  getObjectStream,
-  guessContentType,
-  isMinioEnabled,
-  objectKeyFromFileUrl,
-  resolveExistingMinioKey,
-} from "@/app/lib/minio";
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { join, normalize, basename } from "path";
+import { guessContentType } from "@/app/lib/minio";
 import { safeDownloadFileName } from "@/lib/evidenceFileUrl";
 
-function resolveLocalUploadPath(urlPath) {
-  const raw = String(urlPath || "").trim();
-  if (!raw.startsWith("/uploads/")) return null;
+const UPLOADS_EVIDENCE_ROOT = join(process.cwd(), "public", "uploads", "evidence");
 
-  const rel = raw.replace(/^\/uploads\//, "");
-  const parts = rel
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(String(value ?? ""));
+  } catch {
+    return String(value ?? "");
+  }
+}
+
+/** Map any stored evidence URL to a relative key: dept/filename */
+function evidenceRelativeKeyFromPath(pathParam) {
+  let url = String(pathParam || "").trim().split("?")[0].split("#")[0];
+  if (!url) return null;
+
+  try {
+    if (/^https?:\/\//i.test(url)) {
+      url = new URL(url).pathname;
+    }
+  } catch {
+    // keep
+  }
+
+  const storagePrefix = "/api/evidence/storage/";
+  if (url.startsWith(storagePrefix)) {
+    return url
+      .slice(storagePrefix.length)
+      .split("/")
+      .filter(Boolean)
+      .map(safeDecode)
+      .join("/");
+  }
+
+  const uploadsPrefix = "/uploads/evidence/";
+  if (url.startsWith(uploadsPrefix)) {
+    return url
+      .slice(uploadsPrefix.length)
+      .split("/")
+      .filter(Boolean)
+      .map(safeDecode)
+      .join("/");
+  }
+
+  if (url.startsWith("/uploads/")) {
+    const rest = url.slice("/uploads/".length);
+    if (rest.toLowerCase().startsWith("evidence/")) {
+      return rest
+        .slice("evidence/".length)
+        .split("/")
+        .filter(Boolean)
+        .map(safeDecode)
+        .join("/");
+    }
+  }
+
+  // Bare key: hrd/file.xlsx
+  if (!url.startsWith("/") && url.includes("/")) {
+    return url
+      .split("/")
+      .filter(Boolean)
+      .map(safeDecode)
+      .join("/");
+  }
+
+  return null;
+}
+
+function resolveUnderEvidenceRoot(relativeKey) {
+  const parts = String(relativeKey || "")
     .split("/")
-    .filter(Boolean)
-    .map((p) => {
-      try {
-        return decodeURIComponent(p);
-      } catch {
-        return p;
-      }
-    });
+    .filter(Boolean);
   if (parts.length === 0) return null;
   if (parts.some((p) => p === ".." || p === ".")) return null;
 
-  const full = normalize(join(process.cwd(), "public", "uploads", ...parts));
-  const root = normalize(join(process.cwd(), "public", "uploads"));
+  const full = normalize(join(UPLOADS_EVIDENCE_ROOT, ...parts));
+  const root = normalize(UPLOADS_EVIDENCE_ROOT);
   if (!full.startsWith(root)) return null;
   return full;
 }
 
-function fileResponse(buffer, fileName, contentType, forceDownload) {
+function findLocalEvidenceFile(relativeKey, preferredName = "") {
+  const exact = resolveUnderEvidenceRoot(relativeKey);
+  if (exact && existsSync(exact)) return exact;
+
+  // Try alternate folder casing / preferred original filename in same folder
+  const parts = String(relativeKey || "")
+    .split("/")
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const folderName = parts[0];
+  const storedFileName = parts.slice(1).join("/");
+  const folderPath = resolveUnderEvidenceRoot(folderName);
+  if (!folderPath || !existsSync(folderPath)) {
+    // try lowercase / uppercase folder
+    for (const alt of [folderName.toLowerCase(), folderName.toUpperCase()]) {
+      const altFolder = resolveUnderEvidenceRoot(alt);
+      if (altFolder && existsSync(altFolder)) {
+        const candidate = join(altFolder, storedFileName);
+        if (existsSync(candidate)) return candidate;
+        const byPreferred = preferredName ? join(altFolder, basename(preferredName)) : null;
+        if (byPreferred && existsSync(byPreferred)) return byPreferred;
+        // scan folder for closest name match
+        try {
+          const files = readdirSync(altFolder);
+          const want = [
+            storedFileName.toLowerCase(),
+            basename(preferredName || "").toLowerCase(),
+          ].filter(Boolean);
+          const hit = files.find((f) => {
+            const lower = f.toLowerCase();
+            return want.some((w) => w && (lower === w || lower.includes(w) || w.includes(lower)));
+          });
+          if (hit) return join(altFolder, hit);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return null;
+  }
+
+  if (preferredName) {
+    const byPreferred = join(folderPath, basename(preferredName));
+    if (existsSync(byPreferred)) return byPreferred;
+  }
+
+  try {
+    const files = readdirSync(folderPath);
+    const want = [
+      storedFileName.toLowerCase(),
+      basename(preferredName || "").toLowerCase(),
+    ].filter(Boolean);
+    const hit = files.find((f) => {
+      const lower = f.toLowerCase();
+      return want.some((w) => w && (lower === w || lower.includes(w) || w.includes(lower)));
+    });
+    if (hit) return join(folderPath, hit);
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+function fileResponse(buffer, fileName, forceDownload) {
   const headers = new Headers();
-  headers.set("Content-Type", contentType || guessContentType(fileName));
+  headers.set("Content-Type", guessContentType(fileName));
   headers.set("Content-Length", String(buffer.length));
   headers.set(
     "Content-Disposition",
@@ -49,48 +164,31 @@ function fileResponse(buffer, fileName, contentType, forceDownload) {
   return new NextResponse(buffer, { status: 200, headers });
 }
 
-async function readMinioBuffer(objectKey) {
-  const result = await getObjectStream(objectKey);
-  if (result.Body && typeof result.Body.transformToByteArray === "function") {
-    return {
-      buffer: Buffer.from(await result.Body.transformToByteArray()),
-      contentType: result.ContentType || null,
-    };
+function decodePathParam(searchParams) {
+  let pathParam = String(searchParams.get("path") || "").trim();
+  const b64 = String(searchParams.get("p") || "").trim();
+  if (b64) {
+    try {
+      const normalized = b64.replace(/-/g, "+").replace(/_/g, "/");
+      const pad =
+        normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+      const fromP = Buffer.from(normalized + pad, "base64").toString("utf8").trim();
+      if (fromP) pathParam = fromP;
+    } catch {
+      // keep path
+    }
   }
-  return null;
+  return pathParam;
 }
 
 /**
- * Universal evidence file download.
- * Query: path=...  (or p=base64url)  download=1  name=original.pdf
+ * Evidence download from local disk only (public/uploads/evidence).
+ * Does NOT use MinIO — published legacy files live on disk.
  */
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
-    let pathParam = String(searchParams.get("path") || "").trim();
-    const b64 = String(searchParams.get("p") || "").trim();
-    if (!pathParam && b64) {
-      try {
-        // Accept base64url (preferred) and standard base64
-        const normalized = b64.replace(/-/g, "+").replace(/_/g, "/");
-        const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-        pathParam = Buffer.from(normalized + pad, "base64").toString("utf8").trim();
-      } catch {
-        pathParam = "";
-      }
-    }
-    // If both present, prefer decoded `p` (safer for & in paths)
-    if (b64) {
-      try {
-        const normalized = b64.replace(/-/g, "+").replace(/_/g, "/");
-        const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-        const fromP = Buffer.from(normalized + pad, "base64").toString("utf8").trim();
-        if (fromP) pathParam = fromP;
-      } catch {
-        // keep pathParam
-      }
-    }
-
+    const pathParam = decodePathParam(searchParams);
     const forceDownload = searchParams.get("download") !== "0";
     const preferredName = String(searchParams.get("name") || "").trim();
 
@@ -98,132 +196,44 @@ export async function GET(req) {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
 
-    // Absolute remote URL — proxy fetch
+    // Absolute http(s) that is actually our uploads path
+    let normalizedPath = pathParam;
     if (/^https?:\/\//i.test(pathParam)) {
-      // Prefer MinIO key extraction when it's our public MinIO URL
-      if (isMinioEnabled() && objectKeyFromFileUrl(pathParam)) {
-        try {
-          const key = await resolveExistingMinioKey(pathParam, preferredName);
-          const loaded = await readMinioBuffer(key);
-          if (loaded) {
-            const fileName = safeDownloadFileName(
-              preferredName || key.split("/").pop() || "download",
-            );
-            return fileResponse(
-              loaded.buffer,
-              fileName,
-              loaded.contentType || guessContentType(fileName),
-              forceDownload,
-            );
-          }
-        } catch {
-          // fall through to fetch
-        }
+      try {
+        normalizedPath = new URL(pathParam).pathname;
+      } catch {
+        return NextResponse.json(
+          { error: "External URL download is disabled for evidence files." },
+          { status: 400 },
+        );
       }
+    }
 
-      const upstream = await fetch(pathParam);
-      if (!upstream.ok) {
-        return NextResponse.json({ error: "File not found" }, { status: 404 });
-      }
-      const buf = Buffer.from(await upstream.arrayBuffer());
-      const fileName = safeDownloadFileName(
-        preferredName || pathParam.split("/").pop() || "download",
-      );
-      return fileResponse(
-        buf,
-        fileName,
-        upstream.headers.get("content-type") || guessContentType(fileName),
-        forceDownload,
+    const relativeKey = evidenceRelativeKeyFromPath(normalizedPath);
+    if (!relativeKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported evidence file path. Expected /uploads/evidence/... or /api/evidence/storage/...",
+        },
+        { status: 400 },
       );
     }
 
-    // --- Legacy local uploads ---
-    if (pathParam.startsWith("/uploads/")) {
-      const fullPath = resolveLocalUploadPath(pathParam);
-      if (fullPath && existsSync(fullPath)) {
-        const fileName = safeDownloadFileName(
-          preferredName || fullPath.split(/[/\\]/).pop() || "download",
-        );
-        return fileResponse(
-          readFileSync(fullPath),
-          fileName,
-          guessContentType(fileName),
-          forceDownload,
-        );
-      }
-
-      // Same layout may exist in MinIO after migration
-      if (isMinioEnabled()) {
-        try {
-          const key = await resolveExistingMinioKey(pathParam, preferredName);
-          const loaded = await readMinioBuffer(key);
-          if (loaded) {
-            const fileName = safeDownloadFileName(
-              preferredName || key.split("/").pop() || "download",
-            );
-            return fileResponse(
-              loaded.buffer,
-              fileName,
-              loaded.contentType || guessContentType(fileName),
-              forceDownload,
-            );
-          }
-        } catch (e) {
-          return NextResponse.json(
-            { error: e?.message || "File not found in storage" },
-            { status: 404 },
-          );
-        }
-      }
-
+    const fullPath = findLocalEvidenceFile(relativeKey, preferredName);
+    if (!fullPath || !existsSync(fullPath)) {
       return NextResponse.json(
-        { error: "File not found on server disk" },
+        {
+          error: `File not found on disk (uploads/evidence/${relativeKey}). Re-upload the file if it was never saved locally.`,
+        },
         { status: 404 },
       );
     }
 
-    // --- MinIO / storage proxy URLs ---
-    const localKey = objectKeyFromFileUrl(pathParam);
-    const localFallback = localKey
-      ? resolveLocalUploadPath(`/uploads/evidence/${localKey}`)
-      : null;
-    if (localFallback && existsSync(localFallback)) {
-      const fileName = safeDownloadFileName(
-        preferredName || localFallback.split(/[/\\]/).pop() || "download",
-      );
-      return fileResponse(
-        readFileSync(localFallback),
-        fileName,
-        guessContentType(fileName),
-        forceDownload,
-      );
-    }
-
-    if (!isMinioEnabled()) {
-      return NextResponse.json(
-        {
-          error:
-            "Storage (MinIO) is not configured on this server, and the file was not found under /uploads.",
-        },
-        { status: 503 },
-      );
-    }
-
-    const objectKey = await resolveExistingMinioKey(pathParam, preferredName);
-    const loaded = await readMinioBuffer(objectKey);
-    if (!loaded) {
-      return NextResponse.json({ error: "Empty object" }, { status: 404 });
-    }
-
     const fileName = safeDownloadFileName(
-      preferredName || objectKey.split("/").pop() || "download",
+      preferredName || basename(fullPath) || "download",
     );
-    return fileResponse(
-      loaded.buffer,
-      fileName,
-      loaded.contentType || guessContentType(fileName),
-      forceDownload,
-    );
+    return fileResponse(readFileSync(fullPath), fileName, forceDownload);
   } catch (error) {
     console.error("GET /api/evidence/file:", error);
     return NextResponse.json(
