@@ -36,9 +36,8 @@ export async function GET(req) {
          CASE LOWER(COALESCE(role, 'user'))
            WHEN 'super_admin' THEN 0
            WHEN 'superadmin' THEN 0
-           WHEN 'admin' THEN 1
-           WHEN 'reviewer' THEN 2
-           ELSE 3
+           WHEN 'reviewer' THEN 1
+           ELSE 2
          END,
          name ASC
        LIMIT $1 OFFSET $2`,
@@ -70,11 +69,11 @@ export async function POST(req) {
     const email = (body?.email || "").toLowerCase().trim();
     const password = String(body?.password || "");
     const rawRole = (body?.role || "user").toLowerCase().trim();
-    const allowedRoles = new Set(["user", "reviewer", "admin", "super_admin"]);
+    const allowedRoles = new Set(["user", "reviewer", "super_admin"]);
     if (!allowedRoles.has(rawRole)) {
       return NextResponse.json(
-        { success: false, error: "Invalid role. Allowed: user, reviewer, admin, super_admin" },
-        { status: 400 }
+        { success: false, error: "Invalid role. Allowed: user, reviewer, super_admin" },
+        { status: 400 },
       );
     }
     const userRole = rawRole;

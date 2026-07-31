@@ -89,10 +89,10 @@ export async function requireSopPublisher() {
 }
 
 /**
- * Allow SOP editors (preparer / reviewer / admin) to change drafts:
+ * Allow SOP editors (preparer / reviewer / super_admin) to change drafts:
  * - role "user" (preparer)
  * - role "reviewer"
- * - role "admin"
+ * - role "super_admin"
  *
  * Used for: saving SOP steps, meta (preparer/reviewer), audit period, etc.
  * Final publish uses requireSopPublisher().

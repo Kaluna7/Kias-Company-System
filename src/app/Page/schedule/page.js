@@ -204,7 +204,7 @@ function SchedulePageContent() {
       const res = await fetch("/api/users?page=1&pageSize=100", { cache: "no-store" });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success && Array.isArray(json.users)) {
-        // Filter: only include users with role "user", exclude "admin" and "reviewer"
+        // Filter: only include users with role "user", exclude "reviewer" and "super_admin"
         const filteredUsers = json.users.filter(user => {
           const role = (user.role || "").toLowerCase();
           return role === "user";

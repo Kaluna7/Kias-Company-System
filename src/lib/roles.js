@@ -2,9 +2,8 @@
  * Central role helpers.
  * Roles are free-form strings on users.role (no Prisma enum).
  *
- * - super_admin / superadmin: full access including Schedule management
- * - admin: normal admin (no Schedule card / schedule create)
- * - reviewer, user: existing roles
+ * Allowed roles: user | reviewer | super_admin (alias: superadmin)
+ * Legacy "admin" is no longer a valid account role.
  */
 
 export function normalizeRole(role) {
@@ -13,16 +12,18 @@ export function normalizeRole(role) {
     .trim();
 }
 
-/** Super admin — can manage schedules and do everything an admin can. */
+/** Super admin — full access including Schedule and Create Account. */
 export function isSuperAdmin(role) {
   const r = normalizeRole(role);
   return r === "super_admin" || r === "superadmin";
 }
 
-/** Regular admin or super admin. */
+/**
+ * Privileged editor access previously shared by admin + super_admin.
+ * Now: super_admin only (regular admin role removed).
+ */
 export function isAdminRole(role) {
-  const r = normalizeRole(role);
-  return r === "admin" || isSuperAdmin(r);
+  return isSuperAdmin(role);
 }
 
 export function isReviewerRole(role) {
@@ -34,12 +35,12 @@ export function isUserRole(role) {
 }
 
 /**
- * Dashboard / progress style "admin-like" access (admin, super_admin, reviewer).
+ * Dashboard / progress style access (super_admin, reviewer).
  * Does NOT grant schedule management by itself.
  */
 export function isAdminLikeRole(role) {
   const r = normalizeRole(role);
-  return r === "admin" || r === "reviewer" || isSuperAdmin(r);
+  return r === "reviewer" || isSuperAdmin(r);
 }
 
 /** Only super admin may open/create/edit schedules. */
@@ -55,11 +56,19 @@ export function canCreateAccounts(role) {
 /** Roles that may edit worksheets / publish findings, etc. */
 export function isEditorRole(role) {
   const r = normalizeRole(role);
-  return r === "user" || r === "reviewer" || r === "admin" || isSuperAdmin(r);
+  return r === "user" || r === "reviewer" || isSuperAdmin(r);
 }
 
 /** Privileged account roles excluded from employee pickers / assignment lists. */
 export function isPrivilegedAccountRole(role) {
   const r = normalizeRole(role);
-  return r === "admin" || r === "reviewer" || isSuperAdmin(r);
+  return r === "reviewer" || isSuperAdmin(r);
+}
+
+/** Roles allowed when creating accounts. */
+export const ALLOWED_ACCOUNT_ROLES = ["user", "reviewer", "super_admin"];
+
+export function isAllowedAccountRole(role) {
+  const r = normalizeRole(role);
+  return r === "user" || r === "reviewer" || isSuperAdmin(r);
 }

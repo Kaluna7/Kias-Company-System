@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useToast } from "@/app/contexts/ToastContext";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const MODULES = [
   { value: "sop-review", label: "SOP Review" },
@@ -47,7 +48,7 @@ export default function ChatSidebar({ currentUser }) {
   const [selectedConversation, setSelectedConversation] = useState("all"); // 'all' or sender name
 
   const role = (currentUser?.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "reviewer" || role === "super_admin" || role === "superadmin";
+  const isAdmin = isAdminLikeRole(role);
   const currentName = (currentUser?.name || "").trim();
 
   // Ref untuk container chat messages

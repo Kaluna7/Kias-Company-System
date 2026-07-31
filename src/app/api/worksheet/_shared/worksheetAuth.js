@@ -4,7 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { canEditReviewerFields as canEditReviewerFieldsFromRole } from "@/lib/canEditReviewerFields";
 import { isEditorRole } from "@/lib/roles";
 
-/** Session required; role must be user, reviewer, admin, or super_admin (worksheet editors). */
+/** Session required; role must be user, reviewer, or super_admin (worksheet editors). */
 export async function requireWorksheetEditorSession() {
   try {
     const session = await getServerSession(authOptions);
@@ -32,7 +32,7 @@ export async function requireWorksheetEditorSession() {
 }
 
 /**
- * Any worksheet editor may publish to report (user / reviewer / admin / super_admin).
+ * Any worksheet editor may publish to report (user / reviewer / super_admin).
  * Draft vs publish is controlled by body.publishToReport on POST.
  */
 export function isWorksheetPublisherRole(role) {

@@ -106,7 +106,7 @@ function DashboardPageContent() {
 
   const role = (session?.user?.role || "").toLowerCase();
   const isAdmin = isAdminLikeRole(role);
-  // Create Account menu: super_admin only (regular admin must not see it)
+  // Create Account menu: super_admin only
   const canCreateEmployeeAccount = isSuperAdmin(role) && canCreateAccounts(role);
   const canOpenSchedule = canManageSchedule(role);
 
@@ -1348,7 +1348,7 @@ function DashboardPageContent() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Create Account</h2>
-                <p className="text-xs text-slate-500 mt-1">Super admin can create user, reviewer, admin, and super admin accounts.</p>
+                <p className="text-xs text-slate-500 mt-1">Super admin can create user, reviewer, and super admin accounts.</p>
               </div>
               <button
                 type="button"
@@ -1403,7 +1403,6 @@ function DashboardPageContent() {
                 >
                   <option value="user">User</option>
                   <option value="reviewer">Reviewer</option>
-                  <option value="admin">Admin</option>
                   <option value="super_admin">Super Admin</option>
                 </select>
               </div>

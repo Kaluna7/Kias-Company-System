@@ -1209,8 +1209,6 @@ function ReportPreviewPageContent() {
   const conclusionMeasureRef = useRef(null);
   /** true = tampilkan form isi conclusion + Save; false = tampilkan Add Conclusion atau halaman hasil. */
   const [showConclusionForm, setShowConclusionForm] = useState(false);
-  /** deptKey yang sedang generate conclusion via AI, atau null. */
-  const [conclusionAiLoadingDept, setConclusionAiLoadingDept] = useState(null);
   /** Finding & Recommendation: per department, array indeks finding yang dipilih (checkbox = multi). */
   const [selectedFindingByDept, setSelectedFindingByDept] = useState({});
   /** Modal pilih finding: deptKey yang dibuka (null = tertutup). */
@@ -1256,8 +1254,6 @@ function ReportPreviewPageContent() {
   const [joiningOnlyOffice, setJoiningOnlyOffice] = useState(false);
   const [teammateCreatingOnlyOffice, setTeammateCreatingOnlyOffice] = useState(null);
   const [onlyOfficeLoadingProgress, setOnlyOfficeLoadingProgress] = useState(0);
-  const [aiStatus, setAiStatus] = useState("");
-  const aiStatusTimerRef = useRef(null);
   /** Avoid hydration mismatch from browser extensions (fdprocessedid on buttons/inputs). */
   const [clientReady, setClientReady] = useState(false);
   useEffect(() => {
@@ -2583,106 +2579,8 @@ function ReportPreviewPageContent() {
   useEffect(
     () => () => {
       cancelScheduledWsPush();
-      if (aiStatusTimerRef.current) {
-        window.clearTimeout(aiStatusTimerRef.current);
-      }
     },
     [cancelScheduledWsPush],
-  );
-
-  const handleAiApply = useCallback(
-    (patch) => {
-      if (!patch || typeof patch !== "object") return;
-      const wsOverride = {};
-
-      if (patch.executiveSummaryHtml != null) {
-        const html = normalizeExecutiveSummaryHtml(patch.executiveSummaryHtml, year);
-        setExecutiveSummaryHtml(html);
-        setDraftRichTextHtml(html);
-        wsOverride.executiveSummaryHtml = sanitizeExecutiveSummaryHtml(html, year);
-      }
-
-      if (patch.conclusionValues && typeof patch.conclusionValues === "object") {
-        setConclusionValues((prev) => {
-          const next = { ...prev, ...patch.conclusionValues };
-          wsOverride.conclusionValues = next;
-          return next;
-        });
-        setShowConclusionForm(true);
-      }
-
-      if (Object.keys(wsOverride).length > 0) {
-        window.setTimeout(() => {
-          broadcastPreviewStateNow(wsOverride, { force: true });
-        }, 0);
-      }
-    },
-    [year, broadcastPreviewStateNow],
-  );
-
-  const clearAiStatusSoon = useCallback((delayMs = 2000) => {
-    if (aiStatusTimerRef.current) {
-      window.clearTimeout(aiStatusTimerRef.current);
-    }
-    aiStatusTimerRef.current = window.setTimeout(() => {
-      setAiStatus("");
-      aiStatusTimerRef.current = null;
-    }, delayMs);
-  }, []);
-
-  const handleGenerateConclusionAi = useCallback(
-    async (section) => {
-      if (!section?.deptKey || !Number.isFinite(year)) return;
-      const deptKey = section.deptKey;
-      if (aiStatusTimerRef.current) {
-        window.clearTimeout(aiStatusTimerRef.current);
-        aiStatusTimerRef.current = null;
-      }
-      setConclusionAiLoadingDept(deptKey);
-      setAiStatus(`Generating conclusion for ${section.deptLabel || deptKey}…`);
-
-      try {
-        const auditRows = auditRowsForDept(deptKey, false);
-        const res = await fetch("/api/report/ai/assist", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            year,
-            task: "conclusion_dept",
-            deptKey,
-            deptSection: {
-              deptKey,
-              deptLabel: section.deptLabel,
-              executiveSummary: section.executiveSummary ?? null,
-              sopRows: section.sopRows || [],
-              auditRows: auditRows.length ? auditRows : section.auditRows || [],
-            },
-          }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || `AI failed (${res.status})`);
-        }
-        const text = String(json.text || "").trim();
-        if (!text) {
-          throw new Error("AI tidak mengembalikan teks. Coba lagi.");
-        }
-        handleAiApply({ conclusionValues: { [deptKey]: text } });
-        setAiStatus(`Conclusion generated for ${section.deptLabel || deptKey}.`);
-        clearAiStatusSoon(2000);
-      } catch (e) {
-        if (aiStatusTimerRef.current) {
-          window.clearTimeout(aiStatusTimerRef.current);
-          aiStatusTimerRef.current = null;
-        }
-        setAiStatus("");
-        window.alert(e?.message || "Generate conclusion failed");
-      } finally {
-        setConclusionAiLoadingDept(null);
-      }
-    },
-    [year, handleAiApply, auditRowsForDept, clearAiStatusSoon],
   );
 
   /** Terapkan snapshot hub (narasi OnlyOffice + tabel modul) ke UI preview. */
@@ -4580,11 +4478,6 @@ function ReportPreviewPageContent() {
           />
         </div>
       </div>
-      {aiStatus && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[92] max-w-lg px-4 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-900 text-xs shadow-md print:hidden">
-          {aiStatus}
-        </div>
-      )}
       {/* Cover — one A4: background fill + bordered text boxes (Arial only on page 1) */}
       <div
         className="mx-auto bg-white shadow-md print:shadow-none w-[210mm] h-[297mm] min-h-[297mm] max-h-[297mm] overflow-hidden break-after-page relative box-border isolate [print-size:A4] font-[Arial]"
@@ -6176,19 +6069,9 @@ function ReportPreviewPageContent() {
               <div className={`flex-1 ${CONCLUSION_APPENDIX_TEXT_CLASS} leading-relaxed space-y-6`}>
                 {conclusionDeptSections.map((section, i) => (
                   <div key={section.deptKey} className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold">
-                        6.{i + 1}&nbsp;&nbsp;Department&nbsp;&nbsp;{section.deptLabel}
-                      </p>
-                      <button
-                        type="button"
-                        disabled={conclusionAiLoadingDept != null}
-                        onClick={() => handleGenerateConclusionAi(section)}
-                        className="print:hidden shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-medium hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {conclusionAiLoadingDept === section.deptKey ? "Generating…" : "Generate with AI"}
-                      </button>
-                    </div>
+                    <p className="font-semibold">
+                      6.{i + 1}&nbsp;&nbsp;Department&nbsp;&nbsp;{section.deptLabel}
+                    </p>
                     <textarea
                       data-conclusion-textarea
                       className={`w-full border border-gray-300 rounded p-3 ${CONCLUSION_APPENDIX_TEXT_CLASS} min-h-[80px] resize-y overflow-y-auto bg-gray-50 placeholder:text-gray-400`}

@@ -6,7 +6,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function main() {
   const users = [
-    { name: "Alice Admin", email: "admin@example.com", password: "adminpass", role: "admin" },
+    { name: "Super Admin", email: "superadmin@example.com", password: "superpass", role: "super_admin" },
     { name: "Rian Reviewer", email: "reviewer@example.com", password: "reviewerpass", role: "reviewer" },
     { name: "Budi User", email: "user@example.com", password: "userpass", role: "user" },
   ];

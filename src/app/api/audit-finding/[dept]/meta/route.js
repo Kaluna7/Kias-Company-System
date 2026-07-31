@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { canEditReviewerFields } from "@/lib/canEditReviewerFields";
+import { isAdminLikeRole } from "@/lib/roles";
 import { pool } from "@/app/api/SopReview/_shared/pool";
 
 function qIdent(name) {
@@ -160,7 +161,7 @@ export async function POST(req, { params }) {
 
     const session = await getServerSession(authOptions);
     const role = (session?.user?.role || "").toLowerCase();
-    const canEditFinalStatus = role === "admin" || role === "reviewer" || role === "super_admin" || role === "superadmin";
+    const canEditFinalStatus = isAdminLikeRole(role);
     const canEditReviewer = canEditReviewerFields(role);
 
     const client = await pool.connect();
