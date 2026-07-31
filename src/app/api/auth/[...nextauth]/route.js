@@ -65,20 +65,42 @@ export const authOptions = {
     }),
   ],
 
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    // Absolute JWT lifetime; refreshed while the app is open (SessionProvider refetchInterval).
+    // Combined with SessionIdleGuard: offline / idle 2 hours → must login again.
+    maxAge: 2 * 60 * 60, // 2 hours
+    updateAge: 5 * 60, // re-issue token at most every 5 minutes while active
+  },
 
   callbacks: {
     async jwt({ token, user }) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const idleLimitSec = 2 * 60 * 60;
+
       if (user) {
         token.id = String(user.id ?? token.id ?? token.sub ?? "");
         token.sub = String(user.id ?? token.sub ?? "");
         token.email = user.email ?? token.email;
         token.name = user.name;
         token.role = user.role;
+        token.lastActiveAt = nowSec;
+        return token;
       }
+
+      const last = Number(token.lastActiveAt) || Number(token.iat) || nowSec;
+      if (nowSec - last >= idleLimitSec) {
+        // Force session invalidation after 2h idle between JWT refreshes
+        return {};
+      }
+
+      token.lastActiveAt = nowSec;
       return token;
     },
     async session({ session, token }) {
+      if (!token || (!token.id && !token.sub && !token.email)) {
+        return { ...session, user: null, expires: new Date(0).toISOString() };
+      }
       session.user = session.user || {};
       session.user.id = String(token.id ?? token.sub ?? session.user.id ?? "");
       session.user.name = token.name ?? session.user.name;

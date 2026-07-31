@@ -65,6 +65,14 @@ export function isPrivilegedAccountRole(role) {
   return r === "reviewer" || isSuperAdmin(r);
 }
 
+/**
+ * Who may edit data on published module reports (SOP / Finding / Worksheet / Evidence UI).
+ * Regular "user" is view-only on reports.
+ */
+export function canEditPublishedReport(role) {
+  return isAdminLikeRole(role);
+}
+
 /** Roles allowed when creating accounts. */
 export const ALLOWED_ACCOUNT_ROLES = ["user", "reviewer", "super_admin"];
 

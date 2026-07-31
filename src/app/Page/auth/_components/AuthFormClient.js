@@ -43,8 +43,13 @@ export default function AuthFormClient() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
-    if (err || params.has("callbackUrl")) {
-      if (err) setErrorMsg(mapSignInError(err));
+    const reason = params.get("reason");
+    if (reason === "session_expired") {
+      setErrorMsg("Session expired after 2 hours offline. Please sign in again.");
+    } else if (err) {
+      setErrorMsg(mapSignInError(err));
+    }
+    if (err || reason || params.has("callbackUrl")) {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);

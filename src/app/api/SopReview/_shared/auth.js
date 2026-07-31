@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { isAdminRole } from "@/lib/roles";
+import { isAdminLikeRole, isAdminRole } from "@/lib/roles";
 
 function isAdminBLike(session) {
   const identity = String(
@@ -127,7 +127,7 @@ export async function requireSopEditor() {
 }
 
 /**
- * Editing published report data: SOP editor roles allowed.
+ * Editing published report data: reviewer or super_admin only (not preparer/user).
  */
 export async function requireSopReportPublishedEditor() {
   try {
@@ -138,9 +138,9 @@ export async function requireSopReportPublishedEditor() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    if (role !== "reviewer" && role !== "user" && !isAdminLike(session)) {
+    if (!isAdminLikeRole(role)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: SOP editor only" },
+        { success: false, error: "Forbidden: only reviewer or super admin can edit published report" },
         { status: 403 },
       );
     }

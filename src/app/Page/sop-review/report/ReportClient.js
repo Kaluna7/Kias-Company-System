@@ -10,7 +10,7 @@ import {
   notifySopReviewDataChanged,
   yearFromPublishedAt,
 } from "@/app/lib/sop-review/sopReviewNotifyClient";
-import { isEditorRole } from "@/lib/roles";
+import { canEditPublishedReport } from "@/lib/roles";
 
 const STEP_STATUS_OPTIONS = ["DRAFT", "IN REVIEW", "APPROVED", "REJECTED"];
 
@@ -26,13 +26,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
   const { data: session } = useSession();
   const router = useRouter();
   const role = (session?.user?.role || "").toLowerCase();
-  const userIdentity = String(
-    session?.user?.username || session?.user?.name || session?.user?.email || "",
-  )
-    .trim()
-    .toLowerCase();
-  const isAdminB = role === "adminb" || userIdentity === "adminb" || userIdentity.startsWith("adminb@");
-  const canEditPublished = isEditorRole(role) || isAdminB;
+  const canEditPublished = canEditPublishedReport(role);
   const canEditReportDates = canEditPublished;
 
   const [rows, setRows] = useState(initialRows);
@@ -547,11 +541,11 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) {
-        toast.show("Please sign in as Reviewer or Admin.", "error");
+        toast.show("Please sign in as Reviewer or Super Admin.", "error");
         return;
       }
       if (res.status === 403) {
-        toast.show(data?.error || "Only Reviewer or Admin can delete published data.", "error");
+        toast.show(data?.error || "Only Reviewer or Super Admin can delete published data.", "error");
         return;
       }
       if (!res.ok || !data.success) {
