@@ -65,6 +65,50 @@ async function ensureReportMetaColumns(metaTable) {
   }
 }
 
+async function ensureDraftTables(client, slug, departmentName) {
+  const stepsTable = `sops_${slug}`;
+  const metaTable = `sop_${slug}`;
+  const safeDept = String(departmentName || "").replace(/'/g, "''");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ${stepsTable} (
+      id SERIAL PRIMARY KEY,
+      no INTEGER,
+      sop_related TEXT,
+      status VARCHAR(20) DEFAULT 'DRAFT',
+      comment TEXT DEFAULT '',
+      reviewer_feedback TEXT DEFAULT '',
+      reviewer VARCHAR(255) DEFAULT '',
+      auditee_comment TEXT DEFAULT '',
+      follow_up_detail TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS reviewer_feedback TEXT DEFAULT ''`);
+  await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS auditee_comment TEXT DEFAULT ''`);
+  await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS follow_up_detail TEXT DEFAULT ''`);
+  await client.query(`ALTER TABLE ${stepsTable} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ${metaTable} (
+      id SERIAL PRIMARY KEY,
+      department_name VARCHAR(255) DEFAULT '${safeDept}',
+      sop_status VARCHAR(50),
+      preparer_status VARCHAR(50),
+      preparer_name VARCHAR(255),
+      preparer_date DATE,
+      reviewer_comment TEXT,
+      reviewer_status VARCHAR(50),
+      reviewer_name VARCHAR(255),
+      reviewer_date DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  return { stepsTable, metaTable };
+}
+
 export async function GET(req, { params }) {
   try {
     const p = await Promise.resolve(params);
@@ -127,8 +171,8 @@ export async function GET(req, { params }) {
 }
 
 /**
- * DELETE: remove published report row(s) and all their steps (reviewer/admin only).
- * Body: { meta_ids: number[] }
+ * DELETE: unpublish (restore to department) by default, or hard-delete report only.
+ * Body: { meta_ids: number[], restore?: boolean (default true), force?: boolean }
  */
 export async function DELETE(req, { params }) {
   const authError = await requireSopReportPublishedEditor();
@@ -149,8 +193,11 @@ export async function DELETE(req, { params }) {
       );
     }
 
-    const stepsTable = `sops_report_${resolved.slug}`;
-    const metaTable = `sop_report_${resolved.slug}`;
+    const restore = body?.restore !== false;
+    const force = body?.force === true;
+
+    const reportStepsTable = `sops_report_${resolved.slug}`;
+    const reportMetaTable = `sop_report_${resolved.slug}`;
     const metaIds = metaIdsRaw.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
     if (metaIds.length === 0) {
       return NextResponse.json({ success: false, error: "No valid meta_ids" }, { status: 400 });
@@ -158,24 +205,121 @@ export async function DELETE(req, { params }) {
 
     const client = await pool.connect();
     try {
-      await ensureReportMetaIdColumn(stepsTable);
-      await ensureReportMetaColumns(metaTable);
+      await ensureReportMetaIdColumn(reportStepsTable);
+      await ensureReportMetaColumns(reportMetaTable);
+      const { stepsTable: draftSteps, metaTable: draftMeta } = await ensureDraftTables(
+        client,
+        resolved.slug,
+        resolved.departmentName,
+      );
 
       await client.query("BEGIN");
-      for (const metaId of metaIds) {
-        const exists = await client.query(`SELECT id FROM ${metaTable} WHERE id = $1`, [metaId]);
-        if (!exists?.rows?.length) continue;
-        await client.query(`DELETE FROM ${stepsTable} WHERE report_meta_id = $1`, [metaId]);
-        await client.query(`DELETE FROM ${metaTable} WHERE id = $1`, [metaId]);
+
+      if (restore) {
+        if (metaIds.length !== 1) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Unpublish restores one published record at a time.",
+            },
+            { status: 400 },
+          );
+        }
+
+        const metaId = metaIds[0];
+        const metaRes = await client.query(`SELECT * FROM ${reportMetaTable} WHERE id = $1`, [metaId]);
+        const meta = metaRes.rows?.[0];
+        if (!meta) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ success: false, error: "Published record not found" }, { status: 404 });
+        }
+
+        const draftCountRes = await client.query(`SELECT COUNT(*)::int AS n FROM ${draftSteps}`);
+        const draftCount = draftCountRes.rows?.[0]?.n ?? 0;
+        if (draftCount > 0 && !force) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            {
+              success: false,
+              code: "DRAFT_NOT_EMPTY",
+              error:
+                "Department page already has SOP data. Unpublish would overwrite it. Confirm overwrite or clear the department first.",
+              draftCount,
+            },
+            { status: 409 },
+          );
+        }
+
+        const stepsRes = await client.query(
+          `SELECT no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail
+           FROM ${reportStepsTable}
+           WHERE report_meta_id = $1
+           ORDER BY no ASC NULLS LAST, id ASC`,
+          [metaId],
+        );
+        const steps = stepsRes.rows || [];
+
+        await client.query(`TRUNCATE TABLE ${draftSteps} RESTART IDENTITY`);
+        await client.query(`TRUNCATE TABLE ${draftMeta} RESTART IDENTITY`);
+
+        await client.query(
+          `INSERT INTO ${draftMeta}
+            (department_name, sop_status, preparer_status, preparer_name, preparer_date,
+             reviewer_comment, reviewer_status, reviewer_name, reviewer_date, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())`,
+          [
+            meta.department_name || resolved.departmentName,
+            meta.sop_status || "AVAILABLE",
+            meta.preparer_status || "DRAFT",
+            meta.preparer_name || null,
+            meta.preparer_date || null,
+            meta.reviewer_comment || null,
+            meta.reviewer_status || "DRAFT",
+            meta.reviewer_name || null,
+            meta.reviewer_date || null,
+          ],
+        );
+
+        for (const s of steps) {
+          await client.query(
+            `INSERT INTO ${draftSteps}
+              (no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [
+              s.no ?? null,
+              s.sop_related ?? "",
+              s.status ?? "DRAFT",
+              s.comment ?? "",
+              s.reviewer_feedback ?? "",
+              s.reviewer ?? "",
+              s.auditee_comment ?? "",
+              s.follow_up_detail ?? "",
+            ],
+          );
+        }
+
+        await client.query(`DELETE FROM ${reportStepsTable} WHERE report_meta_id = $1`, [metaId]);
+        await client.query(`DELETE FROM ${reportMetaTable} WHERE id = $1`, [metaId]);
+      } else {
+        for (const metaId of metaIds) {
+          const exists = await client.query(`SELECT id FROM ${reportMetaTable} WHERE id = $1`, [metaId]);
+          if (!exists?.rows?.length) continue;
+          await client.query(`DELETE FROM ${reportStepsTable} WHERE report_meta_id = $1`, [metaId]);
+          await client.query(`DELETE FROM ${reportMetaTable} WHERE id = $1`, [metaId]);
+        }
       }
+
       await client.query("COMMIT");
       try {
         revalidatePath("/Page/sop-review/report");
+        revalidatePath("/Page/sop-review");
+        revalidatePath("/Page/dashboard");
       } catch (_) {
         /* ignore */
       }
-      notifySopReviewDataFromServer(dept, { action: "delete" });
-      return NextResponse.json({ success: true }, { status: 200 });
+      notifySopReviewDataFromServer(dept, { action: restore ? "unpublish" : "delete" });
+      return NextResponse.json({ success: true, restored: restore }, { status: 200 });
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
       console.error("DELETE /api/SopReview/[dept]/published error:", err);

@@ -275,6 +275,7 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
           exceeds_audit_period: exceedsAuditPeriod,
           department: r.department,
           apiPath: r.apiPath,
+          metaId: meta?.id ?? null,
           items: [],
           preparer: meta.preparer_name || r.preparer || "",
           reviewer: meta.reviewer_name || "",
@@ -515,54 +516,66 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     });
   }, []);
 
-  const deletePublishedRecord = async (metaId) => {
+  const unpublishPublishedRecord = async ({ metaId, apiPath, department, force = false }) => {
     const mid = Number(metaId);
     if (!Number.isFinite(mid) || mid <= 0) return;
-    const group = editSnapshot || selectedDetail;
-    const apiPath = group?.items?.[0]?.apiPath;
     if (!apiPath) {
-      toast.show("Missing department for delete.", "error");
+      toast.show("Missing department for unpublish.", "error");
       return;
     }
-    if (
-      !window.confirm(
-        "Delete this published record and all of its SOP steps? This cannot be undone.",
-      )
-    ) {
-      return;
+    if (!force) {
+      const ok = window.confirm(
+        `Unpublish ${department || "this department"}?\n\nData will return to the SOP Review department page and be removed from this report. Progress will become Pending again.`,
+      );
+      if (!ok) return;
     }
     setDeletingPublished(true);
     try {
-      const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meta_ids: [mid] }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        toast.show("Please sign in as Reviewer or Super Admin.", "error");
+      let useForce = force;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meta_ids: [mid], restore: true, force: useForce }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          toast.show("Please sign in as Reviewer or Super Admin.", "error");
+          return;
+        }
+        if (res.status === 403) {
+          toast.show(data?.error || "Only Reviewer or Super Admin can unpublish.", "error");
+          return;
+        }
+        if (res.status === 409 && data?.code === "DRAFT_NOT_EMPTY" && !useForce) {
+          const overwrite = window.confirm(
+            `${data.error || "Department page already has SOP data."}\n\nOverwrite department data with this published record?`,
+          );
+          if (!overwrite) return;
+          useForce = true;
+          continue;
+        }
+        if (!res.ok || !data.success) {
+          toast.show("Unpublish failed: " + (data.error || res.status), "error");
+          return;
+        }
+        notifySopReviewDataChanged({
+          apiPath,
+          reportYear: selectedYear || new Date().getFullYear(),
+          action: "unpublish",
+        });
+        toast.show(
+          `Unpublished. Data is back on the ${department || "department"} SOP Review page.`,
+          "success",
+        );
+        setViewOpen(false);
+        setSelectedDetail(null);
+        setDetailEditing(false);
+        setEditSnapshot(null);
+        router.refresh();
         return;
       }
-      if (res.status === 403) {
-        toast.show(data?.error || "Only Reviewer or Super Admin can delete published data.", "error");
-        return;
-      }
-      if (!res.ok || !data.success) {
-        toast.show("Delete failed: " + (data.error || res.status), "error");
-        return;
-      }
-      notifySopReviewDataChanged({
-        apiPath,
-        reportYear: selectedYear || new Date().getFullYear(),
-        action: "delete",
-      });
-      toast.show("Published record deleted.", "success");
-      setViewOpen(false);
-      setSelectedDetail(null);
-      setDetailEditing(false);
-      setEditSnapshot(null);
-      router.refresh();
     } catch (e) {
       console.error(e);
       toast.show("Error: " + (e?.message || ""), "error");
@@ -1163,9 +1176,10 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                         {item.reviewer_comments || ""}
                       </td>
                       <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center">
-                        <div className="inline-flex items-center gap-1.5">
+                        <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
                           {canEditReportDates && (
                             <button
+                              type="button"
                               className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
                               onClick={() => openPeriodDatePicker(row)}
                             >
@@ -1173,11 +1187,28 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                             </button>
                           )}
                           <button
+                            type="button"
                             className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
                             onClick={() => handleView(row)}
                           >
                             <span>View</span>
                           </button>
+                          {canEditPublished && row.metaId != null && (
+                            <button
+                              type="button"
+                              disabled={deletingPublished}
+                              className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-800 ring-1 ring-inset ring-orange-200 hover:bg-orange-100 disabled:opacity-50"
+                              onClick={() =>
+                                unpublishPublishedRecord({
+                                  metaId: row.metaId,
+                                  apiPath: row.apiPath,
+                                  department: row.department,
+                                })
+                              }
+                            >
+                              <span>{deletingPublished ? "…" : "Unpublish"}</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1348,7 +1379,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                   Edit mode: all <strong>SOP steps table</strong> columns can be changed (including auditee fields),{" "}
                   <strong>Remove</strong> for a step. Header and audit period are read-only here; use the report list to
                   adjust audit period if needed. Click <strong>Save</strong> to apply.{" "}
-                  <strong>Delete published record</strong> removes the entire publication.
+                  <strong>Unpublish</strong> sends data back to the department page and removes it from this report.
                 </div>
               )}
               {!modalDetail?.items || modalDetail.items.length === 0 ? (
@@ -1390,14 +1421,20 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                 )
                               </span>
                             </h4>
-                            {ed && itemMeta.id != null && (
+                            {canEditPublished && itemMeta.id != null && (
                               <button
                                 type="button"
-                                onClick={() => deletePublishedRecord(itemMeta.id)}
+                                onClick={() =>
+                                  unpublishPublishedRecord({
+                                    metaId: itemMeta.id,
+                                    apiPath: item.apiPath || modalDetail?.items?.[0]?.apiPath,
+                                    department: item.department || modalDetail?.department,
+                                  })
+                                }
                                 disabled={deletingPublished || savingPublished}
-                                className="shrink-0 px-2.5 py-1.5 rounded-full text-[11px] font-medium border border-red-200 bg-red-50 text-red-800 hover:bg-red-100 disabled:opacity-50"
+                                className="shrink-0 px-2.5 py-1.5 rounded-full text-[11px] font-medium border border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100 disabled:opacity-50"
                               >
-                                {deletingPublished ? "Deleting..." : "Delete published record"}
+                                {deletingPublished ? "Unpublishing..." : "Unpublish"}
                               </button>
                             )}
                           </div>
@@ -1701,7 +1738,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                       className="p-4 text-center text-slate-500 border border-slate-200"
                                     >
                                       No steps left. Click <strong>Save</strong> to update the record, or{" "}
-                                      <strong>Delete published record</strong> to remove it entirely.
+                                      <strong>Unpublish</strong> to send data back to the department page.
                                     </td>
                                   </tr>
                                 )}
