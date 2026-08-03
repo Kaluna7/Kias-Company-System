@@ -1,6 +1,7 @@
 import { getInternalFetchBaseUrl } from "@/lib/getInternalFetchBaseUrl";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
 import { resolveAuditReviewYear } from "@/app/lib/audit-review/resolveAuditReviewYear";
+import { executiveSummaryRowHasContent } from "@/app/utils/parseStoredJsonList";
 import AuditReviewDeptClient from "./_components/AuditReviewDeptClient";
 
 /** Always read fresh audit-review data from DB after edits (avoid stale Next.js fetch cache). */
@@ -132,14 +133,18 @@ async function loadAuditReviewData(dept, selectedYear = null) {
           executiveSummary = summaryJson.data;
         }
       }
-      if (!executiveSummary) {
+      // Prefer a contentful row when the year-scoped result is an empty shell.
+      if (!executiveSummaryRowHasContent(executiveSummary)) {
         const latestRes = await fetch(
           `${baseUrl}/api/audit-review/${deptInfo.apiPath}/executive-summary`,
           noStore,
         );
         if (latestRes.ok) {
           const latestJson = await latestRes.json();
-          if (latestJson.success && latestJson.data) {
+          if (
+            latestJson.success &&
+            executiveSummaryRowHasContent(latestJson.data)
+          ) {
             executiveSummary = latestJson.data;
           }
         }

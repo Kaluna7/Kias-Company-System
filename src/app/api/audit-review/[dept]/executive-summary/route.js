@@ -69,14 +69,50 @@ export async function GET(req, { params }) {
         ADD COLUMN IF NOT EXISTS audit_year INTEGER
       `);
 
+      const { executiveSummaryRowHasContent } = await import(
+        "@/app/utils/parseStoredJsonList"
+      );
+
       const result = hasValidYear
         ? await client.query(
             `SELECT * FROM ${tableName} WHERE audit_year = $1 ORDER BY id DESC LIMIT 1`,
             [year],
           )
-        : await client.query(`SELECT * FROM ${tableName} ORDER BY id DESC LIMIT 1`);
+        : await client.query(
+            `SELECT * FROM ${tableName} ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`,
+          );
 
       let data = result.rows[0] || null;
+
+      // Empty year shells (e.g. lockOnly insert) must not hide a filled older row.
+      if (hasValidYear && data && !executiveSummaryRowHasContent(data)) {
+        const contentful = await client.query(
+          `SELECT * FROM ${tableName}
+           WHERE audit_year IS DISTINCT FROM $1
+           ORDER BY updated_at DESC NULLS LAST, id DESC`,
+          [year],
+        );
+        const filled = contentful.rows.find((row) =>
+          executiveSummaryRowHasContent(row),
+        );
+        if (filled) {
+          data = {
+            ...filled,
+            // Keep the year-row identity/lock so UI save still targets this year.
+            id: data.id,
+            audit_year: year,
+            is_locked: data.is_locked,
+          };
+        }
+      } else if (!hasValidYear && data && !executiveSummaryRowHasContent(data)) {
+        const contentful = await client.query(
+          `SELECT * FROM ${tableName} ORDER BY updated_at DESC NULLS LAST, id DESC`,
+        );
+        data =
+          contentful.rows.find((row) => executiveSummaryRowHasContent(row)) ||
+          data;
+      }
+
       if (forReport) {
         const { getAuditReviewPublishStateForReport } = await import(
           "@/app/lib/audit-review/reportPublishLock"
@@ -158,20 +194,14 @@ export async function POST(req, { params }) {
         `CREATE UNIQUE INDEX IF NOT EXISTS ${tableName}_audit_year_unique ON ${tableName}(audit_year)`
       );
 
-      const latest = await client.query(
-        `SELECT id FROM ${tableName} ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`,
-      );
-      const latestId = latest.rows[0]?.id ?? null;
-
-      // Check if record exists for this audit year
       const existing = await client.query(
         `SELECT id FROM ${tableName} WHERE audit_year = $1 ORDER BY id DESC LIMIT 1`,
         [auditYear],
       );
 
       if (lockOnly) {
-        // Must match GET ?year= — lock/unlock the row for this audit year, not another year's row.
-        const targetId = existing.rows[0]?.id ?? latestId ?? null;
+        // Unlock/lock flag only — never invent an empty year shell that shadows real content.
+        const targetId = existing.rows[0]?.id ?? null;
         if (targetId) {
           await client.query(
             `
@@ -185,15 +215,14 @@ export async function POST(req, { params }) {
           const updated = await client.query(`SELECT * FROM ${tableName} WHERE id = $1`, [targetId]);
           return NextResponse.json({ success: true, data: updated.rows[0] }, { status: 200 });
         }
-        const inserted = await client.query(
-          `
-            INSERT INTO ${tableName} (audit_year, is_locked)
-            VALUES ($1, $2)
-            RETURNING *
-          `,
-          [auditYear, body.isLocked === true],
+        return NextResponse.json(
+          {
+            success: true,
+            data: null,
+            message: "No executive summary row for this year yet",
+          },
+          { status: 200 },
         );
-        return NextResponse.json({ success: true, data: inserted.rows[0] }, { status: 200 });
       }
 
       if (existing.rows.length > 0) {

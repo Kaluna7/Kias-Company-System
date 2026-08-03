@@ -95,6 +95,32 @@ function supportsFindingSnapshotFields(dept) {
   );
 }
 
+function supportsReportPeriodSnapshotFields(dept) {
+  const modelName = deptToModel[dept];
+  const model = Prisma.dmmf.datamodel.models.find((item) => item.name === modelName);
+  if (!model) return false;
+  const fieldNames = new Set(model.fields.map((field) => field.name));
+  return [
+    "report_audit_period_start",
+    "report_audit_period_end",
+    "report_audit_fieldwork_start",
+    "report_audit_fieldwork_end",
+  ].every((field) => fieldNames.has(field));
+}
+
+function parseDateOnlyOrNull(raw) {
+  if (raw == null || raw === "") return null;
+  const str = String(raw);
+  const ymd = str.includes("T") ? str.split("T")[0] : str.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+  }
+  const d = new Date(`${ymd}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function getFindingTableName(dept) {
   const tableName = deptToModel[dept];
   return tableName ? qIdent(tableName) : null;
@@ -660,6 +686,17 @@ export async function POST(req, { params }) {
     const body = await req.json();
     const selectedYear = parseSelectedYear(req);
     const timestamp = alignDateToSelectedYear(new Date(), selectedYear);
+    const fromReport = body.fromReport === true;
+    const completionStatus = truncateString(
+      body.completionStatus || (fromReport ? "COMPLETED" : null),
+      50,
+    );
+    const completionDate = body.completionDate
+      ? alignDateToSelectedYear(new Date(body.completionDate), selectedYear)
+      : fromReport
+        ? timestamp
+        : null;
+
     const createData = {
       risk_id: truncateString(body.riskId, 50),
       risk_description: body.riskDescription ?? null,
@@ -674,10 +711,8 @@ export async function POST(req, { params }) {
       finding_description: body.findingDescription ?? null,
       recommendation: body.recommendation ?? null,
       auditee: truncateString(body.auditee, 255),
-      completion_status: truncateString(body.completionStatus, 50),
-      completion_date: body.completionDate
-        ? alignDateToSelectedYear(new Date(body.completionDate), selectedYear)
-        : null,
+      completion_status: completionStatus,
+      completion_date: completionDate,
       created_at: timestamp,
       updated_at: timestamp,
     };
@@ -688,6 +723,19 @@ export async function POST(req, { params }) {
       createData.description = body.description ?? null;
       createData.application = body.application ?? null;
       createData.owners = truncateString(body.owners, 35);
+    }
+
+    if (supportsReportPeriodSnapshotFields(dept)) {
+      const periodStart = parseDateOnlyOrNull(body.reportAuditPeriodStart);
+      const periodEnd = parseDateOnlyOrNull(body.reportAuditPeriodEnd);
+      const fieldworkStart = parseDateOnlyOrNull(body.reportAuditFieldworkStart);
+      const fieldworkEnd = parseDateOnlyOrNull(body.reportAuditFieldworkEnd);
+      if (periodStart || periodEnd || fieldworkStart || fieldworkEnd || fromReport) {
+        createData.report_audit_period_start = periodStart;
+        createData.report_audit_period_end = periodEnd;
+        createData.report_audit_fieldwork_start = fieldworkStart || periodStart;
+        createData.report_audit_fieldwork_end = fieldworkEnd;
+      }
     }
 
     const created = await delegate.create({

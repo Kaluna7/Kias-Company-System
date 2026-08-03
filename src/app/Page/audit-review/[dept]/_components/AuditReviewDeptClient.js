@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/app/contexts/ToastContext";
 import { sortByRiskId } from "@/app/utils/sortByRiskId";
 import { resolveAuditReviewYear } from "@/app/lib/audit-review/resolveAuditReviewYear";
 import { mergeReviewFindingRows } from "@/app/lib/audit-review/keyFindingRow";
-import { parseStoredJsonList } from "@/app/utils/parseStoredJsonList";
+import { parseStoredJsonList, executiveSummaryRowHasContent } from "@/app/utils/parseStoredJsonList";
 import { notifyAuditReviewPublishChanged } from "@/app/lib/audit-review/reportPublishLockClient";
 import StickyHorizontalScrollTable from "@/app/components/ui/StickyHorizontalScrollTable";
 import Pagination from "@/app/components/ui/Pagination";
@@ -234,6 +234,34 @@ export default function AuditReviewDeptClient({
   const [isLocked, setIsLocked] = useState(Boolean(initialExecutiveSummary?.is_locked));
   const [summaryHydrated, setSummaryHydrated] = useState(false);
   const isInteractionDisabled = isLocked || loading;
+  const lastSavedSummaryRef = useRef("");
+  const [draftSaveStatus, setDraftSaveStatus] = useState(""); // "", "saving", "saved", "error"
+
+  const buildExecutiveSummarySnapshot = useCallback(
+    () =>
+      JSON.stringify({
+        objectiveOfAudit,
+        scopeAreasCovered,
+        scopeMethodology,
+        scopeTimeframeAuditPeriod,
+        scopeTimeframeFieldworkDates,
+        limitationsScope,
+        limitationsTime,
+        limitationsResource,
+        internalAuditTeam,
+      }),
+    [
+      objectiveOfAudit,
+      scopeAreasCovered,
+      scopeMethodology,
+      scopeTimeframeAuditPeriod,
+      scopeTimeframeFieldworkDates,
+      limitationsScope,
+      limitationsTime,
+      limitationsResource,
+      internalAuditTeam,
+    ],
+  );
 
   // Key Findings state
   const [keyFindings, setKeyFindings] = useState([]);
@@ -336,12 +364,13 @@ export default function AuditReviewDeptClient({
   const summaryStorageYear =
     Number.isInteger(persistYear) ? persistYear : selectedYear || "default";
 
-  // Hydrate executive summary. Prefer server data when available so saved/locked
-  // records reopen with the latest persisted values instead of stale local cache.
+  // Hydrate executive summary. Prefer contentful server data; empty year shells
+  // must not wipe a good local draft.
   useEffect(() => {
+    setSummaryHydrated(false);
     const storageKey = `auditReviewExecutiveSummary_${apiPath}_${summaryStorageYear}`;
     try {
-      if (initialExecutiveSummary) {
+      if (executiveSummaryRowHasContent(initialExecutiveSummary)) {
         applyExecutiveSummaryRow(initialExecutiveSummary, {
           setObjectiveOfAudit,
           setScopeAreasCovered,
@@ -358,16 +387,33 @@ export default function AuditReviewDeptClient({
         const saved = localStorage.getItem(storageKey);
         if (saved) {
           const parsed = JSON.parse(saved);
-          setObjectiveOfAudit(parsed.objectiveOfAudit || []);
-          setScopeAreasCovered(parsed.scopeAreasCovered || []);
-          setScopeMethodology(parsed.scopeMethodology || []);
-          setScopeTimeframeAuditPeriod(parsed.scopeTimeframeAuditPeriod || "");
-          setScopeTimeframeFieldworkDates(parsed.scopeTimeframeFieldworkDates || "");
-          setLimitationsScope(parsed.limitationsScope || []);
-          setLimitationsTime(parsed.limitationsTime || []);
-          setLimitationsResource(parsed.limitationsResource || []);
-          setInternalAuditTeam(parsed.internalAuditTeam || []);
-          setIsLocked(Boolean(parsed.isLocked));
+          const localHasContent = [
+            parsed.objectiveOfAudit,
+            parsed.scopeAreasCovered,
+            parsed.scopeMethodology,
+            parsed.limitationsScope,
+            parsed.limitationsTime,
+            parsed.limitationsResource,
+            parsed.internalAuditTeam,
+          ].some((list) => Array.isArray(list) && list.length > 0);
+          if (localHasContent) {
+            setObjectiveOfAudit(parsed.objectiveOfAudit || []);
+            setScopeAreasCovered(parsed.scopeAreasCovered || []);
+            setScopeMethodology(parsed.scopeMethodology || []);
+            setScopeTimeframeAuditPeriod(parsed.scopeTimeframeAuditPeriod || "");
+            setScopeTimeframeFieldworkDates(parsed.scopeTimeframeFieldworkDates || "");
+            setLimitationsScope(parsed.limitationsScope || []);
+            setLimitationsTime(parsed.limitationsTime || []);
+            setLimitationsResource(parsed.limitationsResource || []);
+            setInternalAuditTeam(parsed.internalAuditTeam || []);
+          }
+          if (initialExecutiveSummary) {
+            setIsLocked(Boolean(initialExecutiveSummary.is_locked));
+          } else {
+            setIsLocked(Boolean(parsed.isLocked));
+          }
+        } else if (initialExecutiveSummary) {
+          setIsLocked(Boolean(initialExecutiveSummary.is_locked));
         }
       }
     } catch (err) {
@@ -376,6 +422,18 @@ export default function AuditReviewDeptClient({
       setSummaryHydrated(true);
     }
   }, [apiPath, initialExecutiveSummary, summaryStorageYear]);
+
+  // Mark baseline after hydrate. If server had no content, leave baseline empty
+  // so recovered localStorage draft is pushed to DB by autosave.
+  useEffect(() => {
+    if (!summaryHydrated) return;
+    if (executiveSummaryRowHasContent(initialExecutiveSummary)) {
+      lastSavedSummaryRef.current = buildExecutiveSummarySnapshot();
+    } else {
+      lastSavedSummaryRef.current = "";
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: hydrate gate only
+  }, [summaryHydrated, apiPath, summaryStorageYear, initialExecutiveSummary]);
 
   const fetchCompletedAuditFindings = useCallback(async () => {
     const auditYear = getAuditYear();
@@ -761,57 +819,11 @@ export default function AuditReviewDeptClient({
     return json.data || null;
   };
 
-  /** Unlock only — do not overwrite saved fields with empty local state. */
-  const handleToggleUnlock = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  /** Persist executive summary fields to DB (draft or lock). */
+  const persistExecutiveSummary = useCallback(
+    async (nextLocked, { silent = false } = {}) => {
       const auditYear = getAuditYear();
-      const summaryRes = await fetch(
-        `/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            auditYear,
-            lockOnly: true,
-            isLocked: false,
-          }),
-        },
-      );
-      if (!summaryRes.ok) {
-        const summaryText = await summaryRes.text().catch(() => "");
-        throw new Error(summaryText || "Failed to unlock executive summary");
-      }
-      const row = await fetchExecutiveSummaryFromServer();
-      if (row) applyExecutiveSummaryRow(row, executiveSummarySetters);
-      else setIsLocked(false);
-      await notifyAuditReviewPublishChanged({
-        auditYear,
-        reportYear: selectedYear || auditYear,
-        deptKey,
-        apiPath,
-        isLocked: false,
-      });
-      toast.show("Unlocked for editing. Saved data is unchanged.", "success");
-    } catch (e) {
-      setError(e?.message || String(e));
-      toast.show("Error: " + (e?.message || String(e)), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Save all data
-  const handleSaveAll = async (nextLocked = isLocked) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const auditYear = getAuditYear();
-
-      const serverRow =
-        nextLocked === true ? await fetchExecutiveSummaryFromServer() : null;
+      const serverRow = await fetchExecutiveSummaryFromServer();
       const saveObjective = pickSummaryArrayForSave(
         objectiveOfAudit,
         serverRow,
@@ -848,24 +860,26 @@ export default function AuditReviewDeptClient({
         "internal_audit_team",
       );
 
-      // Save executive summary
-      const summaryRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          auditYear,
-          objectiveOfAudit: JSON.stringify(saveObjective),
-          scopeAreasCovered: JSON.stringify(saveScopeAreas),
-          scopeMethodology: JSON.stringify(saveMethodology),
-          scopeTimeframeAuditPeriod: scopeTimeframeAuditPeriod,
-          scopeTimeframeFieldworkDates: scopeTimeframeFieldworkDates,
-          limitationsScope: JSON.stringify(saveLimitationsScope),
-          limitationsTime: JSON.stringify(saveLimitationsTime),
-          limitationsResource: JSON.stringify(saveLimitationsResource),
-          internalAuditTeam: JSON.stringify(saveTeam),
-          isLocked: nextLocked,
-        }),
-      });
+      const summaryRes = await fetch(
+        `/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            auditYear,
+            objectiveOfAudit: JSON.stringify(saveObjective),
+            scopeAreasCovered: JSON.stringify(saveScopeAreas),
+            scopeMethodology: JSON.stringify(saveMethodology),
+            scopeTimeframeAuditPeriod: scopeTimeframeAuditPeriod,
+            scopeTimeframeFieldworkDates: scopeTimeframeFieldworkDates,
+            limitationsScope: JSON.stringify(saveLimitationsScope),
+            limitationsTime: JSON.stringify(saveLimitationsTime),
+            limitationsResource: JSON.stringify(saveLimitationsResource),
+            internalAuditTeam: JSON.stringify(saveTeam),
+            isLocked: nextLocked,
+          }),
+        },
+      );
 
       if (!summaryRes.ok) {
         const summaryText = await summaryRes.text().catch(() => "");
@@ -877,16 +891,160 @@ export default function AuditReviewDeptClient({
         }
         throw new Error(
           summaryJson?.error ||
-          summaryJson?.details ||
-          summaryText ||
-          "Failed to save executive summary"
+            summaryJson?.details ||
+            summaryText ||
+            "Failed to save executive summary",
         );
       }
 
       const summarySaved = await summaryRes.json().catch(() => ({}));
-      if (summarySaved?.data) {
+      if (summarySaved?.data && !silent) {
         applyExecutiveSummaryRow(summarySaved.data, executiveSummarySetters);
+      } else if (summarySaved?.data && silent) {
+        setIsLocked(Boolean(summarySaved.data.is_locked));
       }
+
+      lastSavedSummaryRef.current = JSON.stringify({
+        objectiveOfAudit: saveObjective,
+        scopeAreasCovered: saveScopeAreas,
+        scopeMethodology: saveMethodology,
+        scopeTimeframeAuditPeriod,
+        scopeTimeframeFieldworkDates,
+        limitationsScope: saveLimitationsScope,
+        limitationsTime: saveLimitationsTime,
+        limitationsResource: saveLimitationsResource,
+        internalAuditTeam: saveTeam,
+      });
+
+      return { auditYear, summarySaved };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable
+    [
+      apiPath,
+      getAuditYear,
+      objectiveOfAudit,
+      scopeAreasCovered,
+      scopeMethodology,
+      scopeTimeframeAuditPeriod,
+      scopeTimeframeFieldworkDates,
+      limitationsScope,
+      limitationsTime,
+      limitationsResource,
+      internalAuditTeam,
+    ],
+  );
+
+  /** Unlock only — do not overwrite saved fields with empty local/server shells. */
+  const handleToggleUnlock = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const auditYear = getAuditYear();
+      const summaryRes = await fetch(
+        `/api/audit-review/${encodeURIComponent(apiPath)}/executive-summary`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            auditYear,
+            lockOnly: true,
+            isLocked: false,
+          }),
+        },
+      );
+      if (!summaryRes.ok) {
+        const summaryText = await summaryRes.text().catch(() => "");
+        throw new Error(summaryText || "Failed to unlock executive summary");
+      }
+      const row = await fetchExecutiveSummaryFromServer();
+      if (row && executiveSummaryRowHasContent(row)) {
+        applyExecutiveSummaryRow(row, executiveSummarySetters);
+      } else {
+        setIsLocked(false);
+      }
+      await notifyAuditReviewPublishChanged({
+        auditYear,
+        reportYear: selectedYear || auditYear,
+        deptKey,
+        apiPath,
+        isLocked: false,
+      });
+      toast.show("Unlocked for editing. Saved data is unchanged.", "success");
+    } catch (e) {
+      setError(e?.message || String(e));
+      toast.show("Error: " + (e?.message || String(e)), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setDraftSaveStatus("saving");
+      await persistExecutiveSummary(false, { silent: true });
+      setDraftSaveStatus("saved");
+      toast.show("Executive summary draft saved.", "success");
+    } catch (e) {
+      setDraftSaveStatus("error");
+      setError(e?.message || String(e));
+      toast.show("Error: " + (e?.message || String(e)), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Autosave draft to DB shortly after edits (Lock is no longer required to persist).
+  useEffect(() => {
+    if (!summaryHydrated || isLocked) return;
+    const snapshot = buildExecutiveSummarySnapshot();
+    if (!snapshot || snapshot === lastSavedSummaryRef.current) return;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(snapshot);
+    } catch {
+      return;
+    }
+    const hasContent = [
+      parsed.objectiveOfAudit,
+      parsed.scopeAreasCovered,
+      parsed.scopeMethodology,
+      parsed.limitationsScope,
+      parsed.limitationsTime,
+      parsed.limitationsResource,
+      parsed.internalAuditTeam,
+    ].some((list) => Array.isArray(list) && list.length > 0);
+    if (!hasContent) return;
+
+    const timer = setTimeout(() => {
+      setDraftSaveStatus("saving");
+      persistExecutiveSummary(false, { silent: true })
+        .then(() => setDraftSaveStatus("saved"))
+        .catch((err) => {
+          console.warn("Autosave executive summary failed:", err);
+          setDraftSaveStatus("error");
+        });
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [
+    summaryHydrated,
+    isLocked,
+    buildExecutiveSummarySnapshot,
+    persistExecutiveSummary,
+  ]);
+
+  // Save all data (Lock = persist summary + findings and lock for report)
+  const handleSaveAll = async (nextLocked = isLocked) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { auditYear } = await persistExecutiveSummary(nextLocked, {
+        silent: false,
+      });
 
       const findingsRes = await fetch(`/api/audit-review/${encodeURIComponent(apiPath)}/findings`, {
         method: "POST",
@@ -1145,6 +1303,20 @@ export default function AuditReviewDeptClient({
             >
               {isLocked ? "Locked for Report" : "Unlocked"}
             </span>
+            {!isLocked && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSaveDraft}
+                className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 transition-colors hover:bg-slate-50 sm:px-3 sm:py-2 sm:text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {draftSaveStatus === "saving"
+                  ? "Saving…"
+                  : draftSaveStatus === "saved"
+                    ? "Saved"
+                    : "Save Draft"}
+              </button>
+            )}
             <button
               type="button"
               disabled={loading}

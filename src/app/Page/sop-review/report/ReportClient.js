@@ -46,6 +46,8 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
   const [savingAuditeeFields, setSavingAuditeeFields] = useState(false);
   const [deletingPublished, setDeletingPublished] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [unpublishDialog, setUnpublishDialog] = useState(null);
+  // unpublishDialog: { kind: 'confirm'|'overwrite', metaId, apiPath, department, message }
 
   const [periodDatePickerOpen, setPeriodDatePickerOpen] = useState(false);
   const [selectedApiPath, setSelectedApiPath] = useState("finance");
@@ -516,69 +518,88 @@ export default function ReportClient({ initialRows = [], initialScheduleData = [
     });
   }, []);
 
-  const unpublishPublishedRecord = async ({ metaId, apiPath, department, force = false }) => {
+  const requestUnpublish = ({ metaId, apiPath, department }) => {
     const mid = Number(metaId);
     if (!Number.isFinite(mid) || mid <= 0) return;
     if (!apiPath) {
       toast.show("Missing department for unpublish.", "error");
       return;
     }
-    if (!force) {
-      const ok = window.confirm(
-        `Unpublish ${department || "this department"}?\n\nData will return to the SOP Review department page and be removed from this report. Progress will become Pending again.`,
-      );
-      if (!ok) return;
-    }
+    setUnpublishDialog({
+      kind: "confirm",
+      metaId: mid,
+      apiPath,
+      department: department || "this department",
+      title: `Unpublish ${department || "this department"}?`,
+      message:
+        "Data will return to the SOP Review department page and be removed from this report. Progress will become Pending again.",
+    });
+  };
+
+  const closeUnpublishDialog = () => {
+    if (deletingPublished) return;
+    setUnpublishDialog(null);
+  };
+
+  const runUnpublish = async (force = false) => {
+    if (!unpublishDialog) return;
+    const { metaId, apiPath, department } = unpublishDialog;
     setDeletingPublished(true);
     try {
-      let useForce = force;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
-          method: "DELETE",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ meta_ids: [mid], restore: true, force: useForce }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          toast.show("Please sign in as Reviewer or Super Admin.", "error");
-          return;
-        }
-        if (res.status === 403) {
-          toast.show(data?.error || "Only Reviewer or Super Admin can unpublish.", "error");
-          return;
-        }
-        if (res.status === 409 && data?.code === "DRAFT_NOT_EMPTY" && !useForce) {
-          const overwrite = window.confirm(
-            `${data.error || "Department page already has SOP data."}\n\nOverwrite department data with this published record?`,
-          );
-          if (!overwrite) return;
-          useForce = true;
-          continue;
-        }
-        if (!res.ok || !data.success) {
-          toast.show("Unpublish failed: " + (data.error || res.status), "error");
-          return;
-        }
-        notifySopReviewDataChanged({
-          apiPath,
-          reportYear: selectedYear || new Date().getFullYear(),
-          action: "unpublish",
-        });
-        toast.show(
-          `Unpublished. Data is back on the ${department || "department"} SOP Review page.`,
-          "success",
-        );
-        setViewOpen(false);
-        setSelectedDetail(null);
-        setDetailEditing(false);
-        setEditSnapshot(null);
-        router.refresh();
+      const res = await fetch(`/api/SopReview/${encodeURIComponent(apiPath)}/published`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meta_ids: [metaId], restore: true, force }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        toast.show("Please sign in as Reviewer or Super Admin.", "error");
+        setUnpublishDialog(null);
         return;
       }
+      if (res.status === 403) {
+        toast.show(data?.error || "Only Reviewer or Super Admin can unpublish.", "error");
+        setUnpublishDialog(null);
+        return;
+      }
+      if (res.status === 409 && data?.code === "DRAFT_NOT_EMPTY" && !force) {
+        setUnpublishDialog({
+          kind: "overwrite",
+          metaId,
+          apiPath,
+          department,
+          title: "Overwrite department data?",
+          message:
+            data.error ||
+            "Department page already has SOP data. Unpublish would overwrite it with this published record.",
+        });
+        return;
+      }
+      if (!res.ok || !data.success) {
+        toast.show("Unpublish failed: " + (data.error || res.status), "error");
+        setUnpublishDialog(null);
+        return;
+      }
+      notifySopReviewDataChanged({
+        apiPath,
+        reportYear: selectedYear || new Date().getFullYear(),
+        action: "unpublish",
+      });
+      toast.show(
+        `Unpublished. Data is back on the ${department || "department"} SOP Review page.`,
+        "success",
+      );
+      setUnpublishDialog(null);
+      setViewOpen(false);
+      setSelectedDetail(null);
+      setDetailEditing(false);
+      setEditSnapshot(null);
+      router.refresh();
     } catch (e) {
       console.error(e);
       toast.show("Error: " + (e?.message || ""), "error");
+      setUnpublishDialog(null);
     } finally {
       setDeletingPublished(false);
     }
@@ -1199,7 +1220,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                               disabled={deletingPublished}
                               className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-800 ring-1 ring-inset ring-orange-200 hover:bg-orange-100 disabled:opacity-50"
                               onClick={() =>
-                                unpublishPublishedRecord({
+                                requestUnpublish({
                                   metaId: row.metaId,
                                   apiPath: row.apiPath,
                                   department: row.department,
@@ -1425,7 +1446,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                               <button
                                 type="button"
                                 onClick={() =>
-                                  unpublishPublishedRecord({
+                                  requestUnpublish({
                                     metaId: itemMeta.id,
                                     apiPath: item.apiPath || modalDetail?.items?.[0]?.apiPath,
                                     department: item.department || modalDetail?.department,
@@ -1850,6 +1871,65 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                   {savingReportDates ? "Saving..." : "Save"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {unpublishDialog && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+            onClick={closeUnpublishDialog}
+            aria-hidden="true"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unpublish-dialog-title"
+            className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-6"
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                  unpublishDialog.kind === "overwrite"
+                    ? "bg-amber-50 text-amber-600"
+                    : "bg-orange-50 text-orange-600"
+                }`}
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 id="unpublish-dialog-title" className="text-lg font-semibold text-slate-900">
+                  {unpublishDialog.title}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{unpublishDialog.message}</p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeUnpublishDialog}
+                disabled={deletingPublished}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => runUnpublish(unpublishDialog.kind === "overwrite")}
+                disabled={deletingPublished}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#141D38] hover:bg-[#0f1730] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {deletingPublished ? "Unpublishing..." : "OK"}
+              </button>
             </div>
           </div>
         </div>
