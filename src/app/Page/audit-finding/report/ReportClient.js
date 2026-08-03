@@ -43,6 +43,62 @@ const EMPTY_ADD_FORM = {
   completionDate: "",
 };
 
+/** Fields copied from Audit Program — locked in the add form. */
+const AP_LOCKED_FIELDS = [
+  { key: "riskId", label: "Risk ID" },
+  { key: "apCode", label: "AP Code" },
+  { key: "risk", label: "Risk" },
+  { key: "owners", label: "Owner" },
+  { key: "method", label: "Method" },
+  { key: "riskDescription", label: "Risk Description", wide: true },
+  { key: "riskDetails", label: "Risk Details", wide: true },
+  { key: "substantiveTest", label: "Substantive Test", wide: true },
+  { key: "objective", label: "Objective", wide: true },
+  { key: "procedures", label: "Procedures", wide: true },
+  { key: "description", label: "Description", wide: true },
+  { key: "application", label: "Application", wide: true },
+];
+
+/** Finding fields the user fills after picking an Audit Program row. */
+const FINDING_EDIT_FIELDS = [
+  { key: "checkYN", label: "Check (Y/N)" },
+  { key: "preparer", label: "Preparer" },
+  { key: "auditee", label: "Auditee" },
+  { key: "completionDate", label: "Completion Date", type: "date" },
+  { key: "findingResult", label: "Finding Result", wide: true },
+  { key: "findingDescription", label: "Finding Description", wide: true, textarea: true },
+  { key: "recommendation", label: "Recommendation", wide: true, textarea: true },
+];
+
+function apOptionKey(row) {
+  return `${String(row?.risk_id ?? "").trim()}::${String(row?.ap_code ?? "").trim()}`;
+}
+
+function mapApRowToForm(row) {
+  return {
+    ...EMPTY_ADD_FORM,
+    riskId: row?.risk_id ?? "",
+    riskDescription: row?.risk_description ?? "",
+    riskDetails: row?.risk_details ?? "",
+    owners: row?.owners ?? "",
+    apCode: row?.ap_code ?? "",
+    substantiveTest: row?.substantive_test ?? "",
+    objective: row?.objective ?? "",
+    procedures: row?.procedures ?? "",
+    method: row?.method ?? "",
+    description: row?.description ?? "",
+    application: row?.application ?? "",
+    risk: row?.risk != null && row?.risk !== "" ? String(row.risk) : "",
+    checkYN: row?.check_yn ?? "",
+    preparer: row?.preparer ?? "",
+    findingResult: row?.finding_result ?? "",
+    findingDescription: row?.finding_description ?? "",
+    recommendation: row?.recommendation ?? "",
+    auditee: row?.auditee ?? "",
+    completionDate: todayYmd(),
+  };
+}
+
 function toYmd(value) {
   if (!value) return "";
   const str = String(value);
@@ -72,6 +128,9 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
   const [addFormDept, setAddFormDept] = useState(null);
   const [addFormPeriodKey, setAddFormPeriodKey] = useState(null);
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
+  const [apOptions, setApOptions] = useState([]);
+  const [selectedApKey, setSelectedApKey] = useState("");
+  const [loadingApOptions, setLoadingApOptions] = useState(false);
   const [saving, setSaving] = useState(false);
   const dateFormatCache = useMemo(() => new Map(), []);
 
@@ -380,7 +439,7 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
     setAddFormOpen(false);
   };
 
-  const openAddForm = (deptName, periodKey) => {
+  const openAddForm = async (deptName, periodKey) => {
     if (!canEdit) return;
     const deptGroup = groupedByDepartment[deptName];
     const periodKeys = Object.keys(deptGroup?.periods || {});
@@ -389,11 +448,54 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
       toast.show("No audit period available for this department.", "error");
       return;
     }
+    const apiPath = DEPT_NAME_TO_API[deptName];
+    if (!apiPath) {
+      toast.show("Unknown department.", "error");
+      return;
+    }
+
     setEditingDeptName(deptName);
     setAddFormDept(deptName);
     setAddFormPeriodKey(targetPeriodKey);
     setAddForm({ ...EMPTY_ADD_FORM, completionDate: todayYmd() });
+    setSelectedApKey("");
+    setApOptions([]);
     setAddFormOpen(true);
+    setLoadingApOptions(true);
+
+    try {
+      // Workspace GET (no include_completed) = rows sourced from published Audit Program.
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "10000",
+      });
+      if (selectedYear != null && !Number.isNaN(selectedYear)) {
+        params.set("year", String(selectedYear));
+      }
+      const res = await fetch(
+        `/api/audit-finding/${encodeURIComponent(apiPath)}?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to load Audit Program rows");
+      }
+      const list = Array.isArray(json.data) ? json.data : [];
+      // Prefer AP rows that still have an ap_code (real program lines).
+      const options = list.filter((row) => String(row?.ap_code || "").trim());
+      setApOptions(options);
+      if (options.length === 0) {
+        toast.show(
+          "No Audit Program rows available for this department. Add/publish Audit Program first (completed APs are hidden).",
+          "error",
+        );
+      }
+    } catch (err) {
+      setApOptions([]);
+      toast.show(err?.message || "Failed to load Audit Program rows", "error");
+    } finally {
+      setLoadingApOptions(false);
+    }
   };
 
   const closeAddForm = () => {
@@ -401,6 +503,18 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
     setAddFormDept(null);
     setAddFormPeriodKey(null);
     setAddForm(EMPTY_ADD_FORM);
+    setApOptions([]);
+    setSelectedApKey("");
+  };
+
+  const handleSelectAp = (key) => {
+    setSelectedApKey(key);
+    const row = apOptions.find((item) => apOptionKey(item) === key);
+    if (!row) {
+      setAddForm({ ...EMPTY_ADD_FORM, completionDate: todayYmd() });
+      return;
+    }
+    setAddForm(mapApRowToForm(row));
   };
 
   const handleAddFormChange = (field, value) => {
@@ -414,13 +528,13 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
       toast.show("Unknown department.", "error");
       return;
     }
+    if (!selectedApKey || !String(addForm.apCode || "").trim()) {
+      toast.show("Select a row from Audit Program first.", "error");
+      return;
+    }
     const periodGroup = groupedByDepartment[addFormDept]?.periods?.[addFormPeriodKey];
     if (!periodGroup) {
       toast.show("Audit period not found.", "error");
-      return;
-    }
-    if (!String(addForm.riskId || "").trim() && !String(addForm.findingDescription || "").trim()) {
-      toast.show("Fill at least Risk ID or Finding Description.", "error");
       return;
     }
 
@@ -513,7 +627,7 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
       setRows((prev) => [...prev, optimisticRow]);
       setSelectedGroup({ deptName: addFormDept, periodKey: addFormPeriodKey });
       closeAddForm();
-      toast.show("Finding added to report.", "success");
+      toast.show("Finding added to report from Audit Program.", "success");
       router.refresh();
     } catch (err) {
       toast.show(err?.message || "Failed to add finding", "error");
@@ -602,28 +716,6 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
     popup.document.close();
   };
 
-  const addFormFields = [
-    { key: "riskId", label: "Risk ID" },
-    { key: "apCode", label: "AP Code" },
-    { key: "risk", label: "Risk", type: "number" },
-    { key: "checkYN", label: "Check (Y/N)" },
-    { key: "preparer", label: "Preparer" },
-    { key: "auditee", label: "Auditee" },
-    { key: "owners", label: "Owner" },
-    { key: "completionDate", label: "Completion Date", type: "date" },
-    { key: "riskDescription", label: "Risk Description", wide: true },
-    { key: "riskDetails", label: "Risk Details", wide: true, textarea: true },
-    { key: "substantiveTest", label: "Substantive Test", wide: true, textarea: true },
-    { key: "objective", label: "Objective", wide: true, textarea: true },
-    { key: "procedures", label: "Procedures", wide: true, textarea: true },
-    { key: "method", label: "Method", wide: true },
-    { key: "description", label: "Description", wide: true, textarea: true },
-    { key: "application", label: "Application", wide: true, textarea: true },
-    { key: "findingResult", label: "Finding Result", wide: true },
-    { key: "findingDescription", label: "Finding Description", wide: true, textarea: true },
-    { key: "recommendation", label: "Recommendation", wide: true, textarea: true },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
       <div className="max-w-full mx-auto">
@@ -653,8 +745,9 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
               </p>
               {canEdit ? (
                 <p className="text-xs text-slate-500 mt-2">
-                  Reviewer / Super Admin: use <span className="font-semibold">Edit</span> on a department to add findings
-                  directly to this report.
+                  Reviewer / Super Admin: use <span className="font-semibold">Edit</span> →{" "}
+                  <span className="font-semibold">Add new data</span>. New rows must be selected from{" "}
+                  <span className="font-semibold">Audit Program</span> (same as the Finding worksheet).
                 </p>
               ) : null}
             </div>
@@ -894,34 +987,105 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
                     return ps && pe ? `${formatDate(ps)} – ${formatDate(pe)}` : "Selected period";
                   })()}
                 </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select a row from Audit Program first. Program fields are locked; fill finding details below.
+                </p>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {addFormFields.map((field) => (
-                    <label
-                      key={field.key}
-                      className={`block text-xs font-semibold text-slate-700 ${field.wide ? "sm:col-span-2" : ""}`}
-                    >
-                      {field.label}
-                      {field.textarea ? (
-                        <textarea
-                          rows={3}
-                          value={addForm[field.key] || ""}
-                          onChange={(e) => handleAddFormChange(field.key, e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      ) : (
-                        <input
-                          type={field.type || "text"}
-                          value={addForm[field.key] || ""}
-                          onChange={(e) => handleAddFormChange(field.key, e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      )}
-                    </label>
-                  ))}
-                </div>
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Audit Program row <span className="text-red-500">*</span>
+                  <select
+                    value={selectedApKey}
+                    disabled={loadingApOptions || saving}
+                    onChange={(e) => handleSelectAp(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100"
+                  >
+                    <option value="">
+                      {loadingApOptions
+                        ? "Loading Audit Program…"
+                        : apOptions.length === 0
+                          ? "No Audit Program rows available"
+                          : "Select Risk ID / AP Code…"}
+                    </option>
+                    {apOptions.map((row) => {
+                      const key = apOptionKey(row);
+                      const label = `${row.risk_id || "-"} · ${row.ap_code || "-"}`;
+                      const hint = row.substantive_test
+                        ? ` — ${String(row.substantive_test).slice(0, 80)}`
+                        : "";
+                      return (
+                        <option key={key} value={key}>
+                          {label}
+                          {hint}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+
+                {selectedApKey ? (
+                  <>
+                    <div>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        From Audit Program (locked)
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {AP_LOCKED_FIELDS.map((field) => (
+                          <label
+                            key={field.key}
+                            className={`block text-xs font-semibold text-slate-700 ${field.wide ? "sm:col-span-2" : ""}`}
+                          >
+                            {field.label}
+                            <textarea
+                              rows={field.wide ? 2 : 1}
+                              readOnly
+                              value={addForm[field.key] || ""}
+                              className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal text-slate-700"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Finding details
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {FINDING_EDIT_FIELDS.map((field) => (
+                          <label
+                            key={field.key}
+                            className={`block text-xs font-semibold text-slate-700 ${field.wide ? "sm:col-span-2" : ""}`}
+                          >
+                            {field.label}
+                            {field.textarea ? (
+                              <textarea
+                                rows={3}
+                                value={addForm[field.key] || ""}
+                                onChange={(e) => handleAddFormChange(field.key, e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            ) : (
+                              <input
+                                type={field.type || "text"}
+                                value={addForm[field.key] || ""}
+                                onChange={(e) => handleAddFormChange(field.key, e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    {loadingApOptions
+                      ? "Loading Audit Program rows…"
+                      : "Choose an Audit Program row to continue."}
+                  </div>
+                )}
               </div>
 
               <div className="px-5 py-4 border-t border-slate-200 bg-white flex items-center justify-end gap-2">
@@ -935,7 +1099,7 @@ export default function ReportClient({ initialData = [], selectedYear = null }) 
                 </button>
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={saving || !selectedApKey || loadingApOptions}
                   onClick={handleSaveNewFinding}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                 >
