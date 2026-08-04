@@ -129,6 +129,7 @@ async function SopReviewGrid({ yearParam }) {
   // Get user session and assignments
   const session = await getServerSession(authOptions);
   const userName = (session?.user?.name || "").trim();
+  const userId = (session?.user?.id || "").trim();
   const role = (session?.user?.role || "").toLowerCase();
   // Sama seperti dashboard: admin & reviewer buka semua department tanpa cek penugasan.
   const isAdmin = isAdminRole(role);
@@ -139,10 +140,16 @@ async function SopReviewGrid({ yearParam }) {
   // Panggilan server-to-server harus ke 127.0.0.1 (getInternalFetchBaseUrl), bukan Host browser —
   // di Docker/reverse proxy fetch ke URL publik sering gagal dan semua kartu jadi Locked.
   let allowedDepartments = [];
-  if (!isPrivileged && userName) {
+  if (!isPrivileged && (userName || userId)) {
     try {
       const baseUrl = getInternalFetchBaseUrl();
-      const apiUrl = `${baseUrl}/api/schedule/user-assignments?userName=${encodeURIComponent(userName)}&module=sop-review&year=${encodeURIComponent(String(auditYear))}`;
+      const qs = new URLSearchParams({
+        userName: userName || "",
+        userId: userId || "",
+        module: "sop-review",
+        year: String(auditYear),
+      });
+      const apiUrl = `${baseUrl}/api/schedule/user-assignments?${qs.toString()}`;
       const res = await fetch(apiUrl, {
         cache: "no-store",
       });

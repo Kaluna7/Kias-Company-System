@@ -37,13 +37,14 @@ export async function GET(req) {
   try {
     const url = new URL(req.url);
     const userName = (url.searchParams.get("userName") || "").trim();
+    const userId = (url.searchParams.get("userId") || "").trim();
     const moduleKey = (url.searchParams.get("module") || "sop-review").trim();
     const yearParam = url.searchParams.get("year");
     const parsedYear = yearParam ? parseInt(yearParam, 10) : null;
     const year = parsedYear != null && Number.isFinite(parsedYear) ? parsedYear : null;
 
-    if (!userName) {
-      return NextResponse.json({ success: false, error: "Missing userName parameter" }, { status: 400 });
+    if (!userName && !userId) {
+      return NextResponse.json({ success: false, error: "Missing userName/userId parameter" }, { status: 400 });
     }
 
     // Check if schedule table exists
@@ -68,7 +69,8 @@ export async function GET(req) {
       [moduleKey]
     );
 
-    const target = String(userName || "").trim().toLowerCase();
+    const targetName = String(userName || "").trim().toLowerCase();
+    const targetId = userId ? String(userId).trim() : "";
     const seenDeptIds = new Set();
     const allowedDepartments = [];
 
@@ -90,7 +92,18 @@ export async function GET(req) {
         .filter(Boolean)
         .map((n) => n.toLowerCase());
 
-      if (!names.includes(target)) continue;
+      const rawId = String(row.user_id || "").trim();
+      const ids = rawId
+        ? rawId
+            .split(",")
+            .map((n) => n.trim())
+            .filter(Boolean)
+        : [];
+
+      const nameMatches = targetName && names.includes(targetName);
+      const idMatches = targetId && ids.includes(targetId);
+
+      if (!nameMatches && !idMatches) continue;
 
       const deptId = String(row.department_id || "").trim();
       if (seenDeptIds.has(deptId)) continue;
@@ -107,7 +120,7 @@ export async function GET(req) {
     }
 
     console.log(
-      `[user-assignments] User: "${userName}", module: "${moduleKey}", matched ${allowedDepartments.length} dept(s)`
+      `[user-assignments] User: "${userName || userId}", module: "${moduleKey}", matched ${allowedDepartments.length} dept(s)`
     );
 
     return NextResponse.json({ success: true, allowedDepartments }, { status: 200 });
