@@ -31,8 +31,23 @@ async function authorize(credentials) {
       import("bcryptjs"),
     ]);
 
+    // Ensure one-time temp password columns exist (safe no-op if already present).
+    try {
+      await pool.query(`
+        ALTER TABLE public.users
+          ADD COLUMN IF NOT EXISTS temp_password_hash TEXT,
+          ADD COLUMN IF NOT EXISTS temp_password_created_at TIMESTAMPTZ
+      `);
+    } catch (schemaErr) {
+      console.warn("[AUTH] temp password schema ensure:", schemaErr?.message);
+    }
+
     const res = await pool.query(
-      `SELECT id, name, email, password_hash, role FROM public.users WHERE email = $1 LIMIT 1`,
+      `SELECT id, name, email, password_hash, role,
+              temp_password_hash
+       FROM public.users
+       WHERE email = $1
+       LIMIT 1`,
       [email]
     );
     const user = res.rows[0];
@@ -40,10 +55,30 @@ async function authorize(credentials) {
     // error "CredentialsSignin" to the client; the login UI maps it to a friendly message.
     if (!user) return null;
 
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return null;
+    const validNormal = await bcrypt.compare(password, user.password_hash);
+    if (validNormal) {
+      return { id: user.id, name: user.name, email: user.email, role: user.role };
+    }
 
-    return { id: user.id, name: user.name, email: user.email, role: user.role };
+    // One-time temporary password set by super admin.
+    if (user.temp_password_hash) {
+      const validTemp = await bcrypt.compare(password, user.temp_password_hash);
+      if (validTemp) {
+        // Consume immediately so it cannot be reused.
+        await pool.query(
+          `UPDATE public.users
+           SET temp_password_hash = NULL,
+               temp_password_created_at = NULL,
+               updated_at = NOW()
+           WHERE id = $1
+             AND temp_password_hash IS NOT NULL`,
+          [user.id],
+        );
+        return { id: user.id, name: user.name, email: user.email, role: user.role };
+      }
+    }
+
+    return null;
   } catch (err) {
     console.error("[AUTH] authorize error:", err);
     return null;

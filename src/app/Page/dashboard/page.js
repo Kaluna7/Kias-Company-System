@@ -68,6 +68,11 @@ function DashboardPageContent() {
   const [showChangeEmailPassword, setShowChangeEmailPassword] = useState(false);
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+  const [isTempPasswordOpen, setIsTempPasswordOpen] = useState(false);
+  const [tempPasswordUserId, setTempPasswordUserId] = useState("");
+  const [tempPasswordValue, setTempPasswordValue] = useState("");
+  const [tempPasswordResult, setTempPasswordResult] = useState("");
+  const [isCreatingTempPassword, setIsCreatingTempPassword] = useState(false);
   const [isHelpSupportOpen, setIsHelpSupportOpen] = useState(false);
   const [isSamplingOpen, setIsSamplingOpen] = useState(false);
   const [samplingConfidence, setSamplingConfidence] = useState("");
@@ -532,6 +537,71 @@ function DashboardPageContent() {
     if (isCreatingAccount) return;
     setIsCreateAccountOpen(false);
   }, [isCreatingAccount]);
+
+  const openTempPassword = useCallback(() => {
+    setIsProfileOpen(false);
+    setTempPasswordUserId("");
+    setTempPasswordValue("");
+    setTempPasswordResult("");
+    setIsTempPasswordOpen(true);
+  }, []);
+
+  const closeTempPassword = useCallback(() => {
+    if (isCreatingTempPassword) return;
+    setIsTempPasswordOpen(false);
+    setTempPasswordUserId("");
+    setTempPasswordValue("");
+    setTempPasswordResult("");
+  }, [isCreatingTempPassword]);
+
+  const handleCreateTempPassword = useCallback(async () => {
+    const userId = String(tempPasswordUserId || "").trim();
+    if (!userId) {
+      toast.show("Please select a user.", "warning");
+      return;
+    }
+    const manual = String(tempPasswordValue || "").trim();
+    if (manual && manual.length < 6) {
+      toast.show("Temporary password must be at least 6 characters.", "warning");
+      return;
+    }
+
+    try {
+      setIsCreatingTempPassword(true);
+      const res = await fetch("/api/users/temp-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          password: manual || undefined,
+          generate: !manual,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        toast.show(json?.error || `Failed to create temporary password (HTTP ${res.status})`, "error");
+        return;
+      }
+      setTempPasswordResult(String(json.temporaryPassword || ""));
+      setTempPasswordValue("");
+      toast.show("Temporary password created. Valid for one login only.", "success");
+    } catch (e) {
+      toast.show(e?.message || "Failed to create temporary password.", "error");
+    } finally {
+      setIsCreatingTempPassword(false);
+    }
+  }, [tempPasswordUserId, tempPasswordValue, toast]);
+
+  const handleCopyTempPassword = useCallback(async () => {
+    if (!tempPasswordResult) return;
+    try {
+      await navigator.clipboard.writeText(tempPasswordResult);
+      toast.show("Temporary password copied.", "success");
+    } catch {
+      toast.show("Could not copy. Please copy manually.", "warning");
+    }
+  }, [tempPasswordResult, toast]);
+
   const openHelpSupport = useCallback(() => {
     setIsProfileOpen(false);
     setIsHelpSupportOpen(true);
@@ -808,6 +878,15 @@ function DashboardPageContent() {
                         className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
                       >
                         <span className="font-medium">Create Account</span>
+                      </button>
+                    )}
+                    {canCreateEmployeeAccount && (
+                      <button
+                        type="button"
+                        onClick={openTempPassword}
+                        className="w-full flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 rounded-xl transition-colors text-sm"
+                      >
+                        <span className="font-medium">Temporary Password</span>
                       </button>
                     )}
                     <button
@@ -1475,6 +1554,111 @@ function DashboardPageContent() {
           </div>
         </div>
       )}
+
+      {isTempPasswordOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-3 p-6 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Temporary Password</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Create a one-time password for a selected user. After one successful login it is deleted
+                  automatically. The user&apos;s normal password stays unchanged.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeTempPassword}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                disabled={isCreatingTempPassword}
+              >
+                <span className="sr-only">Close</span>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">Select user</label>
+                <select
+                  value={tempPasswordUserId}
+                  onChange={(e) => {
+                    setTempPasswordUserId(e.target.value);
+                    setTempPasswordResult("");
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                >
+                  <option value="">Choose user…</option>
+                  {progressUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-700">
+                  Temporary password <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={tempPasswordValue}
+                  onChange={(e) => setTempPasswordValue(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500"
+                  placeholder="Leave empty to auto-generate"
+                  autoComplete="off"
+                />
+                <p className="text-[11px] text-slate-500">
+                  If empty, a random password will be generated and shown once below.
+                </p>
+              </div>
+
+              {tempPasswordResult ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-800">One-time password (copy now)</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 break-all rounded-lg bg-white border border-emerald-100 px-3 py-2 text-sm font-mono text-slate-900">
+                      {tempPasswordResult}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyTempPassword}
+                      className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-emerald-800 bg-white border border-emerald-200 hover:bg-emerald-100"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-emerald-700">
+                    Valid for one login only. Share it securely with the selected user.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeTempPassword}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+                disabled={isCreatingTempPassword}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateTempPassword}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#141D38] to-[#2D3A5A] hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={isCreatingTempPassword || !tempPasswordUserId}
+              >
+                {isCreatingTempPassword ? "Creating..." : "Create temporary password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDialog.open && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
