@@ -39,6 +39,39 @@ function getCategoryColor(category) {
   return category === "planning" ? "from-blue-500 to-cyan-500" : category === "execution" ? "from-green-500 to-emerald-500" : "from-purple-500 to-indigo-500";
 }
 
+/** Clipboard API often fails in modals / non-HTTPS — fallback to execCommand. */
+async function copyTextToClipboard(text) {
+  const value = String(text || "");
+  if (!value) return false;
+
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // try fallback below
+    }
+  }
+
+  if (typeof document === "undefined") return false;
+
+  try {
+    const el = document.createElement("textarea");
+    el.value = value;
+    el.setAttribute("readonly", "");
+    el.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    el.setSelectionRange(0, value.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Stable Dashboard: all hooks declared unconditionally.
  * Optimized for mobile: lazy ChatSidebar, memoized data, reduced heavy CSS.
@@ -108,6 +141,7 @@ function DashboardPageContent() {
     tone: "danger",
   });
   const confirmActionRef = useRef(null);
+  const tempPasswordInputRef = useRef(null);
 
   const role = (session?.user?.role || "").toLowerCase();
   const isAdmin = isAdminLikeRole(role);
@@ -594,12 +628,18 @@ function DashboardPageContent() {
 
   const handleCopyTempPassword = useCallback(async () => {
     if (!tempPasswordResult) return;
-    try {
-      await navigator.clipboard.writeText(tempPasswordResult);
+    const copied = await copyTextToClipboard(tempPasswordResult);
+    if (copied) {
       toast.show("Temporary password copied.", "success");
-    } catch {
-      toast.show("Could not copy. Please copy manually.", "warning");
+      return;
     }
+    const input = tempPasswordInputRef.current;
+    if (input) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, tempPasswordResult.length);
+    }
+    toast.show("Password selected — press Ctrl+C (or Cmd+C) to copy.", "warning");
   }, [tempPasswordResult, toast]);
 
   const openHelpSupport = useCallback(() => {
@@ -1619,9 +1659,16 @@ function DashboardPageContent() {
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-2">
                   <p className="text-xs font-semibold text-emerald-800">One-time password (copy now)</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 break-all rounded-lg bg-white border border-emerald-100 px-3 py-2 text-sm font-mono text-slate-900">
-                      {tempPasswordResult}
-                    </code>
+                    <input
+                      ref={tempPasswordInputRef}
+                      type="text"
+                      readOnly
+                      value={tempPasswordResult}
+                      onFocus={(e) => e.target.select()}
+                      onClick={(e) => e.target.select()}
+                      className="flex-1 min-w-0 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                      aria-label="Temporary password"
+                    />
                     <button
                       type="button"
                       onClick={handleCopyTempPassword}
