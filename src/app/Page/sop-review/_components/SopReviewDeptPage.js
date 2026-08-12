@@ -267,7 +267,9 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [isMobileView, setIsMobileView] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState(() => new Set());
   const [deleteConfirmIndices, setDeleteConfirmIndices] = useState(null);
+  const [replaceDocDialog, setReplaceDocDialog] = useState(null);
   const [isGeneratingRowComments, setIsGeneratingRowComments] = useState(false);
+  const pendingDocReplaceRef = useRef(null);
 
   const searchParams = useSearchParams();
   const yearParam = searchParams.get("year");
@@ -765,8 +767,56 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     })), []);
 
   // Auto-save draft functionality
+  const documentInputRef = useRef(null);
+
+  const guardDocumentReplace = useCallback((file, proceed) => {
+    if (!file || typeof proceed !== "function") return;
+    if (!documentFileUrl) {
+      proceed();
+      return;
+    }
+    pendingDocReplaceRef.current = proceed;
+    setReplaceDocDialog({
+      newFileName: file.name || "document.pdf",
+      currentFileName: documentFileName || "Current document",
+    });
+  }, [documentFileUrl, documentFileName]);
+
+  const cancelReplaceDocument = useCallback(() => {
+    pendingDocReplaceRef.current = null;
+    setReplaceDocDialog(null);
+  }, []);
+
+  const confirmReplaceDocument = useCallback(() => {
+    const proceed = pendingDocReplaceRef.current;
+    pendingDocReplaceRef.current = null;
+    setReplaceDocDialog(null);
+    if (proceed) proceed();
+  }, []);
+  const [documentUploading, setDocumentUploading] = useState(false);
+
+  const applyUploadedDocument = useCallback(({ fileUrl, fileName }) => {
+    if (!fileUrl) return;
+    setDocumentFileUrl(fileUrl);
+    setDocumentFileName(fileName || "SOP Document");
+    lastSavedDataRef.current = "";
+  }, []);
+
+  const fetchStoredDocument = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/SopReview/${apiPath}/document`, { method: "GET" });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success && json.fileUrl) {
+        applyUploadedDocument({ fileUrl: json.fileUrl, fileName: json.fileName });
+        return json.fileUrl;
+      }
+    } catch (err) {
+      console.warn("fetchStoredDocument failed:", err);
+    }
+    return "";
+  }, [apiPath, applyUploadedDocument]);
+
   const saveDraft = useCallback(async (dataToSave, metaToSave = null) => {
-    // Prevent multiple simultaneous saves
     if (isSavingDraftRef.current) return;
     
     // Check if data has actually changed (include reviewer fields in comparison)
@@ -796,9 +846,11 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         reviewer_status: reviewerStatus,
         reviewer_name: reviewerName || null,
         reviewer_date: reviewerDate || null,
-        file_url: documentFileUrl || null,
-        file_name: documentFileName || null,
       };
+      if (documentFileUrl) {
+        metaPayload.file_url = documentFileUrl;
+        metaPayload.file_name = documentFileName || null;
+      }
 
       // Save data with replace mode (delete old data first, then insert new)
       const [metaRes, res] = await Promise.all([
@@ -830,6 +882,68 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       isSavingDraftRef.current = false;
     }
   }, [apiPath, preparerStatus, preparerName, preparerDate, reviewerComment, reviewerStatus, reviewerName, reviewerDate, documentFileUrl, documentFileName, preparePayload]);
+
+  const uploadDocumentFile = useCallback(async (file) => {
+    if (!file) return false;
+    if (file.type !== "application/pdf" && !String(file.name || "").toLowerCase().endsWith(".pdf")) {
+      setSaveMessage({ type: "error", text: "Only PDF files are allowed." });
+      setTimeout(() => setSaveMessage(null), 3000);
+      return false;
+    }
+    setDocumentUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file, file.name || "document.pdf");
+      const res = await fetch(`/api/SopReview/${apiPath}/document`, { method: "POST", body: form });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || `Upload failed (HTTP ${res.status})`);
+      }
+      applyUploadedDocument({ fileUrl: json.fileUrl, fileName: json.fileName || file.name });
+      await saveDraft(deferredSopData, {
+        preparer_status: preparerStatus,
+        preparer_name: preparerName || null,
+        preparer_date: preparerDate || null,
+        reviewer_comment: reviewerComment || null,
+        reviewer_status: reviewerStatus,
+        reviewer_name: reviewerName || null,
+        reviewer_date: reviewerDate || null,
+        file_url: json.fileUrl,
+        file_name: json.fileName || file.name || null,
+      });
+      setSaveMessage({ type: "success", text: "Dokumen SOP tersimpan. Tombol View Document siap dipakai." });
+      setTimeout(() => setSaveMessage(null), 4000);
+      return true;
+    } catch (err) {
+      console.error("uploadDocumentFile failed:", err);
+      setSaveMessage({ type: "error", text: err?.message || "Gagal menyimpan dokumen." });
+      setTimeout(() => setSaveMessage(null), 5000);
+      return false;
+    } finally {
+      setDocumentUploading(false);
+    }
+  }, [
+    apiPath,
+    applyUploadedDocument,
+    deferredSopData,
+    preparerStatus,
+    preparerName,
+    preparerDate,
+    reviewerComment,
+    reviewerStatus,
+    reviewerName,
+    reviewerDate,
+    saveDraft,
+  ]);
+
+  const handleToolbarDocumentChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    guardDocumentReplace(file, () => {
+      uploadDocumentFile(file);
+    });
+  };
 
   // Auto-save when data stabilizes (with debounce)
   useEffect(() => {
@@ -920,7 +1034,23 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     setIsSaving(true);
     setSaveMessage(null);
     try {
-      // Send steps + meta directly in publish body - single source of truth, avoids DB read race and duplicate rows
+      let publishFileUrl = documentFileUrl;
+      let publishFileName = documentFileName;
+      if (!publishFileUrl) {
+        publishFileUrl = await fetchStoredDocument();
+        publishFileName = documentFileName;
+      }
+      if (!publishFileUrl) {
+        setSaveMessage({
+          type: "error",
+          text: "Upload dokumen SOP (PDF) dulu sebelum publish agar muncul di Report.",
+        });
+        setTimeout(() => setSaveMessage(null), 5000);
+        isPublishingRef.current = false;
+        setIsSaving(false);
+        return;
+      }
+
       const meta = {
         department_name: departmentName,
         preparer_status: preparerStatus,
@@ -930,8 +1060,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         reviewer_status: reviewerStatus,
         reviewer_name: reviewerName || null,
         reviewer_date: reviewerDate || null,
-        file_url: documentFileUrl || null,
-        file_name: documentFileName || null,
+        file_url: publishFileUrl,
+        file_name: publishFileName || null,
       };
       const pubRes = await fetch(`/api/SopReview/${apiPath}/publish`, {
         method: "POST",
@@ -1046,9 +1176,20 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         schedulePreparerDate={schedulePreparerDate}
         documentFileUrl={documentFileUrl}
         documentFileName={documentFileName}
+        guardDocumentReplace={guardDocumentReplace}
         onDocumentUploaded={({ fileUrl, fileName }) => {
-          setDocumentFileUrl(fileUrl || "");
-          setDocumentFileName(fileName || "");
+          applyUploadedDocument({ fileUrl, fileName });
+          saveDraft(deferredSopData, {
+            preparer_status: preparerStatus,
+            preparer_name: preparerName || null,
+            preparer_date: preparerDate || null,
+            reviewer_comment: reviewerComment || null,
+            reviewer_status: reviewerStatus,
+            reviewer_name: reviewerName || null,
+            reviewer_date: reviewerDate || null,
+            file_url: fileUrl,
+            file_name: fileName || null,
+          });
         }}
         sopDataCount={sopData.length}
         isCollapsed={isHeaderCollapsed}
@@ -1102,21 +1243,6 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                       {sopData.length > 0 ? "AVAILABLE" : "Not Available"}
                     </span>
                   </div>
-                  {documentFileUrl && (
-                    <a
-                      href={documentFileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 shadow-sm"
-                      title={documentFileName || "View uploaded SOP PDF"}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                      View Document
-                    </a>
-                  )}
                 </div>
 
                 <div className="flex items-center gap-4 justify-between sm:justify-end text-xs text-slate-500">
@@ -1125,26 +1251,59 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     <span className="text-[11px] font-semibold text-blue-700">{sopData.length}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <input
+                      ref={documentInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={handleToolbarDocumentChange}
+                      disabled={isReviewer || documentUploading}
+                    />
                     {documentFileUrl ? (
-                      <a
-                        href={documentFileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow-md flex items-center gap-1"
-                        title={documentFileName || "Open uploaded SOP PDF"}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <span>View Document</span>
-                      </a>
+                      <>
+                        <a
+                          href={documentFileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow-md flex items-center gap-1"
+                          title={documentFileName || "Open uploaded SOP PDF"}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>View Document</span>
+                        </a>
+                        {!isReviewer && (
+                          <button
+                            type="button"
+                            onClick={() => documentInputRef.current?.click()}
+                            disabled={documentUploading}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 ${
+                              documentUploading
+                                ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                                : "bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50"
+                            }`}
+                            title="Upload a new PDF to replace the current document"
+                          >
+                            <span>{documentUploading ? "Uploading..." : "Replace Document"}</span>
+                          </button>
+                        )}
+                      </>
                     ) : (
-                      <span
-                        className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200"
-                        title="Upload a PDF from the header (Choose PDF file) to enable View Document"
-                      >
-                        No document
-                      </span>
+                      !isReviewer && (
+                        <button
+                          type="button"
+                          onClick={() => documentInputRef.current?.click()}
+                          disabled={documentUploading}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 ${
+                            documentUploading
+                              ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                              : "bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                          }`}
+                        >
+                          <span>{documentUploading ? "Uploading..." : "Upload Document"}</span>
+                        </button>
+                      )
                     )}
                     <button
                       type="button"
@@ -1465,6 +1624,51 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 }}
               >
                 Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {replaceDocDialog && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={cancelReplaceDocument}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-200 flex items-center gap-4">
+              <div className="w-11 h-11 rounded-full bg-indigo-100 flex items-center justify-center">
+                <span className="text-indigo-600 text-xl">📄</span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-base font-bold text-slate-900">Replace SOP document?</div>
+                <div className="text-sm text-slate-600 mt-1">
+                  The current document{" "}
+                  <span className="font-semibold text-slate-800">{replaceDocDialog.currentFileName}</span>{" "}
+                  will be replaced with{" "}
+                  <span className="font-semibold text-slate-800">{replaceDocDialog.newFileName}</span>.
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  SOP rows in the table are not removed automatically. Uploading from the Preparer header will also re-extract the PDF if you choose a file there.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-5 py-2 rounded-full text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                onClick={cancelReplaceDocument}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-5 py-2 rounded-full text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow-md transition-colors"
+                onClick={confirmReplaceDocument}
+              >
+                Yes, Replace
               </button>
             </div>
           </div>

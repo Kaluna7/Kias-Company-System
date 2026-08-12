@@ -77,7 +77,7 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
 
       try {
         const batchRes = await callOpenAIForComments(buildBatchPrompt(items), {
-          temperature: 0.2,
+          temperature: 0.4,
           system: AI_SYSTEM,
         });
         diagnostic.batch = {
@@ -104,7 +104,7 @@ export function makeGenerateCommentsHandler({ stepsTable }) {
       if (updates.length === 0) {
         for (const it of items) {
           const singleRes = await callOpenAIForComments(buildSinglePrompt(it), {
-            temperature: 0.2,
+            temperature: 0.4,
             system: AI_SYSTEM,
           });
           const gen = (singleRes.generated || singleRes.rawResponse || "").trim();

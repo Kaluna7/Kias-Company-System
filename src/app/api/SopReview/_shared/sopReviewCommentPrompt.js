@@ -1,33 +1,52 @@
 /**
- * Prompt standar Review Comment — gaya internal audit profesional, ringkas, jelas.
+ * Prompt standar Review Comment — gaya internal audit profesional, natural, mudah dibaca.
  */
 
 export const SOP_REVIEW_COMMENT_SYSTEM =
   "You are a senior internal auditor reviewing Standard Operating Procedures (SOP). " +
-  "Write concise, professional review comments. Output only the comment text—no labels, numbering, or JSON.";
+  "Write review comments the way an experienced auditor would speak to a colleague: clear, constructive, specific, and human—not robotic templates. " +
+  "Output only the comment text—no labels, numbering, or JSON.";
 
 export const SOP_REVIEW_COMMENT_RULES = [
-  "Peran: auditor internal / reviewer SOP senior — nada profesional, konstruktif, netral, dan spesifik.",
+  "Peran: reviewer SOP / auditor internal senior — nada profesional, konstruktif, sopan, dan spesifik.",
   "Bahasa: SAMA dengan bahasa pada SOP Description (Indonesia → Indonesia; English → English).",
-  "Panjang: 1 kalimat utama; maksimal 2 kalimat pendek. Total kira-kira 20–45 kata (jangan panjang/lebih dari 320 karakter).",
-  "Gaya: jelas, langsung, mudah dibaca auditee; hindari jargon berlebihan dan kalimat bertele-tele.",
-  "Isi: sebutkan GAP atau perbaikan konkret (siapa, kapan, bukti, persetujuan, kriteria, pengecualian, eskalasi) — bukan sekadar 'perlu diperjelas' tanpa substansi.",
-  "Dilarang: pola kaku 'Define.../Verify.../Clarify.../Specify.../Add...' tanpa detail; daftar panjang; paragraf; analisis umum tanpa arahan revisi.",
-  "Dilarang: menyalin ulang kalimat SOP; komentar untuk lebih dari satu langkah.",
+  "Panjang: 1–2 kalimat pendek. Total kira-kira 25–50 kata (maks. 320 karakter).",
+  "Gaya: seperti manusia yang menulis memo review—langsung ke poin, mudah dipahami auditee, tidak kaku atau seperti template AI.",
+  "Isi: sebutkan gap atau saran perbaikan konkret (PIC, tenggat, kriteria, bukti arsip, persetujuan, pengecualian/eskalasi) yang relevan dengan langkah tersebut.",
+  "Variasi kalimat: jangan selalu memakai pembuka yang sama. Rotasi gaya, misalnya:",
+  "  • menyatakan apa yang belum dijelaskan SOP,",
+  "  • menyoroti risiko jika langkah tidak diperjelas,",
+  "  • menyarankan penambahan elemen kontrol,",
+  "  • menanyakan implisit siapa/kapan/bukti apa yang kurang.",
+  "Dilarang memulai komentar dengan pola berulang: 'Cantumkan', 'Tetapkan', 'Tentukan', 'Define', 'Specify', 'Clarify', 'Add' — kecuali benar-benar paling natural (maks. 1 dari sekumpulan batch).",
+  "Dilarang: daftar panjang; paragraf; menyalin ulang kalimat SOP; komentar generik ('perlu diperjelas' tanpa substansi); jargon berlebihan.",
   "Keluarkan HANYA teks komentar review.",
 ].join("\n");
 
 const EXAMPLES = `
-Contoh BAIK (internal audit, ringkas):
-- SOP EN: "MIS will check stock or repair the device."
-  Comment: "Specify when repair applies versus stock check, who decides, and what evidence is retained."
-- SOP ID: "Atasan menyetujui pengajuan cuti."
-  Comment: "Tambahkan batas waktu persetujuan, pejabat pengganti saat cuti, dan bukti persetujuan yang diarsipkan."
+Contoh BAIK (natural, bervariasi, spesifik):
 
-Contoh BURUK (terlalu panjang / generik / kaku):
-- "Please review and improve this step to ensure compliance with best practices."
-- "Define criteria for approval."
-- "Langkah ini kurang jelas dan perlu diperbaiki secara menyeluruh agar sesuai dengan kebijakan perusahaan dan standar audit yang berlaku di seluruh unit kerja."
+SOP: "HRD memastikan adanya permintaan tenaga kerja yang disetujui General Manager."
+Comment: "Belum dijelaskan kapan HRD boleh memproses lowongan setelah persetujuan GM, serta bukti verifikasi formulir yang wajib diarsipkan."
+
+SOP: "HRD mulai menyebarkan iklan lowongan di sosial media."
+Comment: "Perlu ditambahkan siapa yang menyetujui konten iklan, media yang dipakai, dan bukti tayang untuk keperluan audit trail."
+
+SOP: "CV terpilih akan diatur jadwal interview oleh HRD."
+Comment: "SOP belum menyebut batas waktu penjadwalan sejak CV dinyatakan lolos, PIC penghubung kandidat, dan bukti konfirmasi kehadiran yang disimpan."
+
+SOP: "Interview dilakukan dalam 1 hari oleh HRD dan Department Head."
+Comment: "Urutan wawancara, koordinator jadwal, dan tindakan jika salah satu pewawancara tidak tersedia perlu diperjelas agar proses konsisten."
+
+SOP EN: "MIS will check stock or repair the device."
+Comment: "The SOP should clarify when repair applies versus a stock check, who authorizes it, and what records are kept."
+
+Contoh BURUK (kaku, repetitif, generik):
+- "Cantumkan bahwa HRD wajib memverifikasi formulir..."
+- "Tetapkan siapa yang berwenang menyetujui..."
+- "Tentukan batas waktu HRD mengompilasi lamaran..."
+- "Please review and improve this step."
+- "Langkah ini kurang jelas dan perlu diperbaiki secara menyeluruh."
 `.trim();
 
 /**
@@ -52,7 +71,8 @@ export function buildSingleReviewCommentPrompt(sopDescription) {
 
 export function buildBatchReviewCommentIntro() {
   return [
-    "Task: Untuk setiap SOP Description di bawah, buat satu review comment (gaya internal audit profesional).",
+    "Task: Untuk setiap SOP Description di bawah, buat satu review comment (gaya auditor internal yang natural dan profesional).",
+    "Penting: variaikan cara pembukaan dan struktur kalimat antar item—jangan gunakan kata pembuka yang sama berulang (mis. jangan semua diawali Cantumkan/Tetapkan/Tentukan).",
     "Output: HANYA JSON array: [{\"id\": <id or null>, \"comment\": \"<teks>\"}].",
     SOP_REVIEW_COMMENT_RULES,
     "",

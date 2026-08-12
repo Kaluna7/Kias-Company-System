@@ -211,6 +211,8 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
     `);
     await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_url TEXT`).catch(() => {});
     await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_name TEXT`).catch(() => {});
+    await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+    await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
   };
 
   const GET = async (req) => {
@@ -298,8 +300,14 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
           reviewerDateToSave = prev?.reviewer_date ?? null;
         }
 
-        const fileUrlToSave = file_url !== undefined ? file_url || null : prev?.file_url ?? null;
-        const fileNameToSave = file_name !== undefined ? file_name || null : prev?.file_name ?? null;
+        const fileUrlToSave =
+          file_url !== undefined && String(file_url || "").trim() !== ""
+            ? String(file_url).trim()
+            : prev?.file_url ?? null;
+        const fileNameToSave =
+          file_name !== undefined && String(file_name || "").trim() !== ""
+            ? String(file_name).trim()
+            : prev?.file_name ?? null;
 
         const q = `
           INSERT INTO ${metaTable}

@@ -66,6 +66,7 @@ export default function SOPHeader({
   documentFileUrl = "",
   documentFileName = "",
   onDocumentUploaded,
+  guardDocumentReplace,
 }) {
   const toast = useToast();
   const [selectedFile, setSelectedFile] = useState(null);
@@ -189,6 +190,7 @@ export default function SOPHeader({
         fileUrl: json.fileUrl || "",
         fileName: json.fileName || file.name || "document.pdf",
       });
+      toast.show("Dokumen SOP tersimpan ke sistem.", "success");
       return true;
     } catch (err) {
       console.error("SOP document upload failed:", err);
@@ -203,25 +205,11 @@ export default function SOPHeader({
   };
 
   /* ---------- File change handler ---------- */
-  const handleFileChange = async (e) => {
+  const processFileUpload = async (file) => {
     setParseError("");
     setParsedPreview([]);
     setFullTextPreview("");
     setShowRaw(false);
-
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== "application/pdf") {
-      toast.show("Only PDF files are allowed.", "error");
-      return;
-    }
-
-    const mobile = isMobileDevice();
-    if (mobile && file.size > MAX_PDF_SIZE_MOBILE_BYTES) {
-      toast.show("File too large for mobile (max 4MB). Use a smaller PDF or upload from desktop.", "error");
-      e.target.value = "";
-      return;
-    }
 
     flushSync(() => {
       setSelectedFile(file);
@@ -316,6 +304,33 @@ export default function SOPHeader({
         setLoadStatusLabel("");
       }, 400);
     }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast.show("Only PDF files are allowed.", "error");
+      return;
+    }
+
+    const mobile = isMobileDevice();
+    if (mobile && file.size > MAX_PDF_SIZE_MOBILE_BYTES) {
+      toast.show("File too large for mobile (max 4MB). Use a smaller PDF or upload from desktop.", "error");
+      return;
+    }
+
+    const startUpload = () => {
+      processFileUpload(file);
+    };
+
+    if (documentFileUrl && typeof guardDocumentReplace === "function") {
+      guardDocumentReplace(file, startUpload);
+      return;
+    }
+
+    startUpload();
   };
 
   /* ---------- Modal + Append flow ---------- */

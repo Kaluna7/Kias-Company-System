@@ -275,8 +275,18 @@ export async function POST(req, { params }) {
       const auditFieldworkEndDate = new Date().toISOString().split("T")[0]; // Today's date (publish date)
 
       // Always insert report meta — dashboard progress reads sop_report_* (published_at).
-      // Missing meta previously left only step rows, so progress stayed 0/N.
       const metaRow = meta && typeof meta === "object" ? meta : {};
+      let publishFileUrl = metaRow.file_url || null;
+      let publishFileName = metaRow.file_name || null;
+      if (!publishFileUrl) {
+        const docRes = await client.query(
+          `SELECT file_url, file_name FROM ${metaTable}
+           WHERE file_url IS NOT NULL AND TRIM(file_url) <> ''
+           ORDER BY id DESC LIMIT 1`,
+        );
+        publishFileUrl = docRes.rows?.[0]?.file_url || null;
+        publishFileName = docRes.rows?.[0]?.file_name || null;
+      }
       const metaInsert = await client.query(
         `INSERT INTO ${reportMeta}
           (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, file_url, file_name, published_at)
@@ -294,8 +304,8 @@ export async function POST(req, { params }) {
           metaRow.reviewer_date || null,
           auditFieldworkStartDate,
           auditFieldworkEndDate,
-          metaRow.file_url || null,
-          metaRow.file_name || null,
+          publishFileUrl,
+          publishFileName,
         ]
       );
       const reportMetaId = metaInsert?.rows?.[0]?.id ?? null;

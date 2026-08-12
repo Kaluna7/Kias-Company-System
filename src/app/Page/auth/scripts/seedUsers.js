@@ -2,6 +2,7 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 
+/** @deprecated Use `pnpm seed:admin` (scripts/seed-super-admin.js) instead. */
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function main() {

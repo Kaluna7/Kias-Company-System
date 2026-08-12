@@ -15,7 +15,8 @@
     "ngrok": "npx ngrok http 3000",
     "onlyoffice:up": "powershell -ExecutionPolicy Bypass -File scripts/onlyoffice-local.ps1",
     "onlyoffice:down": "docker compose -f docker-compose.onlyoffice.local.yml down",
-    "onlyoffice:logs": "docker compose -f docker-compose.onlyoffice.local.yml logs -f onlyoffice"
+    "onlyoffice:logs": "docker compose -f docker-compose.onlyoffice.local.yml logs -f onlyoffice",
+    "seed:admin": "node scripts/seed-super-admin.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1053.0",

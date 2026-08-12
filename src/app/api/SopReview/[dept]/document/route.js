@@ -46,29 +46,50 @@ async function ensureMetaFileColumns(client, metaTable) {
   `);
   await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_url TEXT`);
   await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_name TEXT`);
+  await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
+  await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
 }
 
-async function upsertDraftDocumentMeta({ slug, departmentName, fileUrl, fileName }) {
+async function upsertDraftDocumentMeta({ slug, fileUrl, fileName }) {
   const metaTable = `sop_${slug}`;
   const client = await pool.connect();
   try {
     await ensureMetaFileColumns(client, metaTable);
-    const latest = await client.query(
-      `SELECT id FROM ${metaTable} ORDER BY id DESC LIMIT 1`,
+    const latestRes = await client.query(
+      `SELECT sop_status, preparer_status, preparer_name, preparer_date,
+              reviewer_comment, reviewer_status, reviewer_name, reviewer_date
+       FROM ${metaTable}
+       ORDER BY id DESC
+       LIMIT 1`,
     );
-    if (latest.rows?.[0]?.id) {
+    const prev = latestRes.rows[0];
+
+    if (prev) {
       await client.query(
-        `UPDATE ${metaTable}
-         SET file_url = $1, file_name = $2, updated_at = NOW()
-         WHERE id = $3`,
-        [fileUrl, fileName, latest.rows[0].id],
+        `INSERT INTO ${metaTable}
+          (sop_status, preparer_status, preparer_name, preparer_date,
+           reviewer_comment, reviewer_status, reviewer_name, reviewer_date,
+           file_url, file_name, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        [
+          prev.sop_status || "AVAILABLE",
+          prev.preparer_status || "DRAFT",
+          prev.preparer_name || null,
+          prev.preparer_date || null,
+          prev.reviewer_comment || null,
+          prev.reviewer_status || "DRAFT",
+          prev.reviewer_name || null,
+          prev.reviewer_date || null,
+          fileUrl,
+          fileName,
+        ],
       );
     } else {
       await client.query(
         `INSERT INTO ${metaTable}
-          (department_name, sop_status, preparer_status, reviewer_status, file_url, file_name, updated_at)
-         VALUES ($1, 'AVAILABLE', 'DRAFT', 'DRAFT', $2, $3, NOW())`,
-        [departmentName, fileUrl, fileName],
+          (sop_status, preparer_status, reviewer_status, file_url, file_name, updated_at)
+         VALUES ('AVAILABLE', 'DRAFT', 'DRAFT', $1, $2, NOW())`,
+        [fileUrl, fileName],
       );
     }
   } finally {
@@ -116,7 +137,6 @@ export async function POST(req, { params }) {
     const fileUrl = `/uploads/sop-review/${deptFolder}/${fileName}`;
     await upsertDraftDocumentMeta({
       slug: resolved.slug,
-      departmentName: resolved.departmentName,
       fileUrl,
       fileName: originalName,
     });

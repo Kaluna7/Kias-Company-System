@@ -50,7 +50,7 @@ export async function POST(req) {
     for (const it of items) {
       const step = it.sop_related || "";
       const r = await callOpenAIForComments(buildSingleReviewCommentPrompt(step), {
-        temperature: 0.25,
+        temperature: 0.4,
         system: SOP_REVIEW_COMMENT_SYSTEM,
       });
       if (!r.ok) {
