@@ -1063,30 +1063,47 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
               </span>
             )}
           </div>
-          <div className="overflow-auto">
-            <table className="min-w-full border-collapse text-[11px] sm:text-xs">
+          <div className="overflow-x-hidden overflow-y-auto">
+            <table className="w-full max-w-full table-fixed border-collapse text-[10px] sm:text-[11px]">
+              <colgroup>
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "9.5%" }} />
+              </colgroup>
               <thead>
                 <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
                   {[
-                    "Audit Fieldwork - Start",
-                    "Audit Fieldwork - End",
-                    "Audit Period - Start",
-                    "Audit Period - End",
+                    "Fieldwork Start",
+                    "Fieldwork End",
+                    "Period Start",
+                    "Period End",
                     "Department",
                     "SOP Sheet",
-                    "SOP Availability",
+                    "Availability",
                     "Preparer",
-                    "Preparer Completion Date",
-                    "SOP Preparer",
-                    "SOP Reviewer",
-                    "SOP Reviewer Status",
+                    "Preparer Date",
+                    "Preparer Status",
+                    "Reviewer",
+                    "Reviewer Status",
                     "Reviewer Date",
-                    "SOP Reviewer Comments",
+                    "Reviewer Comments",
                     "Action",
                   ].map((h) => (
                     <th
                       key={h}
-                      className="px-3 py-2 text-center text-[10px] sm:text-xs font-semibold border border-slate-200 whitespace-nowrap"
+                      className="px-1.5 py-2 text-center text-[9px] sm:text-[10px] font-semibold border border-slate-200 leading-tight break-words"
                     >
                       {h}
                     </th>
@@ -1122,94 +1139,94 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                         idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"
                       } hover:bg-slate-100 transition-colors`}
                     >
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {row.audit_fieldwork_start !== "#####"
                           ? row.audit_fieldwork_start
                           : "#####"
                         }
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {row.audit_fieldwork_end !== "#####"
                           ? row.audit_fieldwork_end
                           : "#####"
                         }
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {formatDateForDisplay(row.audit_period_start) !== "#####"
                           ? formatDateForDisplay(row.audit_period_start)
                           : "#####"
                         }
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {formatDateForDisplay(row.audit_period_end) !== "#####"
                           ? formatDateForDisplay(row.audit_period_end)
                           : "#####"
                         }
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-900 border border-slate-200 text-center whitespace-nowrap font-semibold">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-900 border border-slate-200 text-center break-words min-w-0 font-semibold">
                         {row.department || "-"}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {sopSheet}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-center border border-slate-200">
+                      <td className="px-1 py-1.5 text-[10px] text-center border border-slate-200 min-w-0">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-medium ${
+                          className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
                             hasData
                               ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
                               : "bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200"
                           }`}
                         >
-                          {hasData ? "Available" : "Not Available"}
+                          {hasData ? "Available" : "N/A"}
                         </span>
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-left break-words whitespace-pre-wrap align-top max-w-[140px]">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-left break-words whitespace-pre-wrap align-top min-w-0">
                         {row.preparer || "-"}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {item.preparer_completion_date !== "-" ? item.preparer_completion_date : "0"}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-center border border-slate-200 font-semibold">
+                      <td className="px-1 py-1.5 text-[10px] text-center border border-slate-200 font-semibold min-w-0">
                         <span
-                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getPreparerStatusBg(
+                          className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${getPreparerStatusBg(
                             item.sop_preparer_status
                           )}`}
                         >
                           {item.sop_preparer_status || "DRAFT"}
                         </span>
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {item.reviewer !== "-" ? item.reviewer : "0"}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-center border border-slate-200 font-semibold">
+                      <td className="px-1 py-1.5 text-[10px] text-center border border-slate-200 font-semibold min-w-0">
                         <span
-                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getReviewerStatusBg(
+                          className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${getReviewerStatusBg(
                             item.sop_reviewer_status
                           )}`}
                         >
                           {item.sop_reviewer_status || "DRAFT"}
                         </span>
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center break-words min-w-0">
                         {item.reviewer_date !== "-" ? item.reviewer_date : "0"}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-left break-words whitespace-pre-wrap align-top max-w-[160px]">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-left break-words whitespace-pre-wrap align-top min-w-0">
                         {item.reviewer_comments || ""}
                       </td>
-                      <td className="px-2.5 py-2 text-[11px] text-slate-800 border border-slate-200 text-center">
-                        <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                      <td className="px-1 py-1.5 text-[10px] text-slate-800 border border-slate-200 text-center min-w-0">
+                        <div className="inline-flex items-center gap-1 flex-wrap justify-center">
                           {canEditReportDates && (
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
                               onClick={() => openPeriodDatePicker(row)}
                             >
-                              <span>Edit Dates</span>
+                              <span>Dates</span>
                             </button>
                           )}
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
+                            className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
                             onClick={() => handleView(row)}
                           >
                             <span>View</span>
@@ -1219,17 +1236,17 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                               href={row.items?.[0]?._detail?.meta?.file_url || row.file_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-100"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[9px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-100"
                               title={row.items?.[0]?._detail?.meta?.file_name || "View uploaded SOP PDF"}
                             >
-                              <span>Document</span>
+                              <span>Doc</span>
                             </a>
                           )}
                           {canEditPublished && row.metaId != null && (
                             <button
                               type="button"
                               disabled={deletingPublished}
-                              className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-800 ring-1 ring-inset ring-orange-200 hover:bg-orange-100 disabled:opacity-50"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[9px] font-medium text-orange-800 ring-1 ring-inset ring-orange-200 hover:bg-orange-100 disabled:opacity-50"
                               onClick={() =>
                                 requestUnpublish({
                                   metaId: row.metaId,
@@ -1238,7 +1255,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                 })
                               }
                             >
-                              <span>{deletingPublished ? "…" : "Unpublish"}</span>
+                              <span>{deletingPublished ? "…" : "Unpub"}</span>
                             </button>
                           )}
                         </div>
@@ -1597,43 +1614,48 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                           <h4 className="font-semibold text-slate-800 mb-2 sm:mb-3">
                             SOP Steps ({stepRows.length} items)
                           </h4>
-                          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                            <table className={`w-full text-xs border-collapse ${ed ? "min-w-[1180px]" : "min-w-[1080px]"}`}>
+                          <div className="overflow-x-hidden rounded-lg border border-slate-200 bg-white">
+                            <table className="w-full max-w-full text-[11px] border-collapse table-fixed">
+                              <colgroup>
+                                <col style={{ width: ed ? "4%" : "4%" }} />
+                                <col style={{ width: ed ? "18%" : "20%" }} />
+                                <col style={{ width: ed ? "9%" : "10%" }} />
+                                <col style={{ width: ed ? "8%" : "9%" }} />
+                                <col style={{ width: ed ? "14%" : "15%" }} />
+                                <col style={{ width: ed ? "13%" : "14%" }} />
+                                <col style={{ width: ed ? "13%" : "14%" }} />
+                                <col style={{ width: ed ? "13%" : "14%" }} />
+                                {ed && <col style={{ width: "8%" }} />}
+                              </colgroup>
                               <thead>
                                 <tr className="bg-slate-50 text-slate-700">
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
                                     No
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
                                     SOP Related
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
                                     Status
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
                                     Reviewer
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
                                     Comment
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200">
-                                    Reviewer Feedback
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
+                                    Feedback
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200 min-w-[140px]">
-                                    <span className="inline-flex items-center gap-1">
-                                      <span className="text-amber-600" aria-hidden>💬</span>
-                                      Auditee Comment
-                                    </span>
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
+                                    Auditee Comment
                                   </th>
-                                  <th className="px-2.5 py-2 text-left font-semibold text-slate-700 border border-slate-200 min-w-[140px]">
-                                    <span className="inline-flex items-center gap-1">
-                                      <span className="text-orange-600" aria-hidden>📋</span>
-                                      Follow-Up Detail
-                                    </span>
+                                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-700 border border-slate-200 text-[10px]">
+                                    Follow-Up
                                   </th>
                                   {ed && (
-                                    <th className="px-2.5 py-2 text-center font-semibold text-slate-700 border border-slate-200 w-24">
-                                      Actions
+                                    <th className="px-1.5 py-1.5 text-center font-semibold text-slate-700 border border-slate-200 text-[10px]">
+                                      Act
                                     </th>
                                   )}
                                 </tr>
@@ -1644,11 +1666,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                     key={`${itemMeta.id}-step-${step.id ?? idx}`}
                                     className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}
                                   >
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                    <td className="px-1 py-1 border border-slate-200 align-top min-w-0">
                                       {ed ? (
                                         <input
                                           type="number"
-                                          className="w-14 border border-slate-300 rounded px-1 py-1"
+                                          className="w-full min-w-0 max-w-full border border-slate-300 rounded px-1 py-0.5 text-[11px]"
                                           value={step.no ?? idx + 1}
                                           onChange={(e) =>
                                             patchEditStep(itemIdx, idx, {
@@ -1660,11 +1682,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         step.no || idx + 1
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                    <td className="px-1 py-1 border border-slate-200 align-top min-w-0 break-words whitespace-pre-wrap">
                                       {ed ? (
                                         <textarea
-                                          rows={2}
-                                          className="w-full min-w-[120px] border border-slate-300 rounded px-1 py-1 text-xs"
+                                          rows={3}
+                                          className="w-full min-w-0 max-w-full border border-slate-300 rounded px-1 py-0.5 text-[11px] resize-y"
                                           value={step.sop_related ?? ""}
                                           onChange={(e) =>
                                             patchEditStep(itemIdx, idx, { sop_related: e.target.value })
@@ -1674,10 +1696,10 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         step.sop_related || "-"
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                    <td className="px-1 py-1 border border-slate-200 align-top min-w-0">
                                       {ed ? (
                                         <select
-                                          className="w-full min-w-[100px] border border-slate-300 rounded px-1 py-1"
+                                          className="w-full min-w-0 max-w-full border border-slate-300 rounded px-0.5 py-0.5 text-[10px]"
                                           value={step.status || "DRAFT"}
                                           onChange={(e) =>
                                             patchEditStep(itemIdx, idx, { status: e.target.value })
@@ -1691,7 +1713,7 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         </select>
                                       ) : (
                                         <span
-                                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusBadge(
+                                          className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${getStatusBadge(
                                             step.status
                                           )}`}
                                         >
@@ -1699,10 +1721,10 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         </span>
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top">
+                                    <td className="px-1 py-1 border border-slate-200 align-top min-w-0 break-words">
                                       {ed ? (
                                         <input
-                                          className="w-full min-w-[80px] border border-slate-300 rounded px-1 py-1"
+                                          className="w-full min-w-0 max-w-full border border-slate-300 rounded px-1 py-0.5 text-[11px]"
                                           value={step.reviewer ?? ""}
                                           onChange={(e) =>
                                             patchEditStep(itemIdx, idx, { reviewer: e.target.value })
@@ -1712,11 +1734,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         step.reviewer || "-"
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                    <td className="px-1 py-1 border border-slate-200 align-top whitespace-pre-wrap break-words min-w-0">
                                       {ed ? (
                                         <textarea
-                                          rows={2}
-                                          className="w-full min-w-[100px] border border-slate-300 rounded px-1 py-1 text-xs"
+                                          rows={3}
+                                          className="w-full min-w-0 max-w-full border border-slate-300 rounded px-1 py-0.5 text-[11px] resize-y"
                                           value={step.comment ?? ""}
                                           onChange={(e) =>
                                             patchEditStep(itemIdx, idx, { comment: e.target.value })
@@ -1726,11 +1748,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         step.comment || "-"
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                    <td className="px-1 py-1 border border-slate-200 align-top whitespace-pre-wrap break-words min-w-0">
                                       {ed ? (
                                         <textarea
-                                          rows={2}
-                                          className="w-full min-w-[100px] border border-slate-300 rounded px-1 py-1 text-xs"
+                                          rows={3}
+                                          className="w-full min-w-0 max-w-full border border-slate-300 rounded px-1 py-0.5 text-[11px] resize-y"
                                           value={step.reviewer_feedback ?? ""}
                                           onChange={(e) =>
                                             patchEditStep(itemIdx, idx, {
@@ -1742,11 +1764,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         step.reviewer_feedback || "-"
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                    <td className="px-1 py-1 border border-slate-200 align-top whitespace-pre-wrap break-words min-w-0">
                                       {ed || canEditAuditeeInline ? (
                                         <textarea
-                                          rows={2}
-                                          className="w-full min-w-[100px] border border-amber-200 rounded px-1 py-1 text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                                          rows={3}
+                                          className="w-full min-w-0 max-w-full border border-amber-200 rounded px-1 py-0.5 text-[11px] resize-y focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
                                           value={step.auditee_comment ?? ""}
                                           placeholder="Auditee comment..."
                                           disabled={savingAuditeeFields || savingPublished}
@@ -1760,11 +1782,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                         step.auditee_comment || "-"
                                       )}
                                     </td>
-                                    <td className="px-2.5 py-2 border border-slate-200 align-top whitespace-pre-wrap break-words">
+                                    <td className="px-1 py-1 border border-slate-200 align-top whitespace-pre-wrap break-words min-w-0">
                                       {ed || canEditAuditeeInline ? (
                                         <textarea
-                                          rows={2}
-                                          className="w-full min-w-[100px] border border-orange-200 rounded px-1 py-1 text-xs focus:border-orange-400 focus:ring-1 focus:ring-orange-400/30"
+                                          rows={3}
+                                          className="w-full min-w-0 max-w-full border border-orange-200 rounded px-1 py-0.5 text-[11px] resize-y focus:border-orange-400 focus:ring-1 focus:ring-orange-400/30"
                                           value={step.follow_up_detail ?? ""}
                                           placeholder="Follow-up detail..."
                                           disabled={savingAuditeeFields || savingPublished}
@@ -1779,11 +1801,11 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                                       )}
                                     </td>
                                     {ed && (
-                                      <td className="px-2 py-2 border border-slate-200 text-center align-top">
+                                      <td className="px-1 py-1 border border-slate-200 text-center align-top min-w-0">
                                         <button
                                           type="button"
                                           onClick={() => removeEditStep(itemIdx, idx)}
-                                          className="text-[11px] font-semibold text-red-700 hover:text-red-900 hover:underline"
+                                          className="text-[10px] font-semibold text-red-700 hover:text-red-900 hover:underline"
                                         >
                                           Remove
                                         </button>

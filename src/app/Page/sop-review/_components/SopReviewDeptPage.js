@@ -28,44 +28,43 @@ const SopTableRow = memo(function SopTableRow({
   useContentVisibility,
 }) {
   const rowStyle = useContentVisibility ? { contentVisibility: "auto", containIntrinsicSize: "0 80px" } : undefined;
+  const cellInputClass =
+    "w-full min-w-0 max-w-full box-border bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-md px-1.5 py-1 text-[11px] leading-snug transition-colors duration-200 resize-y placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed";
   return (
     <tr
       style={rowStyle}
       className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-blue-50/30 transition-colors duration-150 border-b border-slate-100/60 group`}
     >
-      <td className="p-2 text-center align-top sticky left-0 bg-inherit border-r border-slate-200/40 z-[1]">
+      <td className="p-1 text-center align-top border-r border-slate-200/40">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={() => onToggleSelect(idx)}
-          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer"
+          className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer"
           aria-label={`Select SOP item ${row.no}`}
         />
       </td>
-      <td className="p-3 text-center align-top sticky left-10 bg-inherit border-r border-slate-200/40 z-[1]">
-        <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
-          <span className="text-xs font-bold text-slate-600">{row.no}</span>
+      <td className="p-1 text-center align-top border-r border-slate-200/40">
+        <div className="w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+          <span className="text-[10px] font-bold text-slate-600">{row.no}</span>
         </div>
       </td>
-      <td className="p-3 align-top border-r border-slate-200/40">
-        <div className="relative">
-          <textarea
-            value={row.sop_related}
-            onChange={(e) => onUpdate(idx, { sop_related: e.target.value })}
-            className="w-full bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            rows={3}
-            placeholder="Enter SOP description..."
-            disabled={isReviewer}
-          />
-        </div>
+      <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
+        <textarea
+          value={row.sop_related}
+          onChange={(e) => onUpdate(idx, { sop_related: e.target.value })}
+          className={`${cellInputClass} hover:border-blue-200 focus:border-blue-400 focus:ring-blue-500/20`}
+          rows={3}
+          placeholder="Enter SOP description..."
+          disabled={isReviewer}
+        />
       </td>
-      <td className="p-3 text-center align-top border-r border-slate-200/40">
+      <td className="p-1.5 text-center align-top border-r border-slate-200/40 min-w-0">
         <select
           value={row.status || ""}
           onChange={(e) => onUpdate(idx, { status: e.target.value })}
-          // Reviewer and Admin can change row status; regular user cannot
           disabled={!(isReviewer || isAdmin)}
-          className={`w-full px-2 py-2 rounded-lg text-xs font-semibold border transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:cursor-not-allowed ${
+          className={`w-full min-w-0 max-w-full px-1 py-1 rounded-md text-[10px] font-semibold border transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:cursor-not-allowed ${
             row.status === "APPROVED"
               ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-200"
               : row.status === "REJECTED"
@@ -82,66 +81,59 @@ const SopTableRow = memo(function SopTableRow({
           <option value="REJECTED">Rejected</option>
         </select>
       </td>
-      <td className="p-3 align-top border-r border-slate-200/40">
-        <div className="relative">
-          <textarea
-            value={row.comment || ""}
-            onChange={(e) => onUpdate(idx, { comment: e.target.value })}
-            className="w-full bg-transparent border border-transparent hover:border-green-200 focus:border-green-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            rows={2}
-            placeholder="Enter review comment..."
-            // All roles can edit review comment (requested)
-            disabled={false}
-          />
-        </div>
+      <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
+        <textarea
+          value={row.comment || ""}
+          onChange={(e) => onUpdate(idx, { comment: e.target.value })}
+          className={`${cellInputClass} hover:border-green-200 focus:border-green-400 focus:ring-green-500/20`}
+          rows={3}
+          placeholder="Review comment..."
+          disabled={false}
+        />
       </td>
-      <td className="p-3 align-top border-r border-slate-200/40">
-        <div className="relative">
-          <textarea
-            value={row.reviewer_feedback || ""}
-            onChange={(e) => onUpdate(idx, { reviewer_feedback: e.target.value })}
-            className="w-full bg-transparent border border-transparent hover:border-emerald-200 focus:border-emerald-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            rows={2}
-            placeholder="Enter reviewer feedback..."
-            disabled={!(isReviewer || isAdmin)}
-          />
-        </div>
+      <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
+        <textarea
+          value={row.reviewer_feedback || ""}
+          onChange={(e) => onUpdate(idx, { reviewer_feedback: e.target.value })}
+          className={`${cellInputClass} hover:border-emerald-200 focus:border-emerald-400 focus:ring-emerald-500/20`}
+          rows={3}
+          placeholder="Reviewer feedback..."
+          disabled={!(isReviewer || isAdmin)}
+        />
       </td>
-      <td className="p-3 text-center align-top border-r border-slate-200/40">
-        <div className="relative">
-          <input
-            value={row.reviewer || ""}
-            onChange={(e) => onUpdate(idx, { reviewer: e.target.value })}
-            className="w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-lg px-3 py-2 text-sm text-center transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            placeholder="Reviewer..."
-            disabled={!(isReviewer || isAdmin)}
-            title={!(isReviewer || isAdmin) ? "Only admin or reviewer can edit Reviewer" : undefined}
-          />
-        </div>
+      <td className="p-1.5 text-center align-top border-r border-slate-200/40 min-w-0">
+        <input
+          value={row.reviewer || ""}
+          onChange={(e) => onUpdate(idx, { reviewer: e.target.value })}
+          className="w-full min-w-0 max-w-full bg-transparent border border-transparent hover:border-purple-200 focus:border-purple-400 focus:bg-white rounded-md px-1 py-1 text-[11px] text-center transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed"
+          placeholder="Name..."
+          disabled={!(isReviewer || isAdmin)}
+          title={!(isReviewer || isAdmin) ? "Only admin or reviewer can edit Reviewer" : undefined}
+        />
       </td>
-      <td className="p-3 align-top border-r border-slate-200/40">
+      <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
         <textarea
           value={row.auditee_comment || ""}
           onChange={(e) => onUpdate(idx, { auditee_comment: e.target.value })}
-          className="w-full bg-transparent border border-transparent hover:border-amber-200 focus:border-amber-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-          rows={2}
-          placeholder="Auditee comment for report..."
+          className={`${cellInputClass} hover:border-amber-200 focus:border-amber-400 focus:ring-amber-500/20`}
+          rows={3}
+          placeholder="Auditee comment..."
         />
       </td>
-      <td className="p-3 align-top border-r border-slate-200/40">
+      <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
         <textarea
           value={row.follow_up_detail || ""}
           onChange={(e) => onUpdate(idx, { follow_up_detail: e.target.value })}
-          className="w-full bg-transparent border border-transparent hover:border-orange-200 focus:border-orange-400 focus:bg-white rounded-lg px-3 py-2 text-sm transition-colors duration-200 resize-y leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-          rows={2}
-          placeholder="Follow-up detail for report..."
+          className={`${cellInputClass} hover:border-orange-200 focus:border-orange-400 focus:ring-orange-500/20`}
+          rows={3}
+          placeholder="Follow-up detail..."
         />
       </td>
-      <td className="p-3 text-center align-top">
+      <td className="p-1 text-center align-top">
         <button
           onClick={() => onRemove(idx)}
           disabled={false}
-          className="inline-flex items-center justify-center w-8 h-8 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-full text-xs font-medium transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed mx-auto"
+          className="inline-flex items-center justify-center w-7 h-7 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-full text-xs font-medium transition-colors hover:shadow-sm focus:outline-none focus:ring-1 focus:ring-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed mx-auto"
           title="Delete this SOP item"
         >
           <span className="text-sm leading-none">🗑️</span>
@@ -1128,15 +1120,27 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                 </div>
               </div>
 
-              {/* Table Content - responsive: horizontal scroll when narrow; touch-friendly scroll + contain on Android */}
+              {/* Table Content — fit viewport width, vertical scroll only */}
               <div
-                className="overflow-x-auto overflow-y-auto flex-1 -mx-2 sm:mx-0 min-h-0"
+                className="overflow-x-hidden overflow-y-auto flex-1 min-h-0 w-full"
                 style={{ WebkitOverflowScrolling: "touch", contain: "layout" }}
               >
-                <table className="min-w-[1100px] w-full table-fixed border-collapse">
+                <table className="w-full max-w-full table-fixed border-collapse">
+                  <colgroup>
+                    <col style={{ width: "2.5%" }} />
+                    <col style={{ width: "3%" }} />
+                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "15%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "4.5%" }} />
+                  </colgroup>
                   <thead className="bg-gradient-to-r from-slate-100 to-slate-50 sticky top-0 z-10">
                     <tr className="border-b border-slate-200/60">
-                      <th className="p-2 text-center font-bold text-slate-700 border-r border-slate-200/40 w-10 sticky left-0 bg-gradient-to-r from-slate-100 to-slate-50 z-[2]">
+                      <th className="p-1 text-center font-bold text-slate-700 border-r border-slate-200/40 bg-gradient-to-r from-slate-100 to-slate-50">
                         <input
                           type="checkbox"
                           checked={allRowsSelected}
@@ -1145,72 +1149,37 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                           }}
                           onChange={toggleSelectAllRows}
                           disabled={sopData.length === 0}
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                           aria-label="Select all SOP items"
                           title="Select all"
                         />
                       </th>
-                      <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-12 sticky left-10 bg-gradient-to-r from-slate-100 to-slate-50 z-[2]">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="text-xs">No</span>
-                        </div>
+                      <th className="p-1 text-center font-bold text-slate-700 border-r border-slate-200/40 bg-gradient-to-r from-slate-100 to-slate-50">
+                        <span className="text-[10px]">No</span>
                       </th>
-                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 bg-blue-100 rounded flex items-center justify-center">
-                            <span className="text-blue-600 text-xs">📝</span>
-                          </span>
-                          <span className="text-xs">SOP DESCRIPTION</span>
-                        </div>
+                      <th className="p-1.5 text-left font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">SOP Description</span>
                       </th>
-                      <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-32">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="w-3 h-3 bg-yellow-100 rounded-full"></span>
-                          <span className="text-xs">STATUS</span>
-                        </div>
+                      <th className="p-1.5 text-center font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">Status</span>
                       </th>
-                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[180px]">
-                        <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 bg-green-100 rounded flex items-center justify-center">
-                            <span className="text-green-600 text-xs">💬</span>
-                          </span>
-                          <span className="text-xs">REVIEW COMMENT</span>
-                        </div>
+                      <th className="p-1.5 text-left font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">Review Comment</span>
                       </th>
-                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[180px]">
-                        <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 bg-emerald-100 rounded flex items-center justify-center">
-                            <span className="text-emerald-600 text-xs">🗣️</span>
-                          </span>
-                          <span className="text-xs">REVIEWER FEEDBACK</span>
-                        </div>
+                      <th className="p-1.5 text-left font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">Reviewer Feedback</span>
                       </th>
-                      <th className="p-3 text-center font-bold text-slate-700 border-r border-slate-200/40 w-28">
-                        <div className="flex items-center gap-1">
-                          <span className="w-4 h-4 bg-purple-100 rounded flex items-center justify-center">
-                            <span className="text-purple-600 text-xs">👤</span>
-                          </span>
-                          <span className="text-xs">REVIEWER</span>
-                        </div>
+                      <th className="p-1.5 text-center font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">Reviewer</span>
                       </th>
-                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[160px]">
-                        <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 bg-amber-100 rounded flex items-center justify-center">
-                            <span className="text-amber-600 text-xs">💬</span>
-                          </span>
-                          <span className="text-xs">AUDITEE COMMENT</span>
-                        </div>
+                      <th className="p-1.5 text-left font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">Auditee Comment</span>
                       </th>
-                      <th className="p-3 text-left font-bold text-slate-700 border-r border-slate-200/40 min-w-[160px]">
-                        <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 bg-orange-100 rounded flex items-center justify-center">
-                            <span className="text-orange-600 text-xs">📋</span>
-                          </span>
-                          <span className="text-xs">FOLLOW-UP DETAIL</span>
-                        </div>
+                      <th className="p-1.5 text-left font-bold text-slate-700 border-r border-slate-200/40">
+                        <span className="text-[10px] uppercase tracking-wide">Follow-Up Detail</span>
                       </th>
-                      <th className="p-3 text-center font-bold text-slate-700 w-20">
-                        <span className="text-xs">ACTIONS</span>
+                      <th className="p-1 text-center font-bold text-slate-700">
+                        <span className="text-[10px] uppercase tracking-wide">Act</span>
                       </th>
                     </tr>
                   </thead>
