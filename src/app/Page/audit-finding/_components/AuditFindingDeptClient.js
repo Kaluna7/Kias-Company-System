@@ -226,6 +226,10 @@ export default function AuditFindingDeptClient({
   const isSavingTableDataRef = useRef(false);
   const lastSavedTableDataRef = useRef(null);
   const isTableDirtyRef = useRef(false);
+  const saveMetaDataRef = useRef(null);
+  const saveTableDataRef = useRef(null);
+  const pendingMetaSaveRef = useRef(false);
+  const pendingTableSaveRef = useRef(false);
   /** Selalu mirror isi tabel terkini (termasuk dalam updater setState) supaya Save & Done tidak baca state yang ketinggalan satu render. */
   const tableDataRef = useRef(normalizeRows(initialData));
 
@@ -429,7 +433,10 @@ export default function AuditFindingDeptClient({
 
   // Auto-save meta data to API
   const saveMetaData = useCallback(async () => {
-    if (isSavingMetaRef.current) return;
+    if (isSavingMetaRef.current) {
+      pendingMetaSaveRef.current = true;
+      return;
+    }
 
     const currentMeta = {
       preparerStatus,
@@ -494,6 +501,10 @@ export default function AuditFindingDeptClient({
       console.warn("Error saving meta data:", err);
     } finally {
       isSavingMetaRef.current = false;
+      if (pendingMetaSaveRef.current) {
+        pendingMetaSaveRef.current = false;
+        void saveMetaDataRef.current?.();
+      }
     }
   }, [
     apiPath,
@@ -505,6 +516,18 @@ export default function AuditFindingDeptClient({
     review,
     reviewDate,
   ]);
+
+  useEffect(() => {
+    saveMetaDataRef.current = saveMetaData;
+  }, [saveMetaData]);
+
+  const flushMetaSave = useCallback(() => {
+    if (saveMetaTimeoutRef.current) {
+      clearTimeout(saveMetaTimeoutRef.current);
+      saveMetaTimeoutRef.current = null;
+    }
+    void saveMetaDataRef.current?.();
+  }, []);
 
   // Auto-save with debounce
   useEffect(() => {
@@ -527,6 +550,7 @@ export default function AuditFindingDeptClient({
     return () => {
       if (saveMetaTimeoutRef.current) {
         clearTimeout(saveMetaTimeoutRef.current);
+        saveMetaTimeoutRef.current = null;
       }
     };
   }, [
@@ -765,7 +789,10 @@ export default function AuditFindingDeptClient({
   // Melempar Error jika ada request yang gagal agar caller bisa menampilkan pesan — bukan diam-diam gagal.
   const saveTableData = useCallback(async (options = {}) => {
     const force = options.force === true;
-    if (isSavingTableDataRef.current) return;
+    if (isSavingTableDataRef.current) {
+      if (force || isTableDirtyRef.current) pendingTableSaveRef.current = true;
+      return;
+    }
     if (!force && !isTableDirtyRef.current) return;
 
     isSavingTableDataRef.current = true;
@@ -812,8 +839,56 @@ export default function AuditFindingDeptClient({
       isTableDirtyRef.current = false;
     } finally {
       isSavingTableDataRef.current = false;
+      if (pendingTableSaveRef.current) {
+        pendingTableSaveRef.current = false;
+        void saveTableDataRef.current?.({ force: true });
+      }
     }
   }, [apiPath, auditYear]);
+
+  useEffect(() => {
+    saveTableDataRef.current = saveTableData;
+  }, [saveTableData]);
+
+  const flushTableSave = useCallback((options = {}) => {
+    const force = options.force !== false;
+    if (saveTableDataTimeoutRef.current) {
+      clearTimeout(saveTableDataTimeoutRef.current);
+      saveTableDataTimeoutRef.current = null;
+    }
+    if (force || isTableDirtyRef.current) {
+      void saveTableDataRef.current?.({ force: true });
+    }
+  }, []);
+
+  const flushAllSaves = useCallback(async () => {
+    if (saveMetaTimeoutRef.current) {
+      clearTimeout(saveMetaTimeoutRef.current);
+      saveMetaTimeoutRef.current = null;
+    }
+    if (saveTableDataTimeoutRef.current) {
+      clearTimeout(saveTableDataTimeoutRef.current);
+      saveTableDataTimeoutRef.current = null;
+    }
+    if (isTableDirtyRef.current) {
+      await saveTableDataRef.current?.({ force: true });
+    }
+    await saveMetaDataRef.current?.();
+  }, []);
+
+  // Flush pending saves when leaving the page (Back, route change, tab close)
+  useEffect(() => {
+    const onPageHide = () => {
+      flushMetaSave();
+      flushTableSave({ force: true });
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      flushMetaSave();
+      flushTableSave({ force: true });
+    };
+  }, [flushMetaSave, flushTableSave]);
 
   // Auto-save table data with debounce.
   // Penting: JANGAN auto-save ketika user sedang edit (isEditMode=true),
@@ -840,6 +915,7 @@ export default function AuditFindingDeptClient({
     return () => {
       if (saveTableDataTimeoutRef.current) {
         clearTimeout(saveTableDataTimeoutRef.current);
+        saveTableDataTimeoutRef.current = null;
       }
     };
   }, [saveTableData, tableData, isEditMode]);
@@ -1118,14 +1194,20 @@ export default function AuditFindingDeptClient({
     }
   };
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback(async () => {
+    try {
+      await flushAllSaves();
+    } catch (err) {
+      toast.show(err?.message || "Failed to save changes before leaving", "error");
+      return;
+    }
     if (typeof window === "undefined") return;
     if (window.history.length > 1) {
       window.history.back();
       return;
     }
     window.location.href = "/Page/audit-finding";
-  }, []);
+  }, [flushAllSaves, toast]);
 
   const pageOffset =
     ((findingMeta?.page ?? 1) - 1) * (findingMeta?.pageSize ?? 20);

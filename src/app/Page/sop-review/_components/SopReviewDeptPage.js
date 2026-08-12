@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo, memo, useDeferredValue } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import SOPHeader from "@/app/components/layout/Sop-Review/SOPHeader";
@@ -245,7 +245,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const [preparerStatus, setPreparerStatus] = useState("DRAFT");
   const [reviewerStatus, setReviewerStatus] = useState("DRAFT");
   const [sopData, setSopData] = useState([]);
-  const deferredSopData = useDeferredValue(sopData);
+  const sopDataRef = useRef(sopData);
+  const isLoadingRef = useRef(true);
+  const saveDraftRef = useRef(null);
+  const pendingSaveRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
@@ -303,6 +306,14 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   const isSavingDraftRef = useRef(false);
   const lastSavedDataRef = useRef(null);
   const isPublishingRef = useRef(false);
+
+  useEffect(() => {
+    sopDataRef.current = sopData;
+  }, [sopData]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
   /** Latest schedule fields for merging into meta on load — avoids refetch when schedule finishes after first paint (was clobbering preparer/reviewer edits). */
   const scheduleForMergeRef = useRef({ name: "", date: "" });
   useEffect(() => {
@@ -603,10 +614,21 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         if (keyToIndex.has(key)) {
           const idx = keyToIndex.get(key);
           const existing = next[idx];
+          const keepUnlessIncoming = (incoming, prev) => {
+            const inc = String(incoming ?? "").trim();
+            if (inc) return inc;
+            return String(prev ?? "").trim();
+          };
           next[idx] = {
             ...existing,
-            ...payload,
+            sop_related,
+            status: keepUnlessIncoming(it.status, existing.status) || "IN REVIEW",
+            // Review Comment: use the latest from Append when provided; otherwise keep existing
             comment: incomingComment || existing.comment || "",
+            reviewer_feedback: keepUnlessIncoming(it.reviewer_feedback, existing.reviewer_feedback),
+            reviewer: keepUnlessIncoming(it.reviewer, existing.reviewer),
+            auditee_comment: keepUnlessIncoming(it.auditee_comment, existing.auditee_comment),
+            follow_up_detail: keepUnlessIncoming(it.follow_up_detail, existing.follow_up_detail),
           };
         } else {
           next.push({
@@ -817,7 +839,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   }, [apiPath, applyUploadedDocument]);
 
   const saveDraft = useCallback(async (dataToSave, metaToSave = null) => {
-    if (isSavingDraftRef.current) return;
+    if (isSavingDraftRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
     
     // Check if data has actually changed (include reviewer fields in comparison)
     const currentData = {
@@ -880,8 +905,25 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       // Don't show error to user for auto-save failures
     } finally {
       isSavingDraftRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        void saveDraftRef.current?.(sopDataRef.current);
+      }
     }
   }, [apiPath, preparerStatus, preparerName, preparerDate, reviewerComment, reviewerStatus, reviewerName, reviewerDate, documentFileUrl, documentFileName, preparePayload]);
+
+  useEffect(() => {
+    saveDraftRef.current = saveDraft;
+  }, [saveDraft]);
+
+  const flushSaveDraft = useCallback(() => {
+    if (saveDraftTimeoutRef.current) {
+      clearTimeout(saveDraftTimeoutRef.current);
+      saveDraftTimeoutRef.current = null;
+    }
+    if (isLoadingRef.current) return;
+    void saveDraftRef.current?.(sopDataRef.current);
+  }, []);
 
   const uploadDocumentFile = useCallback(async (file) => {
     if (!file) return false;
@@ -900,7 +942,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         throw new Error(json.error || `Upload failed (HTTP ${res.status})`);
       }
       applyUploadedDocument({ fileUrl: json.fileUrl, fileName: json.fileName || file.name });
-      await saveDraft(deferredSopData, {
+      await saveDraft(sopDataRef.current, {
         preparer_status: preparerStatus,
         preparer_name: preparerName || null,
         preparer_date: preparerDate || null,
@@ -925,7 +967,6 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
   }, [
     apiPath,
     applyUploadedDocument,
-    deferredSopData,
     preparerStatus,
     preparerName,
     preparerDate,
@@ -945,29 +986,26 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     });
   };
 
-  // Auto-save when data stabilizes (with debounce)
+  // Auto-save when data stabilizes (with debounce) — always save latest sopDataRef, not deferred copy
   useEffect(() => {
-    // Clear existing timeout
     if (saveDraftTimeoutRef.current) {
       clearTimeout(saveDraftTimeoutRef.current);
     }
 
-    // Don't auto-save on initial load
     if (isLoading) return;
 
-    // Debounce auto-save by 1.2 seconds to reduce save churn while typing
     saveDraftTimeoutRef.current = setTimeout(() => {
-      // Save even if sopData is empty (to save reviewer fields)
-      saveDraft(deferredSopData);
+      saveDraftRef.current?.(sopDataRef.current);
     }, 1200);
 
     return () => {
       if (saveDraftTimeoutRef.current) {
         clearTimeout(saveDraftTimeoutRef.current);
+        saveDraftTimeoutRef.current = null;
       }
     };
   }, [
-    deferredSopData,
+    sopData,
     isLoading,
     saveDraft,
     preparerStatus,
@@ -980,6 +1018,16 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     documentFileUrl,
     documentFileName,
   ]);
+
+  // Flush pending edits when leaving the page (Back, route change, tab close)
+  useEffect(() => {
+    const onPageHide = () => flushSaveDraft();
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      flushSaveDraft();
+    };
+  }, [flushSaveDraft]);
 
   const handleSidebarSaveDraft = (sidebarData) => {
     try {
@@ -1179,7 +1227,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         guardDocumentReplace={guardDocumentReplace}
         onDocumentUploaded={({ fileUrl, fileName }) => {
           applyUploadedDocument({ fileUrl, fileName });
-          saveDraft(deferredSopData, {
+          saveDraft(sopDataRef.current, {
             preparer_status: preparerStatus,
             preparer_name: preparerName || null,
             preparer_date: preparerDate || null,
