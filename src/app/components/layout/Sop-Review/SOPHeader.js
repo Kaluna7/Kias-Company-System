@@ -62,7 +62,10 @@ export default function SOPHeader({
   isAdmin = false,
   isUser = false,
   schedulePreparerName = "",
-  schedulePreparerDate = ""
+  schedulePreparerDate = "",
+  documentFileUrl = "",
+  documentFileName = "",
+  onDocumentUploaded,
 }) {
   const toast = useToast();
   const [selectedFile, setSelectedFile] = useState(null);
@@ -76,6 +79,7 @@ export default function SOPHeader({
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadStatusLabel, setLoadStatusLabel] = useState("");
   const [modalLoadProgress, setModalLoadProgress] = useState(0);
+  const [documentUploading, setDocumentUploading] = useState(false);
 
   // Modal state for preview comments
   const [modalOpen, setModalOpen] = useState(false);
@@ -167,6 +171,37 @@ export default function SOPHeader({
     }
   };
 
+  /* ---------- Persist PDF to server (viewable on dept + report) ---------- */
+  const persistDocument = async (file) => {
+    try {
+      setDocumentUploading(true);
+      const form = new FormData();
+      form.append("file", file, file.name || "document.pdf");
+      const res = await fetch(`/api/SopReview/${apiPath}/document`, {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || `Upload failed (HTTP ${res.status})`);
+      }
+      onDocumentUploaded?.({
+        fileUrl: json.fileUrl || "",
+        fileName: json.fileName || file.name || "document.pdf",
+      });
+      return true;
+    } catch (err) {
+      console.error("SOP document upload failed:", err);
+      toast.show(
+        "Dokumen gagal disimpan ke sistem: " + (err?.message || String(err)),
+        "error",
+      );
+      return false;
+    } finally {
+      setDocumentUploading(false);
+    }
+  };
+
   /* ---------- File change handler ---------- */
   const handleFileChange = async (e) => {
     setParseError("");
@@ -193,9 +228,12 @@ export default function SOPHeader({
       setParsing(true);
       setAiInProgress(true);
       setLoadProgress(2);
-      setLoadStatusLabel("Memproses dokumen...");
+      setLoadStatusLabel("Memproses & menyimpan dokumen...");
       setParseError("");
     });
+
+    // Save original PDF to system in parallel with AI extract
+    const persistPromise = persistDocument(file);
 
     try {
       const { mapAiStepsToPreview, formatAiExtractDebug } = await import(
@@ -269,6 +307,7 @@ export default function SOPHeader({
       console.error("Error processing PDF:", err);
       setParseError("Failed to read PDF: " + (err?.message || String(err)));
     } finally {
+      await persistPromise;
       setParsing(false);
       setAiInProgress(false);
       setLoadProgress(100);
@@ -644,6 +683,37 @@ export default function SOPHeader({
                         {parsing ? "Processing PDF..." : "Choose PDF file"}
                       </div>
                     </label>
+                    {documentFileUrl && (
+                      <div className="p-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg text-xs text-indigo-800 font-medium">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold truncate" title={documentFileName || "SOP Document"}>
+                              {documentUploading ? "Menyimpan dokumen..." : (documentFileName || "SOP Document")}
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-2">
+                              <a
+                                href={documentFileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+                              >
+                                View Document
+                              </a>
+                              <a
+                                href={documentFileUrl}
+                                download={documentFileName || "sop-document.pdf"}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50"
+                              >
+                                Download
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {parsedPreview.length > 0 && (
                       <button
                         type="button"

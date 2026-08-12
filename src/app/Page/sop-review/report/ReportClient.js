@@ -1214,6 +1214,17 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                           >
                             <span>View</span>
                           </button>
+                          {(row.items?.[0]?._detail?.meta?.file_url || row.file_url) && (
+                            <a
+                              href={row.items?.[0]?._detail?.meta?.file_url || row.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-100"
+                              title={row.items?.[0]?._detail?.meta?.file_name || "View uploaded SOP PDF"}
+                            >
+                              <span>Document</span>
+                            </a>
+                          )}
                           {canEditPublished && row.metaId != null && (
                             <button
                               type="button"
@@ -1486,6 +1497,34 @@ ${stepCountDesktop >= maxStepsDesktop ? `<tr><td colspan="8" style="text-align:c
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">SOP Preparer Status</div>
                               <div className="text-sm text-slate-900">{itemMeta.preparer_status || "DRAFT"}</div>
                             </div>
+                            {(itemMeta.file_url || item.file_url) && (
+                              <div className="md:col-span-2">
+                                <div className="font-semibold text-slate-600 text-[11px] mb-1">Uploaded SOP Document</div>
+                                <div className="flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                                  <svg className="w-5 h-5 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span className="text-sm text-indigo-900 font-medium truncate max-w-[280px]" title={itemMeta.file_name || item.file_name || "SOP Document"}>
+                                    {itemMeta.file_name || item.file_name || "SOP Document"}
+                                  </span>
+                                  <a
+                                    href={itemMeta.file_url || item.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700"
+                                  >
+                                    View Document
+                                  </a>
+                                  <a
+                                    href={itemMeta.file_url || item.file_url}
+                                    download={itemMeta.file_name || item.file_name || "sop-document.pdf"}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white text-indigo-700 border border-indigo-200 text-xs font-semibold hover:bg-indigo-50"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            )}
                             <div>
                               <div className="font-semibold text-slate-600 text-[11px] mb-0.5">SOP Reviewer Status</div>
                               <div className="text-sm text-slate-900">{itemMeta.reviewer_status || "DRAFT"}</div>

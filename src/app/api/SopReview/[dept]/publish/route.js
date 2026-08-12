@@ -111,6 +111,8 @@ async function ensureReportTables(client, slug, departmentName) {
       reviewer_date DATE,
       audit_fieldwork_start_date DATE,
       audit_fieldwork_end_date DATE,
+      file_url TEXT,
+      file_name TEXT,
       published_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
@@ -126,6 +128,14 @@ async function ensureReportTables(client, slug, departmentName) {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                      WHERE table_name = '${metaTable}' AND column_name = 'audit_fieldwork_end_date') THEN
         ALTER TABLE ${metaTable} ADD COLUMN audit_fieldwork_end_date DATE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${metaTable}' AND column_name = 'file_url') THEN
+        ALTER TABLE ${metaTable} ADD COLUMN file_url TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = '${metaTable}' AND column_name = 'file_name') THEN
+        ALTER TABLE ${metaTable} ADD COLUMN file_name TEXT;
       END IF;
     END $$;
   `);
@@ -199,10 +209,14 @@ export async function POST(req, { params }) {
           reviewer_status VARCHAR(50),
           reviewer_name VARCHAR(255),
           reviewer_date DATE,
+          file_url TEXT,
+          file_name TEXT,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+      await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_url TEXT`);
+      await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_name TEXT`);
 
       const { stepsTable: reportSteps, metaTable: reportMeta } = await ensureReportTables(
         client,
@@ -265,8 +279,8 @@ export async function POST(req, { params }) {
       const metaRow = meta && typeof meta === "object" ? meta : {};
       const metaInsert = await client.query(
         `INSERT INTO ${reportMeta}
-          (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+          (department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, file_url, file_name, published_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
          RETURNING id`,
         [
           metaRow.department_name || resolved.departmentName,
@@ -280,6 +294,8 @@ export async function POST(req, { params }) {
           metaRow.reviewer_date || null,
           auditFieldworkStartDate,
           auditFieldworkEndDate,
+          metaRow.file_url || null,
+          metaRow.file_name || null,
         ]
       );
       const reportMetaId = metaInsert?.rows?.[0]?.id ?? null;

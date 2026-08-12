@@ -58,7 +58,9 @@ async function ensureReportMetaColumns(metaTable) {
       `ALTER TABLE ${metaTable}
        ADD COLUMN IF NOT EXISTS audit_fieldwork_start_date DATE,
        ADD COLUMN IF NOT EXISTS audit_fieldwork_end_date DATE,
-       ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;`,
+       ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ,
+       ADD COLUMN IF NOT EXISTS file_url TEXT,
+       ADD COLUMN IF NOT EXISTS file_name TEXT;`,
     );
   } finally {
     client.release();
@@ -101,10 +103,14 @@ async function ensureDraftTables(client, slug, departmentName) {
       reviewer_status VARCHAR(50),
       reviewer_name VARCHAR(255),
       reviewer_date DATE,
+      file_url TEXT,
+      file_name TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_url TEXT`);
+  await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_name TEXT`);
 
   return { stepsTable, metaTable };
 }
@@ -129,7 +135,7 @@ export async function GET(req, { params }) {
       await ensureReportMetaColumns(metaTable);
       let metaRows = await selectMaybe(
         metaTable,
-        `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at FROM ${metaTable} ORDER BY id ASC`,
+        `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, file_url, file_name, published_at FROM ${metaTable} ORDER BY id ASC`,
       );
       if (!Number.isNaN(year) && year) {
         metaRows = metaRows.filter((m) => {
@@ -160,7 +166,7 @@ export async function GET(req, { params }) {
 
     const [rows, metaRows] = await Promise.all([
       selectMaybe(stepsTable, `SELECT id, no, sop_related, status, comment, reviewer_feedback, reviewer, auditee_comment, follow_up_detail, published_at FROM ${stepsTable} ORDER BY no ASC NULLS LAST, id ASC`),
-      selectMaybe(metaTable, `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, published_at FROM ${metaTable} ORDER BY id DESC LIMIT 1`),
+      selectMaybe(metaTable, `SELECT id, department_name, sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, audit_fieldwork_start_date, audit_fieldwork_end_date, file_url, file_name, published_at FROM ${metaTable} ORDER BY id DESC LIMIT 1`),
     ]);
 
     return NextResponse.json({ success: true, meta: metaRows?.[0] ?? null, rows }, { status: 200 });
@@ -266,8 +272,8 @@ export async function DELETE(req, { params }) {
         await client.query(
           `INSERT INTO ${draftMeta}
             (department_name, sop_status, preparer_status, preparer_name, preparer_date,
-             reviewer_comment, reviewer_status, reviewer_name, reviewer_date, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())`,
+             reviewer_comment, reviewer_status, reviewer_name, reviewer_date, file_url, file_name, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NOW())`,
           [
             meta.department_name || resolved.departmentName,
             meta.sop_status || "AVAILABLE",
@@ -278,6 +284,8 @@ export async function DELETE(req, { params }) {
             meta.reviewer_status || "DRAFT",
             meta.reviewer_name || null,
             meta.reviewer_date || null,
+            meta.file_url || null,
+            meta.file_name || null,
           ],
         );
 

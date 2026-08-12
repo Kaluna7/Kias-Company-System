@@ -184,6 +184,8 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
     "reviewer_status",
     "reviewer_name",
     "reviewer_date",
+    "file_url",
+    "file_name",
     "created_at",
     "updated_at",
   ].join(", ");
@@ -201,10 +203,14 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
         reviewer_status VARCHAR(50),
         reviewer_name VARCHAR(255),
         reviewer_date DATE,
+        file_url TEXT,
+        file_name TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_url TEXT`).catch(() => {});
+    await client.query(`ALTER TABLE ${metaTable} ADD COLUMN IF NOT EXISTS file_name TEXT`).catch(() => {});
   };
 
   const GET = async (req) => {
@@ -259,9 +265,11 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
         reviewer_status,
         reviewer_name,
         reviewer_date,
+        file_url,
+        file_name,
       } = body || {};
 
-      if (!sop_status && !preparer_status && !reviewer_status) {
+      if (!sop_status && !preparer_status && !reviewer_status && file_url === undefined && file_name === undefined) {
         return NextResponse.json({ success: false, error: "Payload kosong. Sertakan minimal status." }, { status: 400 });
       }
 
@@ -278,22 +286,26 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
         let reviewerNameToSave = reviewer_name || null;
         let reviewerDateToSave = reviewer_date || null;
 
+        const prevR = await client.query(
+          `SELECT reviewer_comment, reviewer_status, reviewer_name, reviewer_date, file_url, file_name FROM ${metaTable} ORDER BY id DESC LIMIT 1`,
+        );
+        const prev = prevR.rows[0] || null;
+
         if (!canEditReviewer) {
-          const prevR = await client.query(
-            `SELECT reviewer_comment, reviewer_status, reviewer_name, reviewer_date FROM ${metaTable} ORDER BY id DESC LIMIT 1`,
-          );
-          const prev = prevR.rows[0] || null;
           reviewerCommentToSave = prev?.reviewer_comment ?? null;
           reviewerStatusToSave = prev?.reviewer_status ?? null;
           reviewerNameToSave = prev?.reviewer_name ?? null;
           reviewerDateToSave = prev?.reviewer_date ?? null;
         }
 
+        const fileUrlToSave = file_url !== undefined ? file_url || null : prev?.file_url ?? null;
+        const fileNameToSave = file_name !== undefined ? file_name || null : prev?.file_name ?? null;
+
         const q = `
           INSERT INTO ${metaTable}
-            (sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, updated_at)
+            (sop_status, preparer_status, preparer_name, preparer_date, reviewer_comment, reviewer_status, reviewer_name, reviewer_date, file_url, file_name, updated_at)
           VALUES
-            ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
           RETURNING ${SELECT_COLUMNS}
         `;
         const vals = [
@@ -305,6 +317,8 @@ export function makeMetaHandlers({ metaTable, departmentName }) {
           reviewerStatusToSave,
           reviewerNameToSave,
           reviewerDateToSave,
+          fileUrlToSave,
+          fileNameToSave,
         ];
         const r = await client.query(q, vals);
         return NextResponse.json({ success: true, inserted: r.rows[0] }, { status: 200 });

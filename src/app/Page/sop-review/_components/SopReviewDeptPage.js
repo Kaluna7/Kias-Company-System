@@ -217,6 +217,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
 
   const [preparerName, setPreparerName] = useState("");
   const [preparerDate, setPreparerDate] = useState("");
+  const [documentFileUrl, setDocumentFileUrl] = useState("");
+  const [documentFileName, setDocumentFileName] = useState("");
   const [reviewerName, setReviewerName] = useState("");
   const [reviewerDate, setReviewerDate] = useState("");
   const [reviewerComment, setReviewerComment] = useState("");
@@ -441,6 +443,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             setReviewerComment(latest.reviewer_comment || "");
             setReviewerName(latest.reviewer_name || "");
             setReviewerDate(latest.reviewer_date ? String(latest.reviewer_date).slice(0, 10) : "");
+            setDocumentFileUrl(latest.file_url || "");
+            setDocumentFileName(latest.file_name || "");
           }
           
           // Update last saved data reference after loading all data
@@ -462,6 +466,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             preparerStatus: latest.preparer_status || "DRAFT",
             preparerName: finalPreparerName,
             preparerDate: finalPreparerDate,
+            documentFileUrl: latest.file_url || "",
+            documentFileName: latest.file_name || "",
           };
           lastSavedDataRef.current = JSON.stringify(loadedData);
         } else if (!metaRes.ok) {
@@ -720,6 +726,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       preparerStatus,
       preparerName,
       preparerDate,
+      documentFileUrl,
+      documentFileName,
     };
     const dataString = JSON.stringify(currentData);
     if (dataString === lastSavedDataRef.current) return;
@@ -735,6 +743,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         reviewer_status: reviewerStatus,
         reviewer_name: reviewerName || null,
         reviewer_date: reviewerDate || null,
+        file_url: documentFileUrl || null,
+        file_name: documentFileName || null,
       };
 
       // Save data with replace mode (delete old data first, then insert new)
@@ -766,7 +776,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     } finally {
       isSavingDraftRef.current = false;
     }
-  }, [apiPath, preparerStatus, preparerName, preparerDate, reviewerComment, reviewerStatus, reviewerName, reviewerDate, preparePayload]);
+  }, [apiPath, preparerStatus, preparerName, preparerDate, reviewerComment, reviewerStatus, reviewerName, reviewerDate, documentFileUrl, documentFileName, preparePayload]);
 
   // Auto-save when data stabilizes (with debounce)
   useEffect(() => {
@@ -800,6 +810,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
     reviewerName,
     reviewerDate,
     reviewerComment,
+    documentFileUrl,
+    documentFileName,
   ]);
 
   const handleSidebarSaveDraft = (sidebarData) => {
@@ -865,6 +877,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         reviewer_status: reviewerStatus,
         reviewer_name: reviewerName || null,
         reviewer_date: reviewerDate || null,
+        file_url: documentFileUrl || null,
+        file_name: documentFileName || null,
       };
       const pubRes = await fetch(`/api/SopReview/${apiPath}/publish`, {
         method: "POST",
@@ -893,6 +907,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       setReviewerName("");
       setReviewerDate("");
       setReviewerComment("");
+      setDocumentFileUrl("");
+      setDocumentFileName("");
     } catch (err) {
       console.error("Publish error:", err);
       setSaveMessage({ type: "error", text: err?.message || "Failed to publish." });
@@ -975,6 +991,12 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
         isUser={isUser}
         schedulePreparerName={schedulePreparerName}
         schedulePreparerDate={schedulePreparerDate}
+        documentFileUrl={documentFileUrl}
+        documentFileName={documentFileName}
+        onDocumentUploaded={({ fileUrl, fileName }) => {
+          setDocumentFileUrl(fileUrl || "");
+          setDocumentFileName(fileName || "");
+        }}
         sopDataCount={sopData.length}
         isCollapsed={isHeaderCollapsed}
         onToggleCollapse={handleToggleHeader}
@@ -1027,6 +1049,21 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                       {sopData.length > 0 ? "AVAILABLE" : "Not Available"}
                     </span>
                   </div>
+                  {documentFileUrl && (
+                    <a
+                      href={documentFileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                      title={documentFileName || "View uploaded SOP PDF"}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View Document
+                    </a>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-4 justify-between sm:justify-end text-xs text-slate-500">
