@@ -683,7 +683,7 @@ export default function SOPHeader({
                         {parsing ? "Processing PDF..." : "Choose PDF file"}
                       </div>
                     </label>
-                    {documentFileUrl && (
+                    {documentFileUrl ? (
                       <div className="p-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg text-xs text-indigo-800 font-medium">
                         <div className="flex items-start gap-2">
                           <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -713,6 +713,12 @@ export default function SOPHeader({
                           </div>
                         </div>
                       </div>
+                    ) : (
+                      !isReviewer && (
+                        <div className="p-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg">
+                          Upload PDF di atas agar dokumen tersimpan dan tombol <span className="font-semibold text-indigo-700">View Document</span> muncul.
+                        </div>
+                      )
                     )}
                     {parsedPreview.length > 0 && (
                       <button

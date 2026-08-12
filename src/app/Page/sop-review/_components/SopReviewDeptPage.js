@@ -13,6 +13,49 @@ import {
 import { notifySopReviewDataChanged } from "@/app/lib/sop-review/sopReviewNotifyClient";
 import { isAdminRole } from "@/lib/roles";
 
+/** Textarea that grows with content — no inner scrollbar. */
+const AutoGrowTextarea = memo(function AutoGrowTextarea({
+  value,
+  onChange,
+  className = "",
+  minRows = 2,
+  ...rest
+}) {
+  const ref = useRef(null);
+
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight) || 16;
+    const minHeight = Math.max(lineHeight * minRows, 36);
+    el.style.height = `${Math.max(el.scrollHeight, minHeight)}px`;
+  }, [minRows]);
+
+  useEffect(() => {
+    resize();
+  }, [value, resize]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [resize]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={minRows}
+      onChange={(e) => {
+        onChange?.(e);
+        requestAnimationFrame(resize);
+      }}
+      className={`${className} overflow-hidden resize-none`}
+      {...rest}
+    />
+  );
+});
 
 // Memoized row for better scroll performance (avoids re-renders when parent updates for unrelated state)
 const SopTableRow = memo(function SopTableRow({
@@ -29,7 +72,7 @@ const SopTableRow = memo(function SopTableRow({
 }) {
   const rowStyle = useContentVisibility ? { contentVisibility: "auto", containIntrinsicSize: "0 80px" } : undefined;
   const cellInputClass =
-    "w-full min-w-0 max-w-full box-border bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-md px-1.5 py-1 text-[11px] leading-snug transition-colors duration-200 resize-y placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed";
+    "w-full min-w-0 max-w-full box-border bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-400 focus:bg-white rounded-md px-1.5 py-1 text-[11px] leading-snug transition-colors duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:cursor-not-allowed";
   return (
     <tr
       style={rowStyle}
@@ -50,11 +93,11 @@ const SopTableRow = memo(function SopTableRow({
         </div>
       </td>
       <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
-        <textarea
+        <AutoGrowTextarea
           value={row.sop_related}
           onChange={(e) => onUpdate(idx, { sop_related: e.target.value })}
           className={`${cellInputClass} hover:border-blue-200 focus:border-blue-400 focus:ring-blue-500/20`}
-          rows={3}
+          minRows={2}
           placeholder="Enter SOP description..."
           disabled={isReviewer}
         />
@@ -82,21 +125,21 @@ const SopTableRow = memo(function SopTableRow({
         </select>
       </td>
       <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
-        <textarea
+        <AutoGrowTextarea
           value={row.comment || ""}
           onChange={(e) => onUpdate(idx, { comment: e.target.value })}
           className={`${cellInputClass} hover:border-green-200 focus:border-green-400 focus:ring-green-500/20`}
-          rows={3}
+          minRows={2}
           placeholder="Review comment..."
           disabled={false}
         />
       </td>
       <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
-        <textarea
+        <AutoGrowTextarea
           value={row.reviewer_feedback || ""}
           onChange={(e) => onUpdate(idx, { reviewer_feedback: e.target.value })}
           className={`${cellInputClass} hover:border-emerald-200 focus:border-emerald-400 focus:ring-emerald-500/20`}
-          rows={3}
+          minRows={2}
           placeholder="Reviewer feedback..."
           disabled={!(isReviewer || isAdmin)}
         />
@@ -112,20 +155,20 @@ const SopTableRow = memo(function SopTableRow({
         />
       </td>
       <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
-        <textarea
+        <AutoGrowTextarea
           value={row.auditee_comment || ""}
           onChange={(e) => onUpdate(idx, { auditee_comment: e.target.value })}
           className={`${cellInputClass} hover:border-amber-200 focus:border-amber-400 focus:ring-amber-500/20`}
-          rows={3}
+          minRows={2}
           placeholder="Auditee comment..."
         />
       </td>
       <td className="p-1.5 align-top border-r border-slate-200/40 min-w-0">
-        <textarea
+        <AutoGrowTextarea
           value={row.follow_up_detail || ""}
           onChange={(e) => onUpdate(idx, { follow_up_detail: e.target.value })}
           className={`${cellInputClass} hover:border-orange-200 focus:border-orange-400 focus:ring-orange-500/20`}
-          rows={3}
+          minRows={2}
           placeholder="Follow-up detail..."
         />
       </td>
@@ -356,15 +399,25 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
       setLoadError(null);
       try {
         const qs = `?year=${encodeURIComponent(String(auditYear))}`;
-        const [res, metaRes] = await Promise.all([
+        const [res, metaRes, docRes] = await Promise.all([
           fetch(`/api/SopReview/${apiPath}${qs}`, { method: "GET" }),
           fetch(`/api/SopReview/${apiPath}/meta${qs}`, { method: "GET" }),
+          fetch(`/api/SopReview/${apiPath}/document`, { method: "GET" }),
         ]);
-        const [{ data: json, raw: rawSteps }, { data: metaJson, raw: rawMeta }] = await Promise.all([
+        const [
+          { data: json, raw: rawSteps },
+          { data: metaJson, raw: rawMeta },
+          { data: docJson },
+        ] = await Promise.all([
           safeJson(res),
           safeJson(metaRes),
+          safeJson(docRes),
         ]);
 
+        const docFromApi =
+          docRes.ok && docJson?.fileUrl
+            ? { fileUrl: docJson.fileUrl, fileName: docJson.fileName || "SOP Document" }
+            : null;
         let loadedSopData = [];
         if (!res.ok) {
           const msg = (json && json.error) || `HTTP ${res.status} | ${rawSteps || "no body"}`;
@@ -435,8 +488,10 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             setReviewerComment(latest.reviewer_comment || "");
             setReviewerName(latest.reviewer_name || "");
             setReviewerDate(latest.reviewer_date ? String(latest.reviewer_date).slice(0, 10) : "");
-            setDocumentFileUrl(latest.file_url || "");
-            setDocumentFileName(latest.file_name || "");
+            const fileUrl = latest.file_url || docFromApi?.fileUrl || "";
+            const fileName = latest.file_name || docFromApi?.fileName || "";
+            setDocumentFileUrl(fileUrl);
+            setDocumentFileName(fileName);
           }
           
           // Update last saved data reference after loading all data
@@ -458,14 +513,18 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             preparerStatus: latest.preparer_status || "DRAFT",
             preparerName: finalPreparerName,
             preparerDate: finalPreparerDate,
-            documentFileUrl: latest.file_url || "",
-            documentFileName: latest.file_name || "",
+            documentFileUrl: latest.file_url || docFromApi?.fileUrl || "",
+            documentFileName: latest.file_name || docFromApi?.fileName || "",
           };
           lastSavedDataRef.current = JSON.stringify(loadedData);
-        } else if (!metaRes.ok) {
-          console.error("Load meta failed:", rawMeta);
-          // Even if meta load fails, update lastSavedDataRef with current state
-          // Use schedule per module date if available
+        } else {
+          if (mounted && docFromApi) {
+            setDocumentFileUrl(docFromApi.fileUrl);
+            setDocumentFileName(docFromApi.fileName);
+          }
+          if (!metaRes.ok) {
+            console.error("Load meta failed:", rawMeta);
+          }
           const finalPreparerDate = sch.date || "";
           const finalPreparerName = sch.name || "";
           const loadedData = {
@@ -477,6 +536,8 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
             preparerStatus: "DRAFT",
             preparerName: finalPreparerName,
             preparerDate: finalPreparerDate,
+            documentFileUrl: docFromApi?.fileUrl || "",
+            documentFileName: docFromApi?.fileName || "",
           };
           lastSavedDataRef.current = JSON.stringify(loadedData);
         }
@@ -1046,7 +1107,7 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                       href={documentFileUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                      className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 shadow-sm"
                       title={documentFileName || "View uploaded SOP PDF"}
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1064,6 +1125,27 @@ export default function SopReviewDeptPage({ apiPath, departmentName }) {
                     <span className="text-[11px] font-semibold text-blue-700">{sopData.length}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {documentFileUrl ? (
+                      <a
+                        href={documentFileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 rounded-full text-xs font-semibold transition-all bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow-md flex items-center gap-1"
+                        title={documentFileName || "Open uploaded SOP PDF"}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>View Document</span>
+                      </a>
+                    ) : (
+                      <span
+                        className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200"
+                        title="Upload a PDF from the header (Choose PDF file) to enable View Document"
+                      >
+                        No document
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={handleGenerateCommentsForTable}
