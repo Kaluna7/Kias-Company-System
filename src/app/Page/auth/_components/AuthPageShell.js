@@ -94,13 +94,13 @@ export default function AuthPageShell({ callbackUrl }) {
                 assurance, and preserve the integrity of every audit process.
               </p>
 
-              <ul className="grid min-h-0 flex-1 grid-cols-2 content-stretch gap-2.5 overflow-hidden lg:gap-3">
+              <ul className="grid shrink-0 grid-cols-2 content-start gap-2.5 lg:gap-3">
                 {VALUE_CARDS.map((item) => {
                   const Icon = item.icon;
                   return (
                     <li
                       key={item.title}
-                      className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/20 bg-[rgba(8,16,32,0.58)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-xl lg:p-3.5"
+                      className="relative flex flex-col rounded-2xl border border-white/20 bg-[rgba(8,16,32,0.58)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-xl lg:p-3.5"
                     >
                       <div
                         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full lg:h-10 lg:w-10"
@@ -114,16 +114,14 @@ export default function AuthPageShell({ callbackUrl }) {
                       <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[0.07em] text-white lg:text-[12px]">
                         {item.title}
                       </p>
-                      <p className="mt-1 line-clamp-3 text-[10px] leading-[1.35] text-slate-200/75 lg:text-[11px]">
+                      <p className="mt-1 text-[10px] leading-[1.4] text-slate-200/80 lg:text-[11px]">
                         {item.body}
                       </p>
-                      <div className="mt-auto pt-2.5">
-                        <div
-                          aria-hidden
-                          className="h-[3px] w-8 rounded-full"
-                          style={{ backgroundColor: item.iconColor }}
-                        />
-                      </div>
+                      <div
+                        aria-hidden
+                        className="mt-2.5 h-[3px] w-8 rounded-full"
+                        style={{ backgroundColor: item.iconColor }}
+                      />
                     </li>
                   );
                 })}
